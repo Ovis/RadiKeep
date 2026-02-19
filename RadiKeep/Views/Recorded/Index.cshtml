@@ -1,0 +1,309 @@
+﻿@inject Microsoft.AspNetCore.Antiforgery.IAntiforgery Antiforgery
+@{
+    ViewData["Title"] = "録音番組一覧";
+}
+
+<input id="VerificationToken" type="hidden" value="@(Antiforgery.GetAndStoreTokens(Context).RequestToken)" />
+
+
+
+<section class="section">
+    <div class="rk-page-head">
+        <h1 class="rk-page-title">録音番組一覧</h1>
+        <p class="rk-page-subtitle">録音済み番組の検索・再生・削除を行います。</p>
+        <div class="mt-2">
+            <a class="button is-small is-light" asp-controller="Recorded" asp-action="DuplicateFinder">
+                <span class="icon"><i class="fas fa-wave-square"></i></span>
+                <span>同一番組候補をチェック</span>
+            </a>
+        </div>
+    </div>
+    <div class="rk-panel mb-6">
+        <div class="field is-grouped">
+            <div class="control">
+                <input class="input search-input" type="text" id="search-input" placeholder="タイトルを入力">
+            </div>
+            <div class="control">
+                <button class="button is-link" id="search-button">検索</button>
+            </div>
+            <div class="control">
+                <div class="select">
+                    <select id="recorded-within-days-select" aria-label="録音期間">
+                        <option value="" selected>期間指定なし</option>
+                        <option value="7">過去7日</option>
+                        <option value="30">過去30日</option>
+                        <option value="90">過去90日</option>
+                        <option value="180">過去180日</option>
+                    </select>
+                </div>
+            </div>
+            <div class="control">
+                <div class="select">
+                    <select id="recorded-station-select" aria-label="放送局フィルタ">
+                        <option value="" selected>全放送局</option>
+                    </select>
+                </div>
+            </div>
+            <div class="control">
+                <div class="select">
+                    <select id="page-size-select" aria-label="1ページあたり件数">
+                        <option value="10" selected>10件</option>
+                        <option value="20">20件</option>
+                        <option value="50">50件</option>
+                        <option value="100">100件</option>
+                    </select>
+                </div>
+            </div>
+            <div class="control">
+                <div class="select">
+                    <select id="mobile-sort-select" aria-label="並び替え">
+                        <option value="StartDateTime_desc" selected>開始時間 新しい順</option>
+                        <option value="StartDateTime_asc">開始時間 古い順</option>
+                        <option value="Title_asc">タイトル 昇順</option>
+                        <option value="Title_desc">タイトル 降順</option>
+                        <option value="Duration_asc">録音時間 短い順</option>
+                        <option value="Duration_desc">録音時間 長い順</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="rk-panel mb-6">
+        <button type="button" id="recorded-tag-tools-toggle" class="recorded-tag-tools-toggle" aria-expanded="false" aria-controls="recorded-tag-tools-content">
+            <span><i class="fas fa-sliders mr-2" aria-hidden="true"></i>絞り込み・一括操作</span>
+            <i class="fas fa-chevron-down" aria-hidden="true"></i>
+        </button>
+        <div id="recorded-tag-tools-content" class="recorded-tag-tools-content">
+            <div class="recorded-tag-mode-tabs" role="tablist" aria-label="タグ操作モード">
+                <button type="button" class="recorded-tag-mode-tab is-active" id="recorded-tag-filter-tab" data-target-panel="recorded-tag-filter-panel" role="tab" aria-selected="true">絞り込み</button>
+                <button type="button" class="recorded-tag-mode-tab" id="recorded-tag-bulk-tab" data-target-panel="recorded-tag-bulk-panel" role="tab" aria-selected="false">一括操作</button>
+            </div>
+
+            <div id="recorded-tag-filter-panel" class="recorded-tag-panel is-active" role="tabpanel" aria-labelledby="recorded-tag-filter-tab">
+                <div class="field is-grouped">
+                    <div class="control">
+                        <label class="label mb-1">タグ絞り込み</label>
+                        <div class="tag-select-layout">
+                            <select id="recorded-tag-filter" class="input" multiple size="5" aria-label="タグ絞り込み"></select>
+                            <div class="selected-tags-panel">
+                                <div class="is-flex is-justify-content-space-between is-align-items-center">
+                                    <span class="is-size-7 has-text-weight-semibold">選択中タグ</span>
+                                    <button type="button" id="recorded-tag-filter-clear" class="button is-small is-light">すべて解除</button>
+                                </div>
+                                <div id="recorded-tag-filter-chips" class="selected-tags-chip-list">
+                                    <span class="selected-tags-empty">未選択</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="control">
+                        <label class="label mb-1">条件</label>
+                        <div class="select">
+                            <select id="recorded-tag-mode" aria-label="タグ条件">
+                                <option value="or" selected>いずれかを含む</option>
+                                <option value="and">すべてを含む</option>
+                            </select>
+                        </div>
+                        <label class="checkbox mt-2 block">
+                            <input type="checkbox" id="recorded-untagged-only"> タグなしのみ
+                        </label>
+                        <label class="checkbox mt-2 block">
+                            <input type="checkbox" id="recorded-unlistened-only"> 未視聴のみ
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <div id="recorded-tag-bulk-panel" class="recorded-tag-panel" role="tabpanel" aria-labelledby="recorded-tag-bulk-tab">
+                <div class="field">
+                    <div class="control">
+                        <label class="label mb-1">一括タグ操作対象</label>
+                        <div class="tag-select-layout">
+                            <select id="recorded-tag-bulk" class="input" multiple size="5" aria-label="一括タグ選択"></select>
+                            <div class="selected-tags-panel">
+                                <div class="is-flex is-justify-content-space-between is-align-items-center">
+                                    <span class="is-size-7 has-text-weight-semibold">選択中タグ</span>
+                                    <button type="button" id="recorded-tag-bulk-clear" class="button is-small is-light">すべて解除</button>
+                                </div>
+                                <div id="recorded-tag-bulk-chips" class="selected-tags-chip-list">
+                                    <span class="selected-tags-empty">未選択</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="field has-addons tag-create-inline">
+                            <div class="control is-expanded">
+                                <input class="input" type="text" id="recorded-tag-bulk-create-name" placeholder="新しいタグ名">
+                            </div>
+                            <div class="control">
+                                <button type="button" class="button is-light" id="recorded-tag-bulk-create-btn">+ 作成</button>
+                            </div>
+                        </div>
+                        <div id="recorded-tag-bulk-create-suggestions" class="tag-create-suggestion-list" aria-live="polite"></div>
+                        <div class="buttons mt-3">
+                            <button class="button is-link is-light" id="bulk-tag-add-button">一括追加</button>
+                            <button class="button is-warning is-light" id="bulk-tag-remove-button">一括解除</button>
+                        </div>
+                        <div class="recorded-listened-zone">
+                            <p class="zone-title">
+                                <i class="fas fa-check-double" aria-hidden="true"></i>
+                                視聴状態の一括更新
+                            </p>
+                            <p class="zone-description">
+                                選択中の録音を既読/未読に切り替えます。
+                            </p>
+                            <div class="buttons">
+                                <button class="button is-success is-light" id="bulk-mark-listened-button">一括で視聴済みにする</button>
+                                <button class="button is-light" id="bulk-mark-unlistened-button">一括で未視聴にする</button>
+                            </div>
+                        </div>
+                        <div class="recorded-danger-zone">
+                            <p class="zone-title">
+                                <i class="fas fa-triangle-exclamation" aria-hidden="true"></i>
+                                一括削除
+                            </p>
+                            <p class="zone-description">
+                                選択中の録音に対して削除を実行します。削除方式は実行時に選択します。
+                            </p>
+                            <div class="buttons">
+                                <button class="button is-danger is-light" id="bulk-delete-button" title="選択した録音を一括削除">選択した録音を削除</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div id="recordings-mobile-list" class="recorded-mobile-list"></div>
+    <template id="recordings-mobile-template">
+        <div class="recorded-mobile-card recording-row">
+            <div class="recorded-mobile-head">
+                <label class="checkbox mt-1" title="選択" aria-label="選択">
+                    <input type="checkbox" class="recording-select">
+                </label>
+                <div class="min-w-0 flex-1">
+                    <p class="recorded-mobile-title">
+                        <span class="program-title-text"></span>
+                        <span class="listened-state-marker" aria-hidden="true"></span>
+                    </p>
+                    <div class="recorded-mobile-meta">
+                        <p class="startDateTime"></p>
+                        <p class="duration"></p>
+                    </div>
+                </div>
+            </div>
+            <div class="recorded-mobile-actions">
+                <button type="button" class="button is-small is-light tag-list-button" title="タグ一覧" aria-label="タグ一覧">
+                    <span class="icon">
+                        <i class="fas fa-tags"></i>
+                    </span>
+                </button>
+                <a class="download-button button is-small is-info" title="ダウンロード" aria-label="ダウンロード">
+                    <span class="icon">
+                        <i class="fas fa-download"></i>
+                    </span>
+                </a>
+                <button type="button" class="button is-small is-primary player-button" title="再生" aria-label="再生">
+                    <span class="icon">
+                        <i class="fas fa-play"></i>
+                    </span>
+                </button>
+                <button type="button" class="button is-small delete-button is-danger" title="削除" aria-label="削除">
+                    <span class="icon">
+                        <i class="fas fa-trash-can"></i>
+                    </span>
+                </button>
+            </div>
+        </div>
+    </template>
+    <div class="rk-table-wrap">
+        <table class="table is-fullwidth">
+            <thead>
+                <tr class="recording-row">
+                    <th>
+                        <label class="checkbox">
+                            <input type="checkbox" id="recordings-select-all" aria-label="全選択">
+                        </label>
+                    </th>
+                    <th class="program-title">
+                        <a href="#" id="sort-title">タイトル</a>
+                    </th>
+                    <th>
+                        <a href="#" id="sort-start">番組開始時間</a>
+                    </th>
+                    <th>
+                        <a href="#" id="sort-duration">録音時間</a>
+                    </th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody id="recordings-table-body">
+            </tbody>
+            <template id="table-template">
+                <tr>
+                    <td>
+                        <label class="checkbox" title="選択" aria-label="選択">
+                            <input type="checkbox" class="recording-select">
+                        </label>
+                    </td>
+                    <td class="program-title">
+                        <span class="program-title-text"></span>
+                        <span class="listened-state-marker" aria-hidden="true"></span>
+                    </td>
+                    <td class="startDateTime"></td>
+                    <td class="duration"></td>
+                    <td>
+                        <div class="record-actions">
+                            <button type="button" class="button is-small is-light tag-list-button" title="タグ一覧" aria-label="タグ一覧">
+                                <span class="icon">
+                                    <i class="fas fa-tags"></i>
+                                </span>
+                            </button>
+                            <a class="download-button button is-small is-info" title="ダウンロード" aria-label="ダウンロード">
+                                <span class="icon">
+                                    <i class="fas fa-download"></i>
+                                </span>
+                            </a>
+                            <button type="button" class="button is-small is-primary player-button" title="再生" aria-label="再生">
+                                <span class="icon">
+                                    <i class="fas fa-play"></i>
+                                </span>
+                            </button>
+                            <button type="button" class="button is-small delete-button is-danger" title="削除" aria-label="削除">
+                                <span class="icon">
+                                    <i class="fas fa-trash-can"></i>
+                                </span>
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+            </template>
+        </table>
+    </div>
+    <nav class="pagination" role="navigation" aria-label="pagination">
+        <ul class="pagination-list" id="pagination-list">
+        </ul>
+    </nav>
+</section>
+
+<div class="modal" id="recording-tags-modal">
+    <div class="modal-background"></div>
+    <div class="modal-card" style="max-width: 32rem;">
+        <header class="modal-card-head">
+            <p class="modal-card-title">タグ一覧</p>
+            <button class="delete" aria-label="close" id="recording-tags-modal-close"></button>
+        </header>
+        <section class="modal-card-body">
+            <p class="mb-3 has-text-weight-semibold" id="recording-tags-modal-title"></p>
+            <ul id="recording-tags-modal-list" class="list-disc pl-5 space-y-1"></ul>
+        </section>
+        <footer class="modal-card-foot">
+            <button class="button is-light" id="recording-tags-modal-close-footer">閉じる</button>
+        </footer>
+    </div>
+</div>
+
+
+@section scripts {
+    <script src="~/lib/hls.js/hls.min.js" asp-append-version="true"></script>
+    <script type="module" src="~/js/recorded.js" asp-append-version="true"></script>
+}

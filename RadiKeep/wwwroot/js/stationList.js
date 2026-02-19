@@ -1,0 +1,90 @@
+import { createCard } from './cardUtil.js';
+import { API_ENDPOINTS } from './const.js';
+import { RadioServiceKind, RadioServiceKindMap } from './define.js';
+export async function generateStationList(kind, checkStationList) {
+    const stationList = await getStationList(kind);
+    return renderStationList(stationList, kind, checkStationList);
+}
+async function getStationList(kind) {
+    switch (kind) {
+        case RadioServiceKind.Radiko:
+            return fetch(API_ENDPOINTS.STATION_LIST_RADIKO)
+                .then(response => response.json())
+                .then(result => result.data);
+        case RadioServiceKind.Radiru:
+            return fetch(API_ENDPOINTS.STATION_LIST_RADIRU)
+                .then(response => response.json())
+                .then(result => result.data);
+        default:
+            throw new Error(`Unsupported RadioServiceKind: ${kind}`);
+    }
+}
+function renderStationList(data, kind, checkStationList) {
+    const contentElements = [];
+    Object.keys(data).forEach(region => {
+        const regionDiv = document.createElement('div');
+        regionDiv.className = 'region pb-6';
+        const regionHeader = document.createElement('div');
+        regionHeader.className = 'field';
+        const regionHeaderTitle = document.createElement('p');
+        regionHeaderTitle.className = 'title is-4 mb-3';
+        regionHeaderTitle.textContent = region;
+        regionHeader.appendChild(regionHeaderTitle);
+        const regionCheckBoxLabel = document.createElement('label');
+        regionCheckBoxLabel.className = 'label';
+        const regionCheckBox = document.createElement('input');
+        regionCheckBox.type = 'checkbox';
+        regionCheckBox.className = 'region-checkbox';
+        regionCheckBox.checked = true;
+        regionCheckBoxLabel.appendChild(regionCheckBox);
+        regionCheckBoxLabel.appendChild(document.createTextNode(' この地域の放送局をすべてチェック'));
+        regionHeader.appendChild(regionCheckBoxLabel);
+        regionDiv.appendChild(regionHeader);
+        const stationsDiv = document.createElement('div');
+        stationsDiv.className = 'columns is-multiline';
+        data[region].forEach(station => {
+            const label = document.createElement('label');
+            label.className = 'column is-one-third';
+            const stationCheckBox = document.createElement('input');
+            stationCheckBox.type = 'checkbox';
+            switch (kind) {
+                case RadioServiceKind.Radiko:
+                    stationCheckBox.name = 'SelectedRadikoStationIds';
+                    stationCheckBox.value = `${station.stationId}`;
+                    break;
+                case RadioServiceKind.Radiru:
+                    stationCheckBox.name = 'SelectedRadiruStationIds';
+                    stationCheckBox.value = `${station.areaId}:${station.stationId}`;
+                    break;
+                default:
+                    throw new Error(`Unsupported RadioServiceKind: ${kind}`);
+            }
+            if (checkStationList === undefined || (checkStationList && checkStationList.includes(stationCheckBox.value))) {
+                stationCheckBox.checked = true;
+            }
+            label.appendChild(stationCheckBox);
+            label.appendChild(document.createTextNode(station.stationName));
+            stationsDiv.appendChild(label);
+        });
+        regionDiv.appendChild(stationsDiv);
+        contentElements.push(regionDiv);
+        const regionCheckbox = regionHeader.querySelector('.region-checkbox');
+        regionCheckbox.addEventListener('change', function () {
+            const checkboxes = stationsDiv.querySelectorAll('input[type="checkbox"]');
+            checkboxes.forEach(checkbox => {
+                checkbox.checked = this.checked;
+            });
+        });
+        stationsDiv.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
+            checkbox.addEventListener('change', function () {
+                const allChecked = Array.from(stationsDiv.querySelectorAll('input[type="checkbox"]')).every(cb => cb.checked);
+                regionCheckbox.checked = allChecked;
+            });
+        });
+    });
+    const cardHeaderTitle = document.createElement('p');
+    cardHeaderTitle.textContent = `${RadioServiceKindMap[kind].displayName}放送局リスト`;
+    const cardElm = createCard(`${RadioServiceKindMap[kind].codeId}stationList`, cardHeaderTitle, contentElements);
+    return cardElm;
+}
+//# sourceMappingURL=stationList.js.map

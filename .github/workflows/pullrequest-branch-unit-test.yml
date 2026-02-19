@@ -1,0 +1,35 @@
+﻿name: PullRequest Branch UnitTest
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches: 
+    - main
+    - feature/*
+    - hotfix/*
+
+jobs:
+  pullrequest-branch-unittest:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Install npm dependencies
+        run: |
+          cd RadiKeep
+          npm ci
+
+      - name: Build the project
+        run: dotnet build --configuration Release RadiKeep/RadiKeep.csproj
+
+      - name: Test RadiKeep
+        run: dotnet test --configuration Release --verbosity normal RadiKeep.Logics.Tests/RadiKeep.Logics.Tests.csproj

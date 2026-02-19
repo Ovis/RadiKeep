@@ -1,0 +1,143 @@
+﻿@{
+    ViewData["Title"] = "録音予定の番組";
+}
+
+
+
+<section class="section">
+    <div class="rk-page-head">
+        <h1 class="rk-page-title">録音予定の番組</h1>
+        <p class="rk-page-subtitle">これから録音される番組の一覧です。番組からの直接予約と、自動予約ルールから追加された番組の両方を表示します。</p>
+    </div>
+    <div class="reserve-mobile-sort">
+        <div class="field">
+            <label class="label" for="mobile-sort-select">並び順</label>
+            <div class="control">
+                <div class="select is-fullwidth">
+                    <select id="mobile-sort-select" aria-label="並び順">
+                        <option value="time_asc">放送時間（昇順）</option>
+                        <option value="time_desc">放送時間（降順）</option>
+                        <option value="title_asc">タイトル（昇順）</option>
+                        <option value="title_desc">タイトル（降順）</option>
+                        <option value="recordingType_asc">録音方法（昇順）</option>
+                        <option value="recordingType_desc">録音方法（降順）</option>
+                        <option value="reserveType_asc">登録元（昇順）</option>
+                        <option value="reserveType_desc">登録元（降順）</option>
+                        <option value="status_asc">状態（昇順）</option>
+                        <option value="status_desc">状態（降順）</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="rk-table-wrap">
+        <table class="table is-fullwidth">
+            <thead>
+                <tr>
+                    <th>
+                        <a href="#" id="sort-title" title="タイトルで並び替え" aria-label="タイトルで並び替え">タイトル</a>
+                    </th>
+                    <th>
+                        <a href="#" id="sort-start" title="放送時間で並び替え" aria-label="放送時間で並び替え">放送時間</a>
+                    </th>
+                    <th>
+                        <a href="#" id="sort-recording-type" title="録音方法で並び替え" aria-label="録音方法で並び替え">録音方法</a>
+                    </th>
+                    <th>
+                        <a href="#" id="sort-reserve-type" title="登録元で並び替え" aria-label="登録元で並び替え">登録元</a>
+                    </th>
+                    <th>
+                        <a href="#" id="sort-status" title="状態で並び替え" aria-label="状態で並び替え">状態</a>
+                    </th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody id="recordings-table-body">
+            </tbody>
+            <template id="recordings-table-template">
+                <tr>
+                    <td class="program-title" data-label="タイトル"></td>
+                    <td class="onair-date" data-label="放送時間"></td>
+                    <td class="recording-type" data-label="録音方法"></td>
+                    <td class="reserve-type" data-label="登録元"></td>
+                    <td class="reserve-status" data-label="状態"></td>
+                    <td data-label="操作">
+                        <div class="reserve-actions">
+                            <a href="#" class="button is-small detail-button is-info" title="詳細" aria-label="詳細">
+                                <span class="icon"><i class="fas fa-info"></i></span><span class="label-text">詳細</span>
+                            </a>
+                            <a href="#" class="button delete-button is-small is-danger" title="削除" aria-label="削除">
+                                <span class="icon"><i class="fas fa-trash-can"></i></span><span class="label-text">削除</span>
+                            </a>
+                            <a href="#" class="button status-button is-small is-success" title="有効化/無効化" aria-label="有効化/無効化">
+                                <span class="icon"><i class="fas status-icon"></i></span><span class="label-text status-text"></span>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+            </template>
+        </table>
+    </div>
+</section>
+<template id="program-reserve-modal-template">
+    <div class="modal is-active" id="detail-modal">
+        <div class="modal-background">
+        </div>
+        <div class="modal-card">
+            <header class="modal-card-head">
+                <p class="modal-card-title">録音予定の詳細</p>
+                <button class="delete" aria-label="close">
+                </button>
+            </header>
+            <section class="modal-card-body">
+                <div class="rk-detail-grid">
+                    <div class="rk-detail-row">
+                        <div class="rk-detail-label">タイトル</div>
+                        <div class="rk-detail-value modal-program-title"></div>
+                    </div>
+                    <div class="rk-detail-row">
+                        <div class="rk-detail-label">放送時間</div>
+                        <div class="rk-detail-value modal-onair-date"></div>
+                    </div>
+                    <div class="rk-detail-row">
+                        <div class="rk-detail-label">放送局</div>
+                        <div class="rk-detail-value modal-onair-station"></div>
+                    </div>
+                    <div class="rk-detail-row">
+                        <div class="rk-detail-label">出演者</div>
+                        <div class="rk-detail-value modal-performer"></div>
+                    </div>
+                    <div class="rk-detail-row">
+                        <div class="rk-detail-label">登録元ルール</div>
+                        <div class="rk-detail-value modal-keyword-reserves"></div>
+                    </div>
+                    <div class="rk-detail-row">
+                        <div class="rk-detail-label">付与予定タグ</div>
+                        <div class="rk-detail-value modal-planned-tags"></div>
+                    </div>
+                    <div>
+                        <div class="rk-detail-label mb-2">説明</div>
+                        <div class="modal-description rk-detail-desc">
+                        </div>
+                    </div>
+                </div>
+            </section>
+            <footer class="modal-card-foot">
+                <div class="buttons">
+                    <button class="button is-primary">閉じる</button>
+                </div>
+            </footer>
+        </div>
+    </div>
+</template>
+
+<div class="rk-toast" id="program-reserve-result-toast" role="status" aria-live="polite" aria-atomic="true">
+    <div class="rk-toast-body">
+        <span id="program-reserve-result-toast-message">更新しました。</span>
+        <button class="delete" aria-label="close" id="program-reserve-result-toast-close"></button>
+    </div>
+</div>
+
+@section scripts {
+    <script type="module" src="~/js/program-reserve.js" asp-append-version="true"></script>
+}

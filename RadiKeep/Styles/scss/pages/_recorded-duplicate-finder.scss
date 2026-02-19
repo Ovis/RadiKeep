@@ -1,0 +1,147 @@
+@use "../common/variables" as *;
+/* page: recorded-duplicate-finder */
+.duplicate-loading {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .duplicate-loading.hidden {
+            display: none !important;
+        }
+
+        .duplicate-actions {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+            margin-top: 0.75rem;
+        }
+
+        .duplicate-side-title {
+            font-weight: 600;
+            line-height: 1.35;
+        }
+
+        .duplicate-side-meta {
+            font-size: 0.75rem;
+            color: rgb(100 116 139);
+        }
+
+        .duplicate-group-title {
+            font-weight: 600;
+            line-height: 1.35;
+        }
+
+        .duplicate-group-meta {
+            font-size: 0.75rem;
+            color: rgb(100 116 139);
+            margin-top: 0.25rem;
+        }
+
+        .duplicate-group-members {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .duplicate-group-member {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.5rem;
+            padding: 0.5rem;
+            border: 1px solid $rk-slate-200;
+            border-radius: 0.5rem;
+            background-color: $rk-slate-50;
+        }
+
+        .duplicate-group-member-main {
+            min-width: 0;
+        }
+
+        .duplicate-group-member-actions {
+            flex-shrink: 0;
+        }
+
+        .duplicate-option-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 0.75rem 1rem;
+            margin-top: 1rem;
+        }
+
+        .duplicate-option-item .label {
+            font-size: 0.8rem;
+            margin-bottom: 0.25rem;
+            display: flex;
+            align-items: center;
+            gap: 0.35rem;
+        }
+
+        .duplicate-option-item .select,
+        .duplicate-option-item .select select {
+            width: 100%;
+        }
+
+        .duplicate-option-grid-hint {
+            grid-column: 1 / -1;
+            margin-top: -0.25rem;
+        }
+
+        .inline-help {
+            position: relative;
+            display: inline-block;
+        }
+
+        .inline-help summary {
+            list-style: none;
+            width: 1.1rem;
+            height: 1.1rem;
+            border-radius: 9999px;
+            border: 1px solid rgb(148 163 184);
+            color: $rk-slate-600;
+            font-size: 0.75rem;
+            line-height: 1.1rem;
+            text-align: center;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .inline-help summary::-webkit-details-marker {
+            display: none;
+        }
+
+        .inline-help[open] .inline-help-body {
+            display: block;
+        }
+
+        .inline-help-body {
+            display: none;
+            position: absolute;
+            z-index: 20;
+            top: 1.4rem;
+            left: 0;
+            width: min(20rem, 80vw);
+            padding: 0.5rem 0.6rem;
+            border-radius: 0.4rem;
+            border: 1px solid $rk-slate-300;
+            background-color: white;
+            box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
+            color: $rk-slate-700;
+            font-size: 0.75rem;
+            line-height: 1.45;
+            font-weight: 400;
+        }
+
+        @media (max-width: 768px) {
+            .duplicate-option-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .inline-help-body {
+                width: min(22rem, 92vw);
+            }
+        }
+
+
+

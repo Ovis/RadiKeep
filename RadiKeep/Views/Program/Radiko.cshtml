@@ -1,0 +1,73 @@
+﻿@{
+    ViewData["Title"] = "radiko番組表";
+}
+
+
+
+
+<section class="section">
+    <div class="rk-page-head">
+        <h1 class="rk-page-title">radiko番組表</h1>
+        <p class="rk-page-subtitle">放送局と日付を選択して番組を表示します。</p>
+    </div>
+    <div class="rk-panel mb-6">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="control">
+                    <label class="label">ラジオ放送局</label>
+                    <div class="select">
+                        <select id="stationSelect">
+                            <option value="">放送局を選択してください</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="control hidden" id="dateSelectContainer">
+                    <label class="label">日付</label>
+                    <div class="select">
+                        <select id="dateSelect">
+                        </select>
+                    </div>
+                </div>
+            </div>
+    </div>
+    <div id="programList" class="rk-program-grid">
+    </div>
+    <div id="programs-empty" class="box p-6 text-center text-zinc-500 hidden mt-4">
+        表示できる番組がありません。
+    </div>
+</section>
+
+<template id="program-card-template">
+    <div class="rk-program-card">
+        <div class="card">
+            <div class="card-content">
+                <div class="flex items-start justify-between gap-2">
+                    <p class="title text-lg"></p>
+                    <span class="rk-status-badge status-badge hidden"></span>
+                </div>
+                <p class="subtitle text-sm text-zinc-600"></p>
+                <p class="performer text-xs text-zinc-500"></p>
+                <div class="content mt-3">
+                    <p class="startTime text-xs text-zinc-500"></p>
+                    <p class="endTime text-xs text-zinc-500"></p>
+                    <p class="description mt-2"></p>
+                    <button type="button" class="description-toggle hidden">more</button>
+                </div>
+            </div>
+            <footer class="card-footer">
+                <button type="button" class="card-footer-item record-btn">リアルタイム録音</button>
+                <button type="button" class="card-footer-item timefree-btn">タイムフリー録音</button>
+            </footer>
+        </div>
+    </div>
+</template>
+
+<div class="rk-toast" id="program-result-toast" role="status" aria-live="polite" aria-atomic="true">
+    <div class="rk-toast-body">
+        <span id="program-result-toast-message">録音予約を開始しました。</span>
+        <button class="delete" aria-label="close" id="program-result-toast-close"></button>
+    </div>
+</div>
+
+@section scripts {
+    <script type="module" src="~/js/radikoprogram.js" asp-append-version="true"></script>
+}

@@ -1,0 +1,428 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version (SemVer, e.g. 1.2.3)"
+        required: false
+        default: ""
+      publish_latest:
+        description: "Also push Docker latest tag"
+        required: false
+        type: boolean
+        default: true
+
+concurrency:
+  group: build-and-release
+  cancel-in-progress: false
+
+jobs:
+  prepare-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      run_build: ${{ steps.meta.outputs.run_build }}
+      version: ${{ steps.meta.outputs.version }}
+      tag: ${{ steps.meta.outputs.tag }}
+      publish_latest: ${{ steps.meta.outputs.publish_latest }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve release metadata
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            version="${GITHUB_REF_NAME#v}"
+            tag="${GITHUB_REF_NAME}"
+          else
+            input_version="${{ github.event.inputs.version }}"
+            if [[ -z "${input_version}" ]]; then
+              echo "workflow_dispatch では version の指定が必要です。" >&2
+              exit 1
+            fi
+            version="${input_version#v}"
+            tag="v${version}"
+            if ! git rev-parse -q --verify "refs/tags/${tag}" >/dev/null; then
+              git config user.name "github-actions[bot]"
+              git config user.email "github-actions[bot]@users.noreply.github.com"
+              git tag "${tag}"
+              git push origin "${tag}"
+            fi
+          fi
+
+          publish_latest="${{ github.event.inputs.publish_latest }}"
+          if [[ -z "${publish_latest}" ]]; then
+            publish_latest="true"
+          fi
+          if [[ "${version}" == *"-"* ]]; then
+            publish_latest="false"
+          fi
+
+          echo "run_build=true" >> "$GITHUB_OUTPUT"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          echo "publish_latest=${publish_latest}" >> "$GITHUB_OUTPUT"
+
+  build-zips:
+    needs: prepare-release
+    if: needs.prepare-release.outputs.run_build == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      VERSION: ${{ needs.prepare-release.outputs.version }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Install npm dependencies
+        run: |
+          cd RadiKeep
+          npm ci
+
+      - name: Publish self-contained app (win-x64)
+        run: dotnet publish -c Release -r win-x64 --self-contained true -p:Version=${VERSION} -p:InformationalVersion=${VERSION} -o ./output/release/zip/win-x64/app RadiKeep/RadiKeep.csproj
+
+      - name: Publish self-contained app (linux-x64)
+        run: dotnet publish -c Release -r linux-x64 --self-contained true -p:Version=${VERSION} -p:InformationalVersion=${VERSION} -o ./output/release/zip/linux-x64/app RadiKeep/RadiKeep.csproj
+
+      - name: Publish self-contained app (linux-arm64)
+        run: dotnet publish -c Release -r linux-arm64 --self-contained true -p:Version=${VERSION} -p:InformationalVersion=${VERSION} -o ./output/release/zip/linux-arm64/app RadiKeep/RadiKeep.csproj
+
+      - name: Prepare ZIP payloads
+        run: |
+          set -euxo pipefail
+          mkdir -p output/release/zips
+
+          mkdir -p output/release/zip/win-x64/app/scripts/windows
+          cp -a scripts/windows/. output/release/zip/win-x64/app/scripts/windows/
+
+          mkdir -p output/release/zip/linux-x64/app/scripts/linux
+          mkdir -p output/release/zip/linux-arm64/app/scripts/linux
+          if [ -d scripts/linux ] && [ "$(find scripts/linux -mindepth 1 -print -quit)" ]; then
+            cp -a scripts/linux/. output/release/zip/linux-x64/app/scripts/linux/
+            cp -a scripts/linux/. output/release/zip/linux-arm64/app/scripts/linux/
+          else
+            echo "scripts/linux is missing or empty. Skip copying linux helper scripts."
+          fi
+
+          cp README.MD output/release/zip/win-x64/app/README.MD
+          cp README.MD output/release/zip/linux-x64/app/README.MD
+          cp README.MD output/release/zip/linux-arm64/app/README.MD
+          cp THIRD_PARTY_NOTICES.md output/release/zip/win-x64/app/THIRD_PARTY_NOTICES.md
+          cp THIRD_PARTY_NOTICES.md output/release/zip/linux-x64/app/THIRD_PARTY_NOTICES.md
+          cp THIRD_PARTY_NOTICES.md output/release/zip/linux-arm64/app/THIRD_PARTY_NOTICES.md
+          THIRD_PARTY_DIR=""
+          if [ -d THIRD_PARTY_LICENSES ]; then
+            THIRD_PARTY_DIR="THIRD_PARTY_LICENSES"
+          elif [ -d THIRD_PARTY_LICENCES ]; then
+            THIRD_PARTY_DIR="THIRD_PARTY_LICENCES"
+          fi
+          if [ -n "$THIRD_PARTY_DIR" ]; then
+            cp -a "$THIRD_PARTY_DIR" output/release/zip/win-x64/app/THIRD_PARTY_LICENSES
+            cp -a "$THIRD_PARTY_DIR" output/release/zip/linux-x64/app/THIRD_PARTY_LICENSES
+            cp -a "$THIRD_PARTY_DIR" output/release/zip/linux-arm64/app/THIRD_PARTY_LICENSES
+          fi
+          cp RadiKeep/appsettings.Development.sample.json output/release/zip/win-x64/app/appsettings.Development.sample.json
+          cp RadiKeep/appsettings.Development.sample.json output/release/zip/linux-x64/app/appsettings.Development.sample.json
+          cp RadiKeep/appsettings.Development.sample.json output/release/zip/linux-arm64/app/appsettings.Development.sample.json
+
+          if [ -f LICENSE ]; then
+            cp LICENSE output/release/zip/win-x64/app/LICENSE
+            cp LICENSE output/release/zip/linux-x64/app/LICENSE
+            cp LICENSE output/release/zip/linux-arm64/app/LICENSE
+          elif [ -f LICENSE.MD ]; then
+            cp LICENSE.MD output/release/zip/win-x64/app/LICENSE.MD
+            cp LICENSE.MD output/release/zip/linux-x64/app/LICENSE.MD
+            cp LICENSE.MD output/release/zip/linux-arm64/app/LICENSE.MD
+          fi
+
+      - name: Create ZIPs and checksums
+        run: |
+          set -euxo pipefail
+          (cd output/release/zip/win-x64 && zip -r ../../zips/RadiKeep-${VERSION}-win-x64.zip app)
+          (cd output/release/zip/linux-x64 && zip -r ../../zips/RadiKeep-${VERSION}-linux-x64.zip app)
+          (cd output/release/zip/linux-arm64 && zip -r ../../zips/RadiKeep-${VERSION}-linux-arm64.zip app)
+          (cd output/release/zips && sha256sum ./*.zip > SHA256SUMS-zips.txt)
+
+      - name: Upload ZIP artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: RadiKeep-zips-${{ env.VERSION }}
+          path: |
+            output/release/zips/*.zip
+            output/release/zips/SHA256SUMS-zips.txt
+
+  build-windows-installer:
+    needs: prepare-release
+    if: needs.prepare-release.outputs.run_build == 'true'
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    env:
+      VERSION: ${{ needs.prepare-release.outputs.version }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Install npm dependencies
+        shell: pwsh
+        run: |
+          Set-Location RadiKeep
+          npm ci
+
+      - name: Publish framework-dependent app
+        shell: pwsh
+        run: dotnet publish -c Release -p:Version=${env:VERSION} -p:InformationalVersion=${env:VERSION} -o .\output\installer\fd\app RadiKeep\RadiKeep.csproj
+
+      - name: Publish self-contained app (win-x64)
+        shell: pwsh
+        run: dotnet publish -c Release -r win-x64 --self-contained true -p:Version=${env:VERSION} -p:InformationalVersion=${env:VERSION} -o .\output\installer\sc\app RadiKeep\RadiKeep.csproj
+
+      - name: Prepare installer payloads
+        shell: pwsh
+        run: |
+          $payloads = @(
+            (Join-Path $env:GITHUB_WORKSPACE "output\installer\fd\app"),
+            (Join-Path $env:GITHUB_WORKSPACE "output\installer\sc\app")
+          )
+
+          foreach ($payloadDir in $payloads) {
+            New-Item -ItemType Directory -Path (Join-Path $payloadDir "scripts\windows") -Force | Out-Null
+            Copy-Item -Path .\scripts\windows\* -Destination (Join-Path $payloadDir "scripts\windows") -Recurse -Force
+            Copy-Item -Path .\README.MD -Destination (Join-Path $payloadDir "README.MD") -Force
+            Copy-Item -Path .\THIRD_PARTY_NOTICES.md -Destination (Join-Path $payloadDir "THIRD_PARTY_NOTICES.md") -Force
+            if (Test-Path .\THIRD_PARTY_LICENSES) {
+              Copy-Item -Path .\THIRD_PARTY_LICENSES -Destination (Join-Path $payloadDir "THIRD_PARTY_LICENSES") -Recurse -Force
+            } elseif (Test-Path .\THIRD_PARTY_LICENCES) {
+              Copy-Item -Path .\THIRD_PARTY_LICENCES -Destination (Join-Path $payloadDir "THIRD_PARTY_LICENSES") -Recurse -Force
+            }
+            Copy-Item -Path .\RadiKeep\appsettings.Development.sample.json -Destination (Join-Path $payloadDir "appsettings.Development.sample.json") -Force
+            if (Test-Path .\LICENSE) {
+              Copy-Item -Path .\LICENSE -Destination (Join-Path $payloadDir "LICENSE") -Force
+            } elseif (Test-Path .\LICENSE.MD) {
+              Copy-Item -Path .\LICENSE.MD -Destination (Join-Path $payloadDir "LICENSE.MD") -Force
+            }
+          }
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup --yes --no-progress
+
+      - name: Build framework-dependent installer
+        shell: pwsh
+        run: |
+          $sourceDir = Join-Path $env:GITHUB_WORKSPACE "output\installer\fd\app"
+          $outputDir = Join-Path $env:GITHUB_WORKSPACE "output\release\windows-installer"
+          $issPath = Join-Path $env:GITHUB_WORKSPACE "installer\windows\RadiKeep.iss"
+          New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" `
+            "/DMyAppVersion=$env:VERSION" `
+            "/DInstallerFlavor=fd" `
+            "/DDotNetRuntimeMode=CheckOnly" `
+            "/DSourceDir=$sourceDir" `
+            "/DOutputDir=$outputDir" `
+            "$issPath"
+
+      - name: Build self-contained installer
+        shell: pwsh
+        run: |
+          $sourceDir = Join-Path $env:GITHUB_WORKSPACE "output\installer\sc\app"
+          $outputDir = Join-Path $env:GITHUB_WORKSPACE "output\release\windows-installer"
+          $issPath = Join-Path $env:GITHUB_WORKSPACE "installer\windows\RadiKeep.iss"
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" `
+            "/DMyAppVersion=$env:VERSION" `
+            "/DInstallerFlavor=sc" `
+            "/DDotNetRuntimeMode=Skip" `
+            "/DSourceDir=$sourceDir" `
+            "/DOutputDir=$outputDir" `
+            "$issPath"
+
+      - name: Create checksums
+        shell: pwsh
+        run: |
+          $files = Get-ChildItem -Path .\output\release\windows-installer -Filter "RadiKeep-setup-*.exe"
+          if ($files.Count -eq 0) { throw "Installer exe was not found." }
+          foreach ($exe in $files) {
+            $hash = Get-FileHash -Path $exe.FullName -Algorithm SHA256
+            "$($hash.Hash) *$($exe.Name)" | Out-File -FilePath "$($exe.FullName).sha256" -Encoding ascii
+          }
+
+      - name: Upload Windows installer artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: RadiKeep-windows-installer-${{ env.VERSION }}
+          path: |
+            output/release/windows-installer/RadiKeep-setup-*.exe
+            output/release/windows-installer/RadiKeep-setup-*.exe.sha256
+
+  build-linux-deb-and-docker:
+    needs: prepare-release
+    if: needs.prepare-release.outputs.run_build == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    env:
+      VERSION: ${{ needs.prepare-release.outputs.version }}
+      RELEASE_TAG: ${{ needs.prepare-release.outputs.tag }}
+      PUBLISH_LATEST: ${{ needs.prepare-release.outputs.publish_latest }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Install npm dependencies
+        run: |
+          cd RadiKeep
+          npm ci
+
+      - name: Publish framework-dependent app (linux-x64)
+        run: dotnet publish -c Release -r linux-x64 --self-contained false -p:Version=${VERSION} -p:InformationalVersion=${VERSION} -o ./output/installer/fd/linux-x64/app RadiKeep/RadiKeep.csproj
+
+      - name: Publish framework-dependent app (linux-arm64)
+        run: dotnet publish -c Release -r linux-arm64 --self-contained false -p:Version=${VERSION} -p:InformationalVersion=${VERSION} -o ./output/installer/fd/linux-arm64/app RadiKeep/RadiKeep.csproj
+
+      - name: Publish self-contained app (linux-x64)
+        run: dotnet publish -c Release -r linux-x64 --self-contained true -p:Version=${VERSION} -p:InformationalVersion=${VERSION} -o ./output/installer/sc/linux-x64/app RadiKeep/RadiKeep.csproj
+
+      - name: Publish self-contained app (linux-arm64)
+        run: dotnet publish -c Release -r linux-arm64 --self-contained true -p:Version=${VERSION} -p:InformationalVersion=${VERSION} -o ./output/installer/sc/linux-arm64/app RadiKeep/RadiKeep.csproj
+
+      - name: Build DEB packages
+        run: |
+          set -euxo pipefail
+          bash ./installer/linux/deb/build-deb.sh \
+            --variant fd \
+            --arch amd64 \
+            --version "${VERSION}" \
+            --publish-dir ./output/installer/fd/linux-x64/app \
+            --output-dir ./output/release/linux
+          bash ./installer/linux/deb/build-deb.sh \
+            --variant fd \
+            --arch arm64 \
+            --version "${VERSION}" \
+            --publish-dir ./output/installer/fd/linux-arm64/app \
+            --output-dir ./output/release/linux
+          bash ./installer/linux/deb/build-deb.sh \
+            --variant sc \
+            --arch amd64 \
+            --version "${VERSION}" \
+            --publish-dir ./output/installer/sc/linux-x64/app \
+            --output-dir ./output/release/linux
+          bash ./installer/linux/deb/build-deb.sh \
+            --variant sc \
+            --arch arm64 \
+            --version "${VERSION}" \
+            --publish-dir ./output/installer/sc/linux-arm64/app \
+            --output-dir ./output/release/linux
+
+      - name: Build Docker image (linux/amd64)
+        run: |
+          set -euxo pipefail
+          docker build --platform linux/amd64 --build-arg APP_VERSION=${VERSION} -t radikeep:${VERSION} -f RadiKeep/Dockerfile .
+
+      - name: Resolve GHCR image name
+        run: |
+          set -euxo pipefail
+          OWNER_LOWER="$(echo "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')"
+          IMAGE_REPO="ghcr.io/${OWNER_LOWER}/radikeep"
+          echo "GHCR_IMAGE_TAG=${IMAGE_REPO}:${VERSION}" >> "$GITHUB_ENV"
+          echo "GHCR_IMAGE_TAG_LATEST=${IMAGE_REPO}:latest" >> "$GITHUB_ENV"
+
+      - name: Login to GHCR
+        run: |
+          set -euxo pipefail
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Push Docker image to GHCR
+        run: |
+          set -euxo pipefail
+          docker tag radikeep:${VERSION} "${GHCR_IMAGE_TAG}"
+          docker push "${GHCR_IMAGE_TAG}"
+          if [[ "${PUBLISH_LATEST}" == "true" ]]; then
+            docker tag radikeep:${VERSION} "${GHCR_IMAGE_TAG_LATEST}"
+            docker push "${GHCR_IMAGE_TAG_LATEST}"
+          fi
+
+      - name: Save Docker image tar
+        run: |
+          set -euxo pipefail
+          mkdir -p output/release/linux
+          docker save -o output/release/linux/RadiKeep-docker-${VERSION}-linux-amd64.tar radikeep:${VERSION}
+
+      - name: Create checksums
+        run: |
+          set -euxo pipefail
+          cd output/release/linux
+          sha256sum ./*.deb ./*.tar > SHA256SUMS-linux.txt
+
+      - name: Upload Linux package artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: RadiKeep-linux-packages-${{ env.VERSION }}
+          path: |
+            output/release/linux/*.deb
+            output/release/linux/*.tar
+            output/release/linux/SHA256SUMS-linux.txt
+
+  create-release:
+    needs:
+      - prepare-release
+      - build-zips
+      - build-windows-installer
+      - build-linux-deb-and-docker
+    if: needs.prepare-release.outputs.run_build == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+
+      - name: Show artifact tree
+        run: find release-assets -type f | sort
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ needs.prepare-release.outputs.tag }}
+          name: ${{ needs.prepare-release.outputs.tag }}
+          generate_release_notes: true
+          files: |
+            release-assets/**/*.zip
+            release-assets/**/*.zip.sha256
+            release-assets/**/*.exe
+            release-assets/**/*.exe.sha256
+            release-assets/**/*.deb
+            release-assets/**/*.tar
+            release-assets/**/SHA256SUMS-*.txt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,83 @@
+@use "../common/variables" as *;
+/* page: home-index */
+.card {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+
+        .card-content {
+            flex-grow: 1;
+        }
+
+        .cursor-pointer {
+            cursor: pointer;
+        }
+
+        .rk-program-meta {
+            min-height: 6.2rem;
+        }
+
+        .program-detail {
+            .card-footer-item + .card-footer-item {
+                border-left: 1px solid $rk-border-muted;
+            }
+
+            .card-footer {
+                display: flex;
+            }
+
+            .card-footer-item {
+                flex: 1 1 0;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                min-height: 2.75rem;
+                white-space: nowrap;
+                font-size: 0.82rem;
+
+                &.hidden {
+                    display: none;
+                }
+            }
+        }
+
+        .description.is-collapsed {
+            display: -webkit-box;
+            -webkit-box-orient: vertical;
+            -webkit-line-clamp: 3;
+            overflow: hidden;
+        }
+
+        .description-toggle {
+            margin-top: 0.35rem;
+            font-size: 0.8rem;
+            color: $rk-info-600;
+            background: transparent;
+            border: 0;
+            padding: 0;
+            cursor: pointer;
+        }
+
+        .description-toggle {
+            &:hover {
+                color: $rk-info-700;
+                text-decoration: underline;
+            }
+        }
+
+        #area-tabs {
+            .tab-button {
+                border: 1px solid $rk-border-soft;
+
+                &.is-active {
+                    background-color: $rk-info-600;
+                    border-color: $rk-info-500;
+                    color: #fff;
+                    font-weight: 700;
+                }
+            }
+        }
+
+
+

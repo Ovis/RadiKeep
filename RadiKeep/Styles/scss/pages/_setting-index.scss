@@ -1,0 +1,26 @@
+@use "../common/variables" as *;
+/* page: setting-index */
+.tag-actions-col {
+        width: 6.5rem;
+        min-width: 6.5rem;
+        white-space: nowrap;
+        text-align: right;
+    }
+
+    .rk-page-btn {
+        border: 1px solid $rk-slate-300;
+        border-radius: 0.5rem;
+        background: white;
+        color: $rk-slate-700;
+        padding: 0.25rem 0.55rem;
+        font-size: 0.8rem;
+    }
+
+    .rk-page-btn.is-current {
+        background: rgb(37 99 235);
+        border-color: rgb(37 99 235);
+        color: white;
+    }
+
+
+

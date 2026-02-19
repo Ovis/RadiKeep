@@ -1,0 +1,30 @@
+@{
+    ViewData["Title"] = "エラー";
+}
+
+
+
+<section class="error-page">
+    <div class="error-card">
+        <div class="error-header">
+            <span class="error-icon" aria-hidden="true">
+                <i class="fas fa-triangle-exclamation"></i>
+            </span>
+            <div>
+                <h1 class="error-title">処理中にエラーが発生しました</h1>
+                <p class="error-description">
+                    画面の表示またはデータの取得に失敗しました。時間をおいて再度お試しください。
+                </p>
+            </div>
+        </div>
+
+        <div class="error-help">
+            問題が続く場合は、ログを確認して原因を特定してください。
+        </div>
+
+        <div class="error-actions">
+            <a class="button is-light" asp-controller="Home" asp-action="Index">ホームに戻る</a>
+            <button type="button" class="button is-info is-light" onclick="location.reload()">再読み込み</button>
+        </div>
+    </div>
+</section>

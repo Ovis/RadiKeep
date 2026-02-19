@@ -1,0 +1,227 @@
+@use "../common/variables" as *;
+/* page: reserve-keyword-list */
+.accordion .card-header {
+            cursor: pointer;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .buttons {
+            flex-wrap: wrap;
+        }
+
+        .keyword-modal-wide {
+            max-width: 72rem;
+        }
+
+        #keyword-reserve-modal {
+            padding: 1rem;
+            overflow-y: auto;
+            align-items: flex-start;
+        }
+
+        #keyword-reserve-modal .modal-card {
+            max-height: calc(100vh - 2rem);
+            margin: auto;
+            display: flex;
+            flex-direction: column;
+        }
+
+        #keyword-reserve-modal .modal-card-body {
+            overflow-y: auto;
+        }
+
+        .reserve-actions {
+            display: flex;
+            flex-wrap: nowrap;
+            gap: 0.5rem;
+            align-items: center;
+        }
+
+        .reserve-actions .button {
+            width: 2.4rem;
+            min-width: 2.4rem;
+            min-height: 2.2rem;
+            padding: 0;
+            justify-content: center;
+            margin-left: 0 !important;
+        }
+
+        .reserve-actions .label-text {
+            display: none;
+        }
+
+        .reserve-order-cell {
+            width: 4.5rem;
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+            white-space: nowrap;
+        }
+
+        .reserve-order-wrap {
+            display: inline-flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 0.45rem;
+            width: 100%;
+        }
+
+        .reserve-order-handle {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 1.2rem;
+            color: rgb(100 116 139);
+            cursor: grab;
+            user-select: none;
+        }
+
+        .reserve-order-handle:active {
+            cursor: grabbing;
+        }
+
+        #keyword-reserve-table-body tr.is-dragging {
+            opacity: 0.6;
+        }
+
+        #keyword-reserve-table-body tr.is-drag-over {
+            outline: 2px solid rgb(56 189 248);
+            outline-offset: -2px;
+        }
+
+        .keyword-tag-select-layout {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) minmax(20rem, 24rem);
+            gap: 0.8rem;
+            align-items: start;
+        }
+
+        .keyword-selected-tags-panel {
+            padding: 0.6rem;
+            border: 1px solid $rk-slate-200;
+            border-radius: 0.6rem;
+            background: $rk-slate-50;
+        }
+
+        .keyword-selected-tags-chip-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.4rem;
+            margin-top: 0.45rem;
+        }
+
+        .keyword-selected-tag-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            border: 1px solid rgb(191 219 254);
+            border-radius: 9999px;
+            padding: 0.2rem 0.55rem;
+            background: rgb(239 246 255);
+            color: rgb(30 64 175);
+            font-size: 0.75rem;
+            line-height: 1.2;
+            white-space: nowrap;
+        }
+
+        .keyword-selected-tag-chip button {
+            border: 0;
+            background: transparent;
+            color: inherit;
+            cursor: pointer;
+            padding: 0;
+            line-height: 1;
+            font-size: 0.85rem;
+        }
+
+        .keyword-selected-tags-empty {
+            color: rgb(100 116 139);
+            font-size: 0.8rem;
+        }
+
+        .keyword-tag-create-inline {
+            margin-top: 0.55rem;
+        }
+
+        .keyword-tag-create-suggestion-list {
+            margin-top: 0.45rem;
+            border: 1px solid $rk-slate-200;
+            border-radius: 0.5rem;
+            background: rgb(255 255 255);
+            padding: 0.4rem;
+            min-height: 2.2rem;
+            display: none;
+        }
+
+        .keyword-tag-create-suggestion-list.is-open {
+            display: block;
+        }
+
+        @media (max-width: 640px) {
+            .rk-table-wrap .table thead {
+                display: none;
+            }
+
+            .rk-table-wrap .table,
+            .rk-table-wrap .table tbody,
+            .rk-table-wrap .table tr,
+            .rk-table-wrap .table td {
+                display: block;
+                width: 100%;
+            }
+
+            .rk-table-wrap .table tbody tr {
+                border: 1px solid $rk-slate-200;
+                border-radius: 0.75rem;
+                background: rgb(255 255 255);
+                margin-bottom: 0.75rem;
+                padding: 0.25rem;
+            }
+
+            .rk-table-wrap .table tbody tr td {
+                border: 0;
+                border-radius: 0;
+                background: transparent;
+                padding: 0.45rem 0.55rem;
+            }
+
+            .rk-table-wrap .table tbody tr td::before {
+                content: attr(data-label);
+                display: block;
+                font-size: 0.72rem;
+                font-weight: 700;
+                color: $rk-slate-600;
+                margin-bottom: 0.2rem;
+            }
+
+            .reserve-actions {
+                display: grid;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                gap: 0.5rem;
+            }
+
+            .reserve-actions .button {
+                width: 100%;
+                min-width: 0;
+                min-height: 2rem;
+                padding: 0.35rem 0.5rem;
+                gap: 0.35rem;
+            }
+
+            .reserve-actions .label-text {
+                display: inline;
+            }
+
+            .keyword-tag-select-layout {
+                grid-template-columns: 1fr;
+            }
+
+            .keyword-selected-tags-panel {
+                margin-top: 0.5rem;
+            }
+        }
+
+
+

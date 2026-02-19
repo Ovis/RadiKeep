@@ -1,0 +1,89 @@
+@use "../common/variables" as *;
+@use "../common/mixins" as *;
+/* page: program-radiko */
+.accordion .card-header {
+            cursor: pointer;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .buttons {
+            flex-wrap: wrap;
+        }
+
+        .rk-program-grid {
+            display: grid;
+            grid-template-columns: repeat(1, minmax(0, 1fr));
+            gap: 1rem;
+            
+            @include mq(md) {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
+            @include mq(lg) {
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+            }
+        }
+
+        .rk-program-card {
+            .card {
+                display: flex;
+                flex-direction: column;
+                height: 100%;
+            }
+
+            .card-content {
+                flex-grow: 1;
+            }
+
+            .card-footer {
+                display: flex;
+            }
+
+            .card-footer-item {
+                flex: 1 1 0;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                min-height: 2.75rem;
+                white-space: nowrap;
+                font-size: 0.82rem;
+
+                &.hidden {
+                    display: none;
+                }
+            }
+
+            .card-footer-item + .card-footer-item {
+                border-left: 1px solid $rk-border-muted;
+            }
+
+            .description {
+                &.is-collapsed {
+                    display: -webkit-box;
+                    -webkit-box-orient: vertical;
+                    -webkit-line-clamp: 3;
+                    overflow: hidden;
+                }
+            }
+
+            .description-toggle {
+                margin-top: 0.35rem;
+                font-size: 0.8rem;
+                color: $rk-info-600;
+                background: transparent;
+                border: 0;
+                padding: 0;
+                cursor: pointer;
+
+                &:hover {
+                    color: $rk-info-700;
+                    text-decoration: underline;
+                }
+            }
+        }
+
+
+

@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "strict": true,
+    "esModuleInterop": true,
+    "moduleResolution": "node",
+    "sourceMap": true,
+    "forceConsistentCasingInFileNames": true,
+    "outDir": "./wwwroot/js",
+    "lib": [ "es2015", "es2017", "dom" ]
+  },
+  "include": [
+    "Scripts/**/*.ts"
+  ]
+}

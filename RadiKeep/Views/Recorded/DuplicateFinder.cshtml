@@ -1,0 +1,168 @@
+@{
+    ViewData["Title"] = "同一番組候補";
+}
+@inject Microsoft.AspNetCore.Antiforgery.IAntiforgery Antiforgery
+
+
+
+<input id="VerificationToken" type="hidden" value="@(Antiforgery.GetAndStoreTokens(Context).RequestToken)" />
+
+<section class="section">
+    <div class="rk-page-card">
+        <div class="rk-page-card__header is-flex is-justify-content-space-between is-align-items-center">
+            <h1 class="title is-5 mb-0">同一番組候補のチェック</h1>
+            <a class="button is-light is-small" asp-controller="Recorded" asp-action="Index">録音番組一覧に戻る</a>
+        </div>
+        <p class="is-size-7 has-text-grey mt-2">
+            番組名・放送日時・録音時間が近いものを先にしぼり込み、その後に音声を比較して「同じ内容の可能性が高い番組」を見つけます。
+        </p>
+
+        <div class="duplicate-option-grid">
+            <div class="duplicate-option-grid-hint">
+                <p class="is-size-7 has-text-grey">
+                    「詳細チェックする件数の上限」や「チェックの丁寧さ」を上げるほど、完了まで時間がかかります。
+                </p>
+                <p class="is-size-7 has-text-grey mt-1">
+                    「同じ放送回とみなす時間差」は、同じ番組の放送回を分けるための目安です。
+                </p>
+            </div>
+
+            <div class="field duplicate-option-item">
+                <label class="label" for="duplicate-lookback-days">手動実行の抽出対象期間</label>
+                <div class="select is-small">
+                    <select id="duplicate-lookback-days">
+                        <option value="30" selected>直近30日</option>
+                        <option value="60">直近60日</option>
+                        <option value="90">直近90日</option>
+                        <option value="180">直近180日</option>
+                        <option value="365">直近365日</option>
+                        <option value="0">全件</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="field duplicate-option-item">
+                <label class="label" for="duplicate-max-groups">
+                    詳細チェックする件数の上限
+                    <details class="inline-help">
+                        <summary>?</summary>
+                        <div class="inline-help-body">
+                            ここを大きくすると見つかる候補は増えますが、処理時間も長くなります。
+                        </div>
+                    </details>
+                </label>
+                <div class="select is-small">
+                    <select id="duplicate-max-groups">
+                        <option value="50">50グループ</option>
+                        <option value="100" selected>100グループ</option>
+                        <option value="200">200グループ</option>
+                        <option value="500">500グループ</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="field duplicate-option-item">
+                <label class="label" for="duplicate-phase2-mode">
+                    チェックの丁寧さ
+                    <details class="inline-help">
+                        <summary>?</summary>
+                        <div class="inline-help-body">
+                            「標準」は速く、「ていねい」は時間がかかる代わりに比較数が増えます。
+                        </div>
+                    </details>
+                </label>
+                <div class="select is-small">
+                    <select id="duplicate-phase2-mode">
+                        <option value="light" selected>標準（速め）</option>
+                        <option value="strict">ていねい（時間がかかる）</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="field duplicate-option-item">
+                <label class="label" for="duplicate-cluster-window-hours">
+                    同じ放送回とみなす時間差
+                    <details class="inline-help">
+                        <summary>?</summary>
+                        <div class="inline-help-body">
+                            系列局で放送時刻が少しずれる番組を、同じ回としてまとめるための目安です。
+                        </div>
+                    </details>
+                </label>
+                <div class="select is-small">
+                    <select id="duplicate-cluster-window-hours">
+                        <option value="24">24時間</option>
+                        <option value="36">36時間</option>
+                        <option value="48" selected>48時間（おすすめ）</option>
+                        <option value="72">72時間</option>
+                        <option value="96">96時間</option>
+                        <option value="168">168時間（7日）</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="field duplicate-option-item">
+                <label class="label" for="duplicate-start-offset-minutes">候補再生の開始位置</label>
+                <div class="select is-small">
+                    <select id="duplicate-start-offset-minutes">
+                        <option value="0" selected>先頭から</option>
+                        <option value="1">開始+1分</option>
+                        <option value="2">開始+2分</option>
+                        <option value="3">開始+3分</option>
+                        <option value="5">開始+5分</option>
+                        <option value="10">開始+10分</option>
+                    </select>
+                </div>
+            </div>
+
+        </div>
+
+        <div class="field">
+            <button id="duplicate-run-btn" class="button is-primary">
+                <span class="icon"><i class="fas fa-wave-square"></i></span>
+                <span>抽出実行</span>
+            </button>
+        </div>
+
+        <div id="duplicate-loading" class="notification is-light mt-3 duplicate-loading hidden">
+            <span class="icon"><i class="fas fa-spinner fa-spin"></i></span>
+            <span>チェック中です。完了するとお知らせに通知されます。</span>
+        </div>
+        <div id="duplicate-error" class="notification is-danger is-light mt-3 hidden"></div>
+
+        <div id="duplicate-status" class="notification is-light mt-4">
+            <p><strong>最終開始時刻:</strong> <span id="duplicate-last-started">-</span></p>
+            <p><strong>最終完了時刻:</strong> <span id="duplicate-last-completed">-</span></p>
+            <div class="mt-2"><strong>メッセージ:</strong> <span id="duplicate-last-message">-</span></div>
+        </div>
+
+        <div class="duplicate-actions">
+            <button id="duplicate-select-all-btn" class="button is-small is-light" type="button">全選択</button>
+            <button id="duplicate-clear-selection-btn" class="button is-small is-light" type="button">選択解除</button>
+            <button id="duplicate-bulk-delete-btn" class="button is-small is-danger" type="button">選択を一括削除</button>
+            <span id="duplicate-selected-count" class="is-size-7 has-text-grey">0件選択中</span>
+        </div>
+
+        <div class="rk-table-wrap mt-3">
+            <table class="table is-fullwidth is-striped is-hoverable">
+                <thead>
+                    <tr>
+                        <th style="width:3rem;">
+                            <label class="checkbox" title="全選択" aria-label="全選択">
+                                <input type="checkbox" id="duplicate-select-all-checkbox">
+                            </label>
+                        </th>
+                        <th style="width:18rem;">グループ概要</th>
+                        <th>同一候補の番組一覧</th>
+                    </tr>
+                </thead>
+                <tbody id="duplicate-table-body"></tbody>
+            </table>
+        </div>
+    </div>
+</section>
+
+@section scripts {
+    <script src="~/lib/hls.js/hls.min.js" asp-append-version="true"></script>
+    <script type="module" src="~/js/recorded-duplicates.js" asp-append-version="true"></script>
+}

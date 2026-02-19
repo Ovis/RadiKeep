@@ -1,0 +1,329 @@
+#!/bin/sh
+set -e
+
+# postinst は「ユーザー/権限準備」「初期設定反映」「systemd 有効化/起動」「完了案内」を担う。
+
+PACKAGE_USER="radikeep"
+PACKAGE_GROUP="radikeep"
+CONFIG_DIR="/etc/radikeep"
+DEFAULTS_FILE="/etc/default/radikeep"
+DATA_DIR="/var/lib/radikeep"
+LOG_DIR="/var/log/radikeep"
+KEYS_DIR="/var/lib/radikeep/keys"
+
+json_escape() {
+  # radikeep.settings.json をシェルで生成するため、最低限のエスケープを行う。
+  printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
+}
+
+get_debconf_value() {
+  # debconf 非導入環境でも失敗扱いにせず、空値フォールバック可能にする。
+  key="$1"
+  if ! command -v debconf-communicate >/dev/null 2>&1; then
+    return 1
+  fi
+
+  result="$(printf 'GET %s\n' "$key" | debconf-communicate radikeep 2>/dev/null | tail -n 1 || true)"
+  case "$result" in
+    0\ *)
+      printf '%s' "${result#0 }"
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+ensure_directory_or_fail() {
+  # セキュリティ観点で相対パスは受け付けない（必ず絶対パス）。
+  target_dir="$1"
+  label="$2"
+
+  case "$target_dir" in
+    /*) ;;
+    *)
+      echo "エラー: ${label} は絶対パスで指定してください: ${target_dir}" >&2
+      exit 1
+      ;;
+  esac
+
+  if [ -d "$target_dir" ]; then
+    return
+  fi
+
+  echo "${label} ディレクトリが存在しないため作成します: ${target_dir}"
+  if ! mkdir -p "$target_dir"; then
+    echo "エラー: ${label} ディレクトリを作成できませんでした: ${target_dir}" >&2
+    exit 1
+  fi
+
+  if [ ! -d "$target_dir" ]; then
+    echo "エラー: ${label} ディレクトリの作成後確認に失敗しました: ${target_dir}" >&2
+    exit 1
+  fi
+}
+
+ensure_user_group() {
+  # 実行専用の system user/group を作成（ログイン不可）。
+  mkdir -p "$DATA_DIR"
+
+  if ! getent group "$PACKAGE_GROUP" >/dev/null 2>&1; then
+    addgroup --system "$PACKAGE_GROUP"
+  fi
+
+  if ! id -u "$PACKAGE_USER" >/dev/null 2>&1; then
+    adduser \
+      --system \
+      --ingroup "$PACKAGE_GROUP" \
+      --home "$DATA_DIR" \
+      --no-create-home \
+      --shell /usr/sbin/nologin \
+      "$PACKAGE_USER"
+  fi
+}
+
+ensure_dirs() {
+  # アプリの書き込み先だけを明示的に作成し、所有権を実行ユーザーへ付与する。
+  mkdir -p "$CONFIG_DIR" "$DATA_DIR" "$LOG_DIR" "$KEYS_DIR" "$DATA_DIR/db"
+  chmod 0755 "$CONFIG_DIR" "$DATA_DIR" "$LOG_DIR"
+  chmod 0700 "$KEYS_DIR"
+  chown -R "$PACKAGE_USER:$PACKAGE_GROUP" "$DATA_DIR" "$LOG_DIR" "$KEYS_DIR"
+}
+
+write_defaults_file() {
+  # /etc/default/radikeep は systemd EnvironmentFile として読み込まれる。
+  # 既存ファイルがあれば差分更新し、ユーザー設定を極力維持する。
+  port="$1"
+  record_dir="$2"
+  temp_dir="$3"
+  aspnetcore_urls="http://0.0.0.0:${port}"
+  if [ ! -f "$DEFAULTS_FILE" ]; then
+    cat > "$DEFAULTS_FILE" <<EOF
+# RadiKeep runtime settings
+RADIKEEP_PORT=${port}
+RADIKEEP_BIND_ADDRESS=0.0.0.0
+ASPNETCORE_URLS=${aspnetcore_urls}
+RadiKeep__RecordFileSaveFolder=${record_dir}
+RadiKeep__TemporaryFileSaveFolder=${temp_dir}
+EOF
+    chmod 0644 "$DEFAULTS_FILE"
+    return
+  fi
+
+  if grep -q '^RADIKEEP_PORT=' "$DEFAULTS_FILE"; then
+    sed -i "s#^RADIKEEP_PORT=.*#RADIKEEP_PORT=${port}#" "$DEFAULTS_FILE"
+  else
+    echo "RADIKEEP_PORT=${port}" >> "$DEFAULTS_FILE"
+  fi
+
+  if ! grep -q '^RADIKEEP_BIND_ADDRESS=' "$DEFAULTS_FILE"; then
+    echo "RADIKEEP_BIND_ADDRESS=0.0.0.0" >> "$DEFAULTS_FILE"
+  fi
+
+  if grep -q '^ASPNETCORE_URLS=' "$DEFAULTS_FILE"; then
+    sed -i "s#^ASPNETCORE_URLS=.*#ASPNETCORE_URLS=${aspnetcore_urls}#" "$DEFAULTS_FILE"
+  else
+    echo "ASPNETCORE_URLS=${aspnetcore_urls}" >> "$DEFAULTS_FILE"
+  fi
+
+  if grep -q '^RadiKeep__RecordFileSaveFolder=' "$DEFAULTS_FILE"; then
+    sed -i "s#^RadiKeep__RecordFileSaveFolder=.*#RadiKeep__RecordFileSaveFolder=${record_dir}#" "$DEFAULTS_FILE"
+  else
+    echo "RadiKeep__RecordFileSaveFolder=${record_dir}" >> "$DEFAULTS_FILE"
+  fi
+
+  if grep -q '^RadiKeep__TemporaryFileSaveFolder=' "$DEFAULTS_FILE"; then
+    sed -i "s#^RadiKeep__TemporaryFileSaveFolder=.*#RadiKeep__TemporaryFileSaveFolder=${temp_dir}#" "$DEFAULTS_FILE"
+  else
+    echo "RadiKeep__TemporaryFileSaveFolder=${temp_dir}" >> "$DEFAULTS_FILE"
+  fi
+}
+
+write_settings_file() {
+  # radikeep.settings.json は初回のみ作成。
+  # 既存がある場合はユーザー上書きを避けるため触らない。
+  record_dir="$1"
+  temp_dir="$2"
+
+  if [ -f "$CONFIG_DIR/radikeep.settings.json" ]; then
+    return
+  fi
+
+  esc_record_dir="$(json_escape "$record_dir")"
+  esc_temp_dir="$(json_escape "$temp_dir")"
+  esc_keys_dir="$(json_escape "$KEYS_DIR")"
+  esc_db_dir="$(json_escape "$DATA_DIR/db")"
+  esc_log_dir="$(json_escape "$LOG_DIR")"
+
+  cat > "$CONFIG_DIR/radikeep.settings.json" <<EOF
+{
+  "RadiKeep": {
+    "DbDirectory": "${esc_db_dir}",
+    "LogDirectory": "${esc_log_dir}",
+    "RecordFileSaveFolder": "${esc_record_dir}",
+    "TemporaryFileSaveFolder": "${esc_temp_dir}",
+    "DataProtectionKeysPath": "${esc_keys_dir}"
+  }
+}
+EOF
+
+  chmod 0640 "$CONFIG_DIR/radikeep.settings.json"
+  chown "$PACKAGE_USER:$PACKAGE_GROUP" "$CONFIG_DIR/radikeep.settings.json"
+}
+
+configure_from_debconf() {
+  # debconf 値を正規化して defaults/appsettings へ反映する。
+  port=""
+  record_dir=""
+  temp_dir=""
+
+  port="$(get_debconf_value radikeep/port || true)"
+  record_dir="$(get_debconf_value radikeep/record_dir || true)"
+  temp_dir="$(get_debconf_value radikeep/temp_dir || true)"
+
+  case "$port" in
+    ''|*[!0-9]*) port=8085 ;;
+    *)
+      if [ "$port" -lt 1 ] || [ "$port" -gt 65535 ]; then
+        port=8085
+      fi
+      ;;
+  esac
+
+  if [ -z "$record_dir" ]; then
+    record_dir="$DATA_DIR/record"
+  fi
+
+  if [ -z "$temp_dir" ]; then
+    temp_dir="$DATA_DIR/temp"
+  fi
+
+  ensure_directory_or_fail "$record_dir" "録音保存先"
+  ensure_directory_or_fail "$temp_dir" "一時保存先"
+  chown -R "$PACKAGE_USER:$PACKAGE_GROUP" "$record_dir" "$temp_dir"
+
+  write_defaults_file "$port" "$record_dir" "$temp_dir"
+  write_settings_file "$record_dir" "$temp_dir"
+}
+
+systemd_reload_and_restart() {
+  # インストール直後にサービスが利用可能な状態になるよう enable + start/restart する。
+  if ! command -v systemctl >/dev/null 2>&1; then
+    return
+  fi
+
+  if [ ! -d /run/systemd/system ]; then
+    return
+  fi
+
+  systemctl daemon-reload
+  systemctl enable radikeep.service
+  if ! systemctl is-enabled --quiet radikeep.service; then
+    echo "エラー: radikeep.service の有効化に失敗しました。" >&2
+    exit 1
+  fi
+
+  if systemctl is-active --quiet radikeep.service; then
+    systemctl restart radikeep.service
+  else
+    systemctl start radikeep.service
+  fi
+
+  if ! systemctl is-active --quiet radikeep.service; then
+    echo "エラー: radikeep.service の起動に失敗しました。" >&2
+    exit 1
+  fi
+}
+
+show_access_url() {
+  # インストール完了時に利用者向けの接続情報を表示する。
+  port=8085
+  bind_address=0.0.0.0
+  access_url="http://127.0.0.1:8085/"
+  lan_ip=""
+  lan_url=""
+  record_dir="$DATA_DIR/record"
+  temp_dir="$DATA_DIR/temp"
+  service_state="unknown"
+
+  if [ -f "$DEFAULTS_FILE" ]; then
+    # shellcheck disable=SC1090
+    . "$DEFAULTS_FILE"
+    if [ -n "${RADIKEEP_PORT:-}" ]; then
+      port="$RADIKEEP_PORT"
+    fi
+    if [ -n "${RADIKEEP_BIND_ADDRESS:-}" ]; then
+      bind_address="$RADIKEEP_BIND_ADDRESS"
+    fi
+    if [ -n "${ASPNETCORE_URLS:-}" ]; then
+      access_url="${ASPNETCORE_URLS%/}/"
+    else
+      access_url="http://${bind_address}:${port}/"
+    fi
+    if [ -n "${RadiKeep__RecordFileSaveFolder:-}" ]; then
+      record_dir="$RadiKeep__RecordFileSaveFolder"
+    fi
+    if [ -n "${RadiKeep__TemporaryFileSaveFolder:-}" ]; then
+      temp_dir="$RadiKeep__TemporaryFileSaveFolder"
+    fi
+  fi
+
+  if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
+    service_state="$(systemctl is-active radikeep.service 2>/dev/null || true)"
+  fi
+
+  if command -v hostname >/dev/null 2>&1; then
+    lan_ip="$(hostname -I 2>/dev/null | awk '{for (i=1; i<=NF; i++) if ($i !~ /^127\./) { print $i; exit }}')"
+  fi
+  if [ -n "$lan_ip" ]; then
+    lan_url="http://${lan_ip}:${port}/"
+  fi
+
+  cat <<EOF
+========================================
+RadiKeep のインストールが完了しました
+アクセスURL(ローカル): http://127.0.0.1:${port}/
+ポート: ${port}
+録音保存先: ${record_dir}
+一時保存先: ${temp_dir}
+設定ファイル: ${CONFIG_DIR}/radikeep.settings.json
+サービス状態: ${service_state}
+EOF
+
+  if [ -n "$lan_url" ]; then
+    cat <<EOF
+アクセスURL(LAN): ${lan_url}
+EOF
+  fi
+
+  cat <<EOF
+確認コマンド:
+  sudo systemctl status radikeep.service --no-pager -l
+========================================
+EOF
+
+  cat >&2 <<EOF
+EOF
+
+  if [ "${service_state}" != "active" ] && [ "${service_state}" != "unknown" ]; then
+    cat >&2 <<EOF
+注意: radikeep.service が active ではありません (${service_state})。
+詳細ログ:
+  sudo journalctl -u radikeep.service -n 100 --no-pager
+EOF
+  fi
+}
+
+case "$1" in
+  configure)
+    # Debian パッケージ標準フロー: configure タイミングで実体作業を行う。
+    ensure_user_group
+    ensure_dirs
+    configure_from_debconf
+    systemd_reload_and_restart
+    show_access_url
+    ;;
+esac
+
+exit 0
