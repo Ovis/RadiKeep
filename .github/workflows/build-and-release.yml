@@ -10,6 +10,16 @@ on:
         description: "Release version (SemVer, e.g. 1.2.3)"
         required: false
         default: ""
+      release_mode:
+        description: "Release mode: none / draft / prerelease / stable"
+        required: false
+        type: choice
+        options:
+          - none
+          - draft
+          - prerelease
+          - stable
+        default: draft
       publish_latest:
         description: "Also push Docker latest tag"
         required: false
@@ -29,6 +39,7 @@ jobs:
       run_build: ${{ steps.meta.outputs.run_build }}
       version: ${{ steps.meta.outputs.version }}
       tag: ${{ steps.meta.outputs.tag }}
+      release_mode: ${{ steps.meta.outputs.release_mode }}
       publish_latest: ${{ steps.meta.outputs.publish_latest }}
     steps:
       - name: Checkout repository
@@ -45,15 +56,64 @@ jobs:
           if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
             version="${GITHUB_REF_NAME#v}"
             tag="${GITHUB_REF_NAME}"
-          else
-            input_version="${{ github.event.inputs.version }}"
-            if [[ -z "${input_version}" ]]; then
-              echo "workflow_dispatch では version の指定が必要です。" >&2
-              exit 1
+            release_mode="stable"
+            if [[ "${version}" == *"-"* ]]; then
+              release_mode="prerelease"
             fi
-            version="${input_version#v}"
-            tag="v${version}"
-            if ! git rev-parse -q --verify "refs/tags/${tag}" >/dev/null; then
+          else
+            release_mode="${{ github.event.inputs.release_mode }}"
+            if [[ -z "${release_mode}" ]]; then
+              release_mode="draft"
+            fi
+            input_version="${{ github.event.inputs.version }}"
+            generate_unique_timestamp_tag() {
+              while true; do
+                candidate="$(TZ=Asia/Tokyo date +%Y%m%d%H%M%S%3N)"
+                if ! git rev-parse -q --verify "refs/tags/${candidate}" >/dev/null; then
+                  echo "${candidate}"
+                  return 0
+                fi
+                sleep 0.01
+              done
+            }
+            timestamp_tag="$(generate_unique_timestamp_tag)"
+
+            case "${release_mode}" in
+              none)
+                # ビルド確認専用: タグ/リリースは作らない
+                version="0.0.0-ci.${timestamp_tag}"
+                tag=""
+                ;;
+              draft)
+                # 動作検証用ドラフト: SemVerタグは使わず時刻タグを採番
+                version="0.0.0-ci.${timestamp_tag}"
+                tag="ci-${timestamp_tag}"
+                ;;
+              prerelease|stable)
+                if [[ -z "${input_version}" ]]; then
+                  echo "release_mode=${release_mode} の場合、version の指定が必要です。" >&2
+                  exit 1
+                fi
+                version="${input_version#v}"
+                tag="v${version}"
+                python3 ./scripts/ci/validate-version-order.py --version "${version}"
+
+                if [[ "${release_mode}" == "prerelease" && "${version}" != *"-"* ]]; then
+                  echo "release_mode=prerelease の場合、version には -beta.1 や -rc.1 のようなプレリリース識別子が必要です。" >&2
+                  exit 1
+                fi
+                if [[ "${release_mode}" == "stable" && "${version}" == *"-"* ]]; then
+                  echo "release_mode=stable の場合、version にプレリリース識別子（-beta.1 / -rc.1 など）は指定できません。" >&2
+                  exit 1
+                fi
+                ;;
+              *)
+                echo "無効な release_mode: ${release_mode}" >&2
+                exit 1
+                ;;
+            esac
+
+            if [[ -n "${tag}" ]] && ! git rev-parse -q --verify "refs/tags/${tag}" >/dev/null; then
               git config user.name "github-actions[bot]"
               git config user.email "github-actions[bot]@users.noreply.github.com"
               git tag "${tag}"
@@ -65,21 +125,40 @@ jobs:
           if [[ -z "${publish_latest}" ]]; then
             publish_latest="true"
           fi
-          if [[ "${version}" == *"-"* ]]; then
+          if [[ "${release_mode}" != "stable" || "${version}" == *"-"* ]]; then
             publish_latest="false"
           fi
 
           echo "run_build=true" >> "$GITHUB_OUTPUT"
           echo "version=${version}" >> "$GITHUB_OUTPUT"
           echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          echo "release_mode=${release_mode}" >> "$GITHUB_OUTPUT"
           echo "publish_latest=${publish_latest}" >> "$GITHUB_OUTPUT"
 
-  build-zips:
+  create-release:
     needs: prepare-release
+    if: needs.prepare-release.outputs.run_build == 'true' && needs.prepare-release.outputs.release_mode != 'none'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Create or update draft Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ needs.prepare-release.outputs.tag }}
+          name: ${{ needs.prepare-release.outputs.tag }}
+          generate_release_notes: true
+          draft: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-zips:
+    needs:
+      - prepare-release
     if: needs.prepare-release.outputs.run_build == 'true'
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
     env:
       VERSION: ${{ needs.prepare-release.outputs.version }}
     steps:
@@ -161,20 +240,25 @@ jobs:
           (cd output/release/zip/linux-arm64 && zip -r ../../zips/RadiKeep-${VERSION}-linux-arm64.zip app)
           (cd output/release/zips && sha256sum ./*.zip > SHA256SUMS-zips.txt)
 
-      - name: Upload ZIP artifacts
-        uses: actions/upload-artifact@v4
+      - name: Upload ZIPs to Release
+        if: needs.prepare-release.outputs.release_mode != 'none'
+        uses: softprops/action-gh-release@v1
         with:
-          name: RadiKeep-zips-${{ env.VERSION }}
-          path: |
+          tag_name: ${{ needs.prepare-release.outputs.tag }}
+          draft: true
+          files: |
             output/release/zips/*.zip
             output/release/zips/SHA256SUMS-zips.txt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   build-windows-installer:
-    needs: prepare-release
+    needs:
+      - prepare-release
     if: needs.prepare-release.outputs.run_build == 'true'
     runs-on: windows-latest
     permissions:
-      contents: read
+      contents: write
     env:
       VERSION: ${{ needs.prepare-release.outputs.version }}
     steps:
@@ -269,20 +353,25 @@ jobs:
             "$($hash.Hash) *$($exe.Name)" | Out-File -FilePath "$($exe.FullName).sha256" -Encoding ascii
           }
 
-      - name: Upload Windows installer artifacts
-        uses: actions/upload-artifact@v4
+      - name: Upload Windows installers to Release
+        if: needs.prepare-release.outputs.release_mode != 'none'
+        uses: softprops/action-gh-release@v1
         with:
-          name: RadiKeep-windows-installer-${{ env.VERSION }}
-          path: |
+          tag_name: ${{ needs.prepare-release.outputs.tag }}
+          draft: true
+          files: |
             output/release/windows-installer/RadiKeep-setup-*.exe
             output/release/windows-installer/RadiKeep-setup-*.exe.sha256
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   build-linux-deb-and-docker:
-    needs: prepare-release
+    needs:
+      - prepare-release
     if: needs.prepare-release.outputs.run_build == 'true'
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
       packages: write
     env:
       VERSION: ${{ needs.prepare-release.outputs.version }}
@@ -348,19 +437,23 @@ jobs:
           docker build --platform linux/amd64 --build-arg APP_VERSION=${VERSION} -t radikeep:${VERSION} -f RadiKeep/Dockerfile .
 
       - name: Resolve GHCR image name
+        if: needs.prepare-release.outputs.release_mode == 'stable'
         run: |
           set -euxo pipefail
           OWNER_LOWER="$(echo "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')"
-          IMAGE_REPO="ghcr.io/${OWNER_LOWER}/radikeep"
+          REPO_LOWER="$(echo "${GITHUB_REPOSITORY#*/}" | tr '[:upper:]' '[:lower:]')"
+          IMAGE_REPO="ghcr.io/${OWNER_LOWER}/${REPO_LOWER}"
           echo "GHCR_IMAGE_TAG=${IMAGE_REPO}:${VERSION}" >> "$GITHUB_ENV"
           echo "GHCR_IMAGE_TAG_LATEST=${IMAGE_REPO}:latest" >> "$GITHUB_ENV"
 
       - name: Login to GHCR
+        if: needs.prepare-release.outputs.release_mode == 'stable'
         run: |
           set -euxo pipefail
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
 
       - name: Push Docker image to GHCR
+        if: needs.prepare-release.outputs.release_mode == 'stable'
         run: |
           set -euxo pipefail
           docker tag radikeep:${VERSION} "${GHCR_IMAGE_TAG}"
@@ -382,47 +475,39 @@ jobs:
           cd output/release/linux
           sha256sum ./*.deb ./*.tar > SHA256SUMS-linux.txt
 
-      - name: Upload Linux package artifacts
-        uses: actions/upload-artifact@v4
+      - name: Upload Linux packages to Release
+        if: needs.prepare-release.outputs.release_mode != 'none'
+        uses: softprops/action-gh-release@v1
         with:
-          name: RadiKeep-linux-packages-${{ env.VERSION }}
-          path: |
+          tag_name: ${{ needs.prepare-release.outputs.tag }}
+          draft: true
+          files: |
             output/release/linux/*.deb
             output/release/linux/*.tar
             output/release/linux/SHA256SUMS-linux.txt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  create-release:
+  publish-release:
     needs:
       - prepare-release
+      - create-release
       - build-zips
       - build-windows-installer
       - build-linux-deb-and-docker
-    if: needs.prepare-release.outputs.run_build == 'true'
+    if: needs.prepare-release.outputs.run_build == 'true' && (needs.prepare-release.outputs.release_mode == 'stable' || needs.prepare-release.outputs.release_mode == 'prerelease')
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: release-assets
-
-      - name: Show artifact tree
-        run: find release-assets -type f | sort
-
-      - name: Create GitHub Release
+      - name: Publish Release (only when all build jobs succeeded)
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ needs.prepare-release.outputs.tag }}
           name: ${{ needs.prepare-release.outputs.tag }}
           generate_release_notes: true
-          files: |
-            release-assets/**/*.zip
-            release-assets/**/*.zip.sha256
-            release-assets/**/*.exe
-            release-assets/**/*.exe.sha256
-            release-assets/**/*.deb
-            release-assets/**/*.tar
-            release-assets/**/SHA256SUMS-*.txt
+          draft: false
+          prerelease: ${{ needs.prepare-release.outputs.release_mode == 'prerelease' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
