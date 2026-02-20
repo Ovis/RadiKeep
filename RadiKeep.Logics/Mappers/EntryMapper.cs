@@ -234,7 +234,7 @@ public class EntryMapper(IAppConfigurationService config) : IEntryMapper
             LogLevel = source.LogLevel,
             Category = source.Category,
             Message = source.Message,
-            Timestamp = source.Timestamp.UtcDateTime,
+            Timestamp = source.Timestamp.ToUniversalTime(),
             IsRead = source.IsRead
         };
     }

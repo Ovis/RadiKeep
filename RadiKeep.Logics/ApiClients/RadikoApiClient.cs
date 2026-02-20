@@ -220,8 +220,8 @@ public class RadikoApiClient(
             var program = new RadikoProgram
             {
                 ProgramId = $"{stationId}_{ft + to}",
-                StartTime = start.UtcDateTime,
-                EndTime = end.UtcDateTime,
+                StartTime = start.ToUniversalTime(),
+                EndTime = end.ToUniversalTime(),
                 Title = programElement.Element("title")?.Value.Trim().ToSafeName().To半角英数字() ?? string.Empty,
                 Performer = programElement.Element("pfm")?.Value.Trim() ?? string.Empty,
                 Description = programElement.Element("info")?.Value.Trim() ??
@@ -272,8 +272,8 @@ public class RadikoApiClient(
             var fallbackProgram = new RadikoProgram
             {
                 ProgramId = $"{stationId}_{ft + to}",
-                StartTime = start.UtcDateTime,
-                EndTime = end.UtcDateTime,
+                StartTime = start.ToUniversalTime(),
+                EndTime = end.ToUniversalTime(),
                 Title = programElement.Element("title")?.Value.Trim().ToSafeName().To半角英数字() ?? string.Empty,
                 Performer = programElement.Element("pfm")?.Value.Trim() ?? string.Empty,
                 Description = programElement.Element("info")?.Value.Trim() ??

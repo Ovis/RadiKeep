@@ -1,4 +1,4 @@
-﻿using System.Runtime.InteropServices;
+using System.Runtime.InteropServices;
 using NUnit.Framework.Legacy;
 using RadiKeep.Logics.Extensions;
 

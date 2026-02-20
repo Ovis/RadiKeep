@@ -30,41 +30,62 @@ public class RadioDbContext : DbContext
     public virtual DbSet<RecordingFile> RecordingFiles { get; set; }
     public virtual DbSet<RecordingMetadata> RecordingMetadatas { get; set; }
 
+    public override int SaveChanges()
+    {
+        NormalizeDateTimeOffsetsToUtc();
+        return base.SaveChanges();
+    }
+
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+    {
+        NormalizeDateTimeOffsetsToUtc();
+        return base.SaveChanges(acceptAllChangesOnSuccess);
+    }
+
+    public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+    {
+        NormalizeDateTimeOffsetsToUtc();
+        return base.SaveChangesAsync(cancellationToken);
+    }
+
+    public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+    {
+        NormalizeDateTimeOffsetsToUtc();
+        return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+    }
+
 
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
 
-        var ulidToStringConverter = new ValueConverter<Ulid, string>(
-            v => v.ToString(),
-            v => Ulid.Parse(v));
-
         if (Database.ProviderName == "Microsoft.EntityFrameworkCore.Sqlite")
         {
-            // SQLite does not have proper support for DateTimeOffset via Entity Framework Core, see the limitations
-            // here: https://docs.microsoft.com/en-us/ef/core/providers/sqlite/limitations#query-limitations
-            // To work around this, when the Sqlite database provider is used, all model properties of type DateTimeOffset
-            // use the DateTimeOffsetToBinaryConverter
-            // Based on: https://github.com/aspnet/EntityFrameworkCore/issues/10784#issuecomment-415769754
-            // This only supports millisecond precision, but should be sufficient for most use cases.
-            // https://blog.dangl.me/archive/handling-datetimeoffset-in-sqlite-with-entity-framework-core/
+            var dateTimeOffsetToBinaryConverter = new DateTimeOffsetToBinaryConverter();
+            var nullableDateTimeOffsetToBinaryConverter = new ValueConverter<DateTimeOffset?, long?>(
+                v => v.HasValue ? v.Value.UtcDateTime.Ticks : null,
+                v => v.HasValue ? new DateTimeOffset(new DateTime(v.Value, DateTimeKind.Utc)) : null);
+
             foreach (var entityType in modelBuilder.Model.GetEntityTypes())
             {
-                var properties =
-                    entityType
-                    .ClrType.GetProperties()
-                    .Where(p => p.PropertyType == typeof(DateTimeOffset) || p.PropertyType == typeof(DateTimeOffset?));
-
-                foreach (var property in properties)
+                foreach (var property in entityType.GetProperties())
                 {
-                    modelBuilder
-                        .Entity(entityType.Name)
-                        .Property(property.Name)
-                        .HasConversion(new DateTimeOffsetToBinaryConverter());
+                    if (property.ClrType == typeof(DateTimeOffset))
+                    {
+                        property.SetValueConverter(dateTimeOffsetToBinaryConverter);
+                    }
+                    else if (property.ClrType == typeof(DateTimeOffset?))
+                    {
+                        property.SetValueConverter(nullableDateTimeOffsetToBinaryConverter);
+                    }
                 }
             }
         }
+
+        var ulidToStringConverter = new ValueConverter<Ulid, string>(
+            v => v.ToString(),
+            v => Ulid.Parse(v));
 
         modelBuilder.Entity<AppConfiguration>(entity =>
         {
@@ -635,5 +656,26 @@ public class RadioDbContext : DbContext
             entity.Property(e => e.ProgramUrl)
                 .HasColumnOrder(7);
         });
+    }
+
+    private void NormalizeDateTimeOffsetsToUtc()
+    {
+        foreach (var entry in ChangeTracker.Entries().Where(e => e.State is EntityState.Added or EntityState.Modified))
+        {
+            foreach (var property in entry.Properties)
+            {
+                var clrType = property.Metadata.ClrType;
+                if (clrType == typeof(DateTimeOffset) && property.CurrentValue is DateTimeOffset dto)
+                {
+                    property.CurrentValue = dto.ToUniversalTime();
+                    continue;
+                }
+
+                if (clrType == typeof(DateTimeOffset?) && property.CurrentValue is DateTimeOffset nullableDto)
+                {
+                    property.CurrentValue = nullableDto.ToUniversalTime();
+                }
+            }
+        }
     }
 }

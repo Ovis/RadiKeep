@@ -55,12 +55,13 @@ public class NotificationRepository(RadioDbContext dbContext) : INotificationRep
         IEnumerable<NoticeCategory>? categories = null,
         CancellationToken cancellationToken = default)
     {
+        var utcThreshold = dateTime.ToUniversalTime();
         await using var dbTran = await dbContext.Database.BeginTransactionAsync(cancellationToken);
 
         try
         {
             var query = dbContext.Notification
-                .Where(x => x.Timestamp <= dateTime.UtcDateTime)
+                .Where(x => x.Timestamp <= utcThreshold)
                 .Where(r => r.IsRead == false);
 
             var categoryList = categories?.Distinct().ToList();
