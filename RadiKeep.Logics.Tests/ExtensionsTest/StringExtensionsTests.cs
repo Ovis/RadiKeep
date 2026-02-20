@@ -1,4 +1,4 @@
-﻿using RadiKeep.Logics.Extensions;
+using RadiKeep.Logics.Extensions;
 
 namespace RadiKeep.Logics.Tests.ExtensionsTest
 {

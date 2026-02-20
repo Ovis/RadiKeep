@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using RadiKeep.Logics.RdbContext;
 
 namespace RadiKeep.Logics.Tests

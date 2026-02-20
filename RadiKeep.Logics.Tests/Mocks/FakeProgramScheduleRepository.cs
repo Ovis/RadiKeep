@@ -15,6 +15,9 @@ public class FakeProgramScheduleRepository : IProgramScheduleRepository
     public ValueTask<List<RadikoProgram>> GetRadikoNowOnAirAsync(DateTimeOffset standardDateTimeOffset, CancellationToken cancellationToken = default)
         => ValueTask.FromResult(new List<RadikoProgram>());
 
+    public ValueTask<List<NhkRadiruProgram>> GetRadiruNowOnAirAsync(DateTimeOffset standardDateTimeOffset, CancellationToken cancellationToken = default)
+        => ValueTask.FromResult(new List<NhkRadiruProgram>());
+
     public ValueTask<List<RadikoProgram>> GetRadikoProgramsAsync(DateOnly date, string stationId, CancellationToken cancellationToken = default)
         => ValueTask.FromResult(new List<RadikoProgram>());
 

@@ -114,8 +114,9 @@ public class ReserveRepository(RadioDbContext dbContext) : IReserveRepository
     /// </summary>
     public async ValueTask<List<ScheduleJob>> GetScheduleJobsOlderThanAsync(DateTimeOffset threshold, CancellationToken cancellationToken = default)
     {
+        var utcThreshold = threshold.ToUniversalTime();
         return await dbContext.ScheduleJob
-            .Where(sj => sj.EndDateTime < threshold.UtcDateTime)
+            .Where(sj => sj.EndDateTime < utcThreshold)
             .ToListAsync(cancellationToken);
     }
 
