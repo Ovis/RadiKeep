@@ -155,9 +155,9 @@ namespace RadiKeep.Areas.Api.Controllers
                 }
             }
 
+            currentAreaStationsForUi = await GetCurrentAreaStationsAsync();
             if (!config.IsRadikoAreaFree)
             {
-                currentAreaStationsForUi = await GetCurrentAreaStationsAsync();
                 var currentAreaStationSet = currentAreaStationsForUi.ToHashSet(StringComparer.OrdinalIgnoreCase);
                 programs = programs
                     .Where(p =>
@@ -219,7 +219,7 @@ namespace RadiKeep.Areas.Api.Controllers
             {
                 Programs = programs,
                 Areas = areaList,
-                CurrentAreaStations = config.IsRadikoAreaFree ? new List<string>() : currentAreaStationsForUi,
+                CurrentAreaStations = currentAreaStationsForUi,
                 IsAreaFree = config.IsRadikoAreaFree
             }));
         }
