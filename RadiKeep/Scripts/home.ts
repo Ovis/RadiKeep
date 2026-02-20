@@ -1,4 +1,4 @@
-import { RadioServiceKind } from './define.js';
+import { RadioServiceKind, RadioServiceKindMap } from './define.js';
 import { RecordingType } from './define.js';
 import { AvailabilityTimeFree } from './define.js';
 import { API_ENDPOINTS } from './const.js';
@@ -171,7 +171,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         let programs: any[] = [];
         let areas: Array<{ areaId: string; areaName: string; areaOrder: number }> = [];
         let currentAreaStations: string[] = [];
+        let activeServiceKind: RadioServiceKind = RadioServiceKind.Undefined;
         let activeAreaId = '';
+        const activeAreaByService = new Map<RadioServiceKind, string>();
 
         if (Array.isArray(data)) {
             programs = data;
@@ -203,6 +205,32 @@ document.addEventListener('DOMContentLoaded', async () => {
         };
 
         areas = normalizeAreas();
+        const areaOrderMap = new Map<string, number>(areas.map(area => [area.areaId, area.areaOrder]));
+
+        const serviceKinds = [RadioServiceKind.Radiko, RadioServiceKind.Radiru]
+            .filter(serviceKind => programs.some(program => program.serviceKind === serviceKind));
+
+        const getAreasForService = (serviceKind: RadioServiceKind) => {
+            const dedup = new Map<string, string>();
+            programs
+                .filter(program => program.serviceKind === serviceKind)
+                .forEach(program => {
+                    const areaId = (program.areaId ?? '').trim();
+                    const areaName = (program.areaName ?? '').trim();
+                    if (areaId.length === 0 || dedup.has(areaId)) {
+                        return;
+                    }
+                    dedup.set(areaId, areaName.length > 0 ? areaName : areaId);
+                });
+
+            return Array.from(dedup.entries())
+                .map(([areaId, areaName], index) => ({
+                    areaId,
+                    areaName,
+                    areaOrder: areaOrderMap.get(areaId) ?? index
+                }))
+                .sort((a, b) => a.areaOrder - b.areaOrder || a.areaName.localeCompare(b.areaName));
+        };
 
         const resolveCurrentAreaId = () => {
             if (currentAreaStations.length === 0) {
@@ -215,11 +243,21 @@ document.addEventListener('DOMContentLoaded', async () => {
         };
 
         const currentAreaId = resolveCurrentAreaId();
-        if (currentAreaId.length > 0 && areas.some(area => area.areaId === currentAreaId)) {
-            activeAreaId = currentAreaId;
-        } else {
-            activeAreaId = areas.length > 0 ? areas[0].areaId : '';
+        activeServiceKind = serviceKinds.includes(RadioServiceKind.Radiko)
+            ? RadioServiceKind.Radiko
+            : (serviceKinds[0] ?? RadioServiceKind.Undefined);
+
+        serviceKinds.forEach(serviceKind => {
+            const serviceAreas = getAreasForService(serviceKind);
+            activeAreaByService.set(serviceKind, serviceAreas[0]?.areaId ?? '');
+        });
+
+        if (activeServiceKind === RadioServiceKind.Radiko &&
+            currentAreaId.length > 0 &&
+            getAreasForService(RadioServiceKind.Radiko).some(area => area.areaId === currentAreaId)) {
+            activeAreaByService.set(RadioServiceKind.Radiko, currentAreaId);
         }
+        activeAreaId = activeAreaByService.get(activeServiceKind) ?? '';
 
         const buildTabs = () => {
             if (!tabsContainer || !tabsWrapper) {
@@ -227,31 +265,69 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
 
             tabsContainer.innerHTML = '';
-
-            if (areas.length <= 1) {
+            const activeServiceAreas = getAreasForService(activeServiceKind);
+            const shouldShowTabs = serviceKinds.length > 1 || activeServiceAreas.length > 1;
+            if (!shouldShowTabs) {
                 tabsWrapper.classList.add('hidden');
                 return;
             }
 
             tabsWrapper.classList.remove('hidden');
+            tabsContainer.className = 'home-tabs';
+            if (serviceKinds.length > 1) {
+                const serviceGroup = document.createElement('div');
+                serviceGroup.className = 'home-tabs-group';
 
-            areas.forEach(area => {
+                const serviceLabel = document.createElement('div');
+                serviceLabel.className = 'home-tabs-label';
+                serviceLabel.textContent = 'サービス';
+                serviceGroup.appendChild(serviceLabel);
+
+                const serviceRow = document.createElement('div');
+                serviceRow.className = 'home-tabs-row is-service';
+                serviceKinds.forEach(serviceKind => {
+                    const button = document.createElement('button');
+                    button.type = 'button';
+                    button.className = 'button is-light tab-button';
+                    button.textContent = RadioServiceKindMap[serviceKind].displayName;
+                    button.dataset.serviceKind = serviceKind.toString();
+                    button.setAttribute('aria-pressed', serviceKind === activeServiceKind ? 'true' : 'false');
+                    button.classList.toggle('is-active', serviceKind === activeServiceKind);
+                    button.addEventListener('click', () => setActiveServiceTab(serviceKind));
+                    serviceRow.appendChild(button);
+                });
+                serviceGroup.appendChild(serviceRow);
+                tabsContainer.appendChild(serviceGroup);
+            }
+
+            const areaGroup = document.createElement('div');
+            areaGroup.className = 'home-tabs-group';
+            const areaLabel = document.createElement('div');
+            areaLabel.className = 'home-tabs-label';
+            areaLabel.textContent = 'エリア';
+            areaGroup.appendChild(areaLabel);
+
+            const areaRow = document.createElement('div');
+            areaRow.className = 'home-tabs-row is-area';
+            activeServiceAreas.forEach(area => {
                 const button = document.createElement('button');
                 button.type = 'button';
                 button.className = 'button is-light tab-button';
                 button.textContent = area.areaName;
                 button.dataset.areaId = area.areaId;
-                button.setAttribute('aria-pressed', 'false');
-                button.addEventListener('click', () => setActiveTab(area.areaId));
-                tabsContainer.appendChild(button);
+                button.dataset.serviceKind = activeServiceKind.toString();
+                button.setAttribute('aria-pressed', area.areaId === activeAreaId ? 'true' : 'false');
+                button.classList.toggle('is-active', area.areaId === activeAreaId);
+                button.addEventListener('click', () => setActiveAreaTab(area.areaId));
+                areaRow.appendChild(button);
             });
-
-            setActiveTab(activeAreaId);
+            areaGroup.appendChild(areaRow);
+            tabsContainer.appendChild(areaGroup);
         };
 
         const getFilteredPrograms = () => {
             const query = searchInput.value.trim().toLowerCase();
-            let list = programs;
+            let list = programs.filter(p => p.serviceKind === activeServiceKind);
 
             // 検索語がある場合はエリア選択に依存せず全エリアから検索する
             if (query.length === 0 && activeAreaId.length > 0) {
@@ -333,16 +409,23 @@ document.addEventListener('DOMContentLoaded', async () => {
             });
         };
 
-        const setActiveTab = (areaId: string) => {
+        const setActiveAreaTab = (areaId: string) => {
             activeAreaId = areaId;
-            if (tabsContainer) {
-                Array.from(tabsContainer.querySelectorAll('button')).forEach(button => {
-                    const isActive = button.dataset.areaId === areaId;
-                    button.classList.toggle('is-active', isActive);
-                    button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
-                });
-            }
+            activeAreaByService.set(activeServiceKind, areaId);
             render();
+            buildTabs();
+        };
+
+        const setActiveServiceTab = (serviceKind: RadioServiceKind) => {
+            activeServiceKind = serviceKind;
+            const serviceAreas = getAreasForService(serviceKind);
+            const rememberedAreaId = activeAreaByService.get(serviceKind) ?? '';
+            activeAreaId = serviceAreas.some(area => area.areaId === rememberedAreaId)
+                ? rememberedAreaId
+                : (serviceAreas[0]?.areaId ?? '');
+            activeAreaByService.set(serviceKind, activeAreaId);
+            render();
+            buildTabs();
         };
 
         buildTabs();

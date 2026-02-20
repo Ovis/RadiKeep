@@ -14,6 +14,11 @@ public interface IProgramScheduleRepository
     ValueTask<List<RadikoProgram>> GetRadikoNowOnAirAsync(DateTimeOffset standardDateTimeOffset, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// 指定時刻に放送中のらじる★らじる番組を取得する
+    /// </summary>
+    ValueTask<List<NhkRadiruProgram>> GetRadiruNowOnAirAsync(DateTimeOffset standardDateTimeOffset, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// radiko番組一覧を日付と局で取得する
     /// </summary>
     ValueTask<List<RadikoProgram>> GetRadikoProgramsAsync(DateOnly date, string stationId, CancellationToken cancellationToken = default);

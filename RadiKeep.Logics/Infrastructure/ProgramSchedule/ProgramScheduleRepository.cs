@@ -24,6 +24,17 @@ public class ProgramScheduleRepository(RadioDbContext dbContext) : IProgramSched
     }
 
     /// <summary>
+    /// 指定時刻に放送中のらじる★らじる番組を取得する
+    /// </summary>
+    public async ValueTask<List<NhkRadiruProgram>> GetRadiruNowOnAirAsync(DateTimeOffset standardDateTimeOffset, CancellationToken cancellationToken = default)
+    {
+        return await dbContext.NhkRadiruPrograms
+            .Where(p => standardDateTimeOffset.UtcDateTime >= p.StartTime && standardDateTimeOffset.UtcDateTime <= p.EndTime)
+            .OrderBy(r => r.StartTime)
+            .ToListAsync(cancellationToken);
+    }
+
+    /// <summary>
     /// radiko番組一覧を日付と局で取得する
     /// </summary>
     public async ValueTask<List<RadikoProgram>> GetRadikoProgramsAsync(DateOnly date, string stationId, CancellationToken cancellationToken = default)
