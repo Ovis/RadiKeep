@@ -62,7 +62,8 @@ export function createStandardPlayerJumpControls(audioElm, options = {}) {
     };
     let jumpLongPressTimer = null;
     let jumpLongPressTriggered = false;
-    let ignoreJumpContextMenuUntil = 0;
+    let suppressJumpContextMenuOnce = false;
+    let suppressTouchContextMenuUntil = 0;
     const changeJump = (direction) => {
         const current = getPlayerJumpSeconds(jumpStorageKey, jumpOptions);
         const currentIndex = jumpOptions.indexOf(current);
@@ -86,7 +87,11 @@ export function createStandardPlayerJumpControls(audioElm, options = {}) {
     });
     amountButton.addEventListener('contextmenu', (event) => {
         event.preventDefault();
-        if (Date.now() < ignoreJumpContextMenuUntil) {
+        if (Date.now() < suppressTouchContextMenuUntil) {
+            return;
+        }
+        if (suppressJumpContextMenuOnce) {
+            suppressJumpContextMenuOnce = false;
             return;
         }
         changeJump(-1);
@@ -95,13 +100,15 @@ export function createStandardPlayerJumpControls(audioElm, options = {}) {
         if (event.pointerType !== 'touch') {
             return;
         }
+        // タッチ由来の contextmenu は右クリック用途とは分離して無効化する
+        suppressTouchContextMenuUntil = Date.now() + 2000;
         if (jumpLongPressTimer !== null) {
             window.clearTimeout(jumpLongPressTimer);
         }
         jumpLongPressTimer = window.setTimeout(() => {
             jumpLongPressTriggered = true;
-            // モバイル長押し時に発火する contextmenu による二重変更を抑止
-            ignoreJumpContextMenuUntil = Date.now() + 800;
+            // 同一長押し操作で後続 contextmenu が来ても二重変更しない
+            suppressJumpContextMenuOnce = true;
             changeJump(-1);
             jumpLongPressTimer = null;
         }, 450);
