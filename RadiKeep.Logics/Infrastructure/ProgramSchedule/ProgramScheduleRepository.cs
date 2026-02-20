@@ -17,10 +17,19 @@ public class ProgramScheduleRepository(RadioDbContext dbContext) : IProgramSched
     /// </summary>
     public async ValueTask<List<RadikoProgram>> GetRadikoNowOnAirAsync(DateTimeOffset standardDateTimeOffset, CancellationToken cancellationToken = default)
     {
-        return await dbContext.RadikoPrograms
-            .Where(p => standardDateTimeOffset.UtcDateTime >= p.StartTime && standardDateTimeOffset.UtcDateTime <= p.EndTime)
+        var currentRadioDate = standardDateTimeOffset.ToRadioDate();
+        var candidates = await dbContext.RadikoPrograms
+            .Where(p =>
+                p.RadioDate >= currentRadioDate.AddDays(-1) &&
+                p.RadioDate <= currentRadioDate.AddDays(1))
+            .AsNoTracking()
             .OrderBy(r => r.StartTime)
             .ToListAsync(cancellationToken);
+
+        return candidates
+            .Where(p => standardDateTimeOffset >= p.StartTime && standardDateTimeOffset <= p.EndTime)
+            .OrderBy(r => r.StartTime)
+            .ToList();
     }
 
     /// <summary>
@@ -28,10 +37,19 @@ public class ProgramScheduleRepository(RadioDbContext dbContext) : IProgramSched
     /// </summary>
     public async ValueTask<List<NhkRadiruProgram>> GetRadiruNowOnAirAsync(DateTimeOffset standardDateTimeOffset, CancellationToken cancellationToken = default)
     {
-        return await dbContext.NhkRadiruPrograms
-            .Where(p => standardDateTimeOffset.UtcDateTime >= p.StartTime && standardDateTimeOffset.UtcDateTime <= p.EndTime)
+        var currentRadioDate = standardDateTimeOffset.ToRadioDate();
+        var candidates = await dbContext.NhkRadiruPrograms
+            .Where(p =>
+                p.RadioDate >= currentRadioDate.AddDays(-1) &&
+                p.RadioDate <= currentRadioDate.AddDays(1))
+            .AsNoTracking()
             .OrderBy(r => r.StartTime)
             .ToListAsync(cancellationToken);
+
+        return candidates
+            .Where(p => standardDateTimeOffset >= p.StartTime && standardDateTimeOffset <= p.EndTime)
+            .OrderBy(r => r.StartTime)
+            .ToList();
     }
 
     /// <summary>
