@@ -1,9 +1,11 @@
-﻿using Microsoft.Extensions.Logging;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using RadiKeep.Logics.Errors;
 using RadiKeep.Logics.Logics.ProgramScheduleLogic;
 using RadiKeep.Logics.Logics.RadikoLogic;
 using RadiKeep.Logics.Logics.RecordingLogic;
 using RadiKeep.Logics.Logics.StationLogic;
+using RadiKeep.Logics.Models.NhkRadiru;
 using RadiKeep.Logics.RdbContext;
 using ZLogger;
 
@@ -76,6 +78,67 @@ namespace RadiKeep.Logics.Logics.PlayProgramLogic
             var streamUrl = $"https://f-radiko.smartstream.ne.jp/{program.StationId}/_definst_/simul-stream.stream/playlist.m3u8";
 
             return (true, token, streamUrl, null);
+        }
+
+        /// <summary>
+        /// らじる★らじるの番組を再生するためのストリームURL取得
+        /// </summary>
+        /// <param name="programId"></param>
+        /// <returns></returns>
+        public async ValueTask<(bool IsSuccess, string? Token, string? Url, Exception? Error)>
+            PlayRadiruProgramAsync(string programId)
+        {
+            var program = await dbContext.NhkRadiruPrograms.FindAsync(programId);
+            if (program == null)
+            {
+                logger.ZLogError($"らじる再生処理で番組情報の取得に失敗 programId={programId}");
+                return (false, null, null, new DomainException("番組の再生ができませんでした。"));
+            }
+
+            var station = await dbContext.NhkRadiruStations
+                .FirstOrDefaultAsync(s => s.AreaId == program.AreaId);
+            if (station == null)
+            {
+                logger.ZLogError($"らじる再生処理で局情報の取得に失敗 programId={programId} areaId={program.AreaId} stationId={program.StationId}");
+                return (false, null, null, new DomainException("番組の再生ができませんでした。"));
+            }
+
+            var streamUrl = program.StationId.ToLowerInvariant() switch
+            {
+                var id when id == RadiruStationKind.R1.ServiceId => station.R1Hls,
+                var id when id == RadiruStationKind.R2.ServiceId => station.R2Hls,
+                var id when id == RadiruStationKind.FM.ServiceId => station.FmHls,
+                _ => string.Empty
+            };
+
+            if (!IsValidRadiruHlsUrl(streamUrl))
+            {
+                logger.ZLogError($"らじる再生処理でHLS URLが不正 programId={programId} areaId={program.AreaId} stationId={program.StationId}");
+                return (false, null, null, new DomainException("番組の再生ができませんでした。"));
+            }
+
+            return (true, null, streamUrl, null);
+        }
+
+        private static bool IsValidRadiruHlsUrl(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return false;
+            }
+
+            if (!Uri.TryCreate(value, UriKind.Absolute, out var uri))
+            {
+                return false;
+            }
+
+            if (!uri.Scheme.Equals(Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) &&
+                !uri.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            return uri.AbsolutePath.EndsWith(".m3u8", StringComparison.OrdinalIgnoreCase);
         }
     }
 }

@@ -11,6 +11,7 @@ using RadiKeep.Logics.Logics.StationLogic;
 using RadiKeep.Logics.Mappers;
 using RadiKeep.Logics.Models;
 using RadiKeep.Logics.Models.Enums;
+using RadiKeep.Logics.Models.NhkRadiru;
 using RadiKeep.Logics.Primitives.DataAnnotations;
 using RadiKeep.Logics.Services;
 using ZLogger;
@@ -122,8 +123,13 @@ namespace RadiKeep.Areas.Api.Controllers
         [Route("now")]
         public async ValueTask<IActionResult> GetNowOnAirProgram()
         {
-            var programs = (await programScheduleLobLogic
-                    .GetRadikoNowOnAirProgramListAsync(appContext.StandardDateTimeOffset))
+            var radikoPrograms = await programScheduleLobLogic
+                .GetRadikoNowOnAirProgramListAsync(appContext.StandardDateTimeOffset);
+            var radiruPrograms = await programScheduleLobLogic
+                .GetRadiruNowOnAirProgramListAsync(appContext.StandardDateTimeOffset);
+
+            var programs = radikoPrograms
+                .Concat(radiruPrograms)
                 .OrderBy(r => r.StationName)
                 .ToList();
             List<string> currentAreaStationsForUi = [];
@@ -149,42 +155,63 @@ namespace RadiKeep.Areas.Api.Controllers
                 }
             }
 
+            currentAreaStationsForUi = await GetCurrentAreaStationsAsync();
             if (!config.IsRadikoAreaFree)
             {
-                currentAreaStationsForUi = await GetCurrentAreaStationsAsync();
                 var currentAreaStationSet = currentAreaStationsForUi.ToHashSet(StringComparer.OrdinalIgnoreCase);
-                if (currentAreaStationsForUi.Count == 0)
-                {
-                    return Ok(ApiResponse.Ok(new List<RadioProgramEntry>()));
-                }
-
-                programs = programs.Where(p => currentAreaStationSet.Contains(p.StationId)).ToList();
+                programs = programs
+                    .Where(p =>
+                        p.ServiceKind == RadioServiceKind.Radiru ||
+                        currentAreaStationSet.Contains(p.StationId))
+                    .ToList();
             }
 
+            var radiruAreaOrderMap = Enum
+                .GetValues<RadiruAreaKind>()
+                .Select((area, index) => new { AreaId = area.GetEnumCodeId(), AreaOrder = index })
+                .ToDictionary(x => x.AreaId, x => x.AreaOrder);
+
             var areaList = programs
-                .Where(p => !string.IsNullOrWhiteSpace(p.AreaId))
-                .Select(p => p.AreaId)
-                .Distinct()
-                .Select(areaId =>
+                .Where(p => !string.IsNullOrWhiteSpace(p.AreaId) && !string.IsNullOrWhiteSpace(p.AreaName))
+                .GroupBy(p => new { p.ServiceKind, p.AreaId, p.AreaName })
+                .Select(group =>
                 {
-                    if (regionOrderMap.TryGetValue(areaId, out var region))
+                    var areaId = group.Key.AreaId;
+                    var areaName = group.Key.AreaName;
+                    var serviceKind = group.Key.ServiceKind;
+
+                    if (serviceKind == RadioServiceKind.Radiko && regionOrderMap.TryGetValue(areaId, out var region))
                     {
                         return new
                         {
                             AreaId = areaId,
                             AreaName = region.RegionName,
-                            AreaOrder = region.RegionOrder
+                            AreaOrder = region.RegionOrder,
+                            ServiceOrder = 0
+                        };
+                    }
+
+                    if (serviceKind == RadioServiceKind.Radiru && radiruAreaOrderMap.TryGetValue(areaId, out var radiruOrder))
+                    {
+                        return new
+                        {
+                            AreaId = areaId,
+                            AreaName = areaName,
+                            AreaOrder = radiruOrder,
+                            ServiceOrder = 1
                         };
                     }
 
                     return new
                     {
                         AreaId = areaId,
-                        AreaName = areaId,
-                        AreaOrder = int.MaxValue
+                        AreaName = areaName,
+                        AreaOrder = int.MaxValue,
+                        ServiceOrder = 9
                     };
                 })
-                .OrderBy(r => r.AreaOrder)
+                .OrderBy(r => r.ServiceOrder)
+                .ThenBy(r => r.AreaOrder)
                 .ThenBy(r => r.AreaName, StringComparer.OrdinalIgnoreCase)
                 .ToList();
 
@@ -192,7 +219,7 @@ namespace RadiKeep.Areas.Api.Controllers
             {
                 Programs = programs,
                 Areas = areaList,
-                CurrentAreaStations = config.IsRadikoAreaFree ? new List<string>() : currentAreaStationsForUi,
+                CurrentAreaStations = currentAreaStationsForUi,
                 IsAreaFree = config.IsRadikoAreaFree
             }));
         }
@@ -389,8 +416,21 @@ namespace RadiKeep.Areas.Api.Controllers
                     }
                 case RadioServiceKind.Radiru:
                     {
-                        // 現時点ではradikoのみ radikoでNHK聴けるので
-                        return BadRequest(ApiResponse.Fail("未実装です。"));
+                        var (isSuccess, token, url, error) = await playProgramLobLogic.PlayRadiruProgramAsync(program.ProgramId);
+
+                        if (!isSuccess)
+                        {
+                            return BadRequest(ApiResponse.Fail(error?.Message ?? "番組の再生ができませんでした。"));
+                        }
+
+                        var response =
+                            new
+                            {
+                                Token = token,
+                                Url = url
+                            };
+
+                        return Ok(ApiResponse.Ok(response));
                     }
                 case RadioServiceKind.Other:
                 case RadioServiceKind.Undefined:

@@ -13,6 +13,16 @@ namespace RadiKeep.Logics.Logics.ProgramScheduleLogic
     public partial class ProgramScheduleLobLogic
     {
         /// <summary>
+        /// 指定時刻に放送されているらじる★らじるの番組表情報リストを取得
+        /// </summary>
+        /// <returns></returns>
+        public async ValueTask<List<RadioProgramEntry>> GetRadiruNowOnAirProgramListAsync(DateTimeOffset standardDateTimeOffset)
+        {
+            var list = await programScheduleRepository.GetRadiruNowOnAirAsync(standardDateTimeOffset);
+            return list.Select(entryMapper.ToRadioProgramEntry).ToList();
+        }
+
+        /// <summary>
         /// らじる★らじるの番組表情報を取得
         /// </summary>
         /// <returns></returns>

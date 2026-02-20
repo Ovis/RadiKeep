@@ -614,6 +614,34 @@
     @apply text-[11px] font-medium;
   }
 
+  .home-tabs {
+    @apply w-full flex flex-col gap-2;
+  }
+
+  .home-tabs-group {
+    @apply w-full flex flex-col gap-1;
+  }
+
+  .home-tabs-label {
+    @apply text-[11px] font-semibold uppercase tracking-wide text-slate-500;
+  }
+
+  .home-tabs-row {
+    @apply flex flex-wrap items-center gap-2;
+  }
+
+  #area-tabs .home-tabs-row .tab-button {
+    @apply rounded-full px-3 py-1 text-xs;
+  }
+
+  #area-tabs .home-tabs-row.is-service .tab-button {
+    @apply border-slate-300 bg-slate-50 text-slate-700;
+  }
+
+  #area-tabs .home-tabs-row.is-service .tab-button.is-active {
+    @apply border-sky-300 bg-sky-50 text-sky-800;
+  }
+
   @media (max-width: 1023px) {
     .bottom-nav {
       @apply grid;
