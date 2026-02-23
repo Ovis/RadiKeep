@@ -247,5 +247,37 @@
             text-decoration: underline;
         }
 
+        #recordingModal {
+            padding: 1rem;
+        }
+
+        .rk-search-alert-modal {
+            max-width: 32rem;
+        }
+
+        .rk-search-alert-message {
+            margin: 0;
+            white-space: pre-line;
+            line-height: 1.6;
+            color: $rk-slate-700;
+        }
+
+        .rk-search-alert-actions {
+            justify-content: flex-end;
+        }
+
+        .rk-search-alert-close-button {
+            border: 0;
+            background: transparent;
+            color: $rk-slate-600;
+            font-size: 1.1rem;
+            line-height: 1;
+            cursor: pointer;
+        }
+
+        .rk-search-alert-close-button:hover {
+            color: $rk-slate-700;
+        }
+
 
 
