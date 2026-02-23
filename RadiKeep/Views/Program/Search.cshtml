@@ -142,13 +142,18 @@
 <!-- モーダル -->
 <div id="recordingModal" class="modal">
     <div class="modal-background modal-closeProcess"></div>
-    <div class="modal-content">
-        <div class="box">
-            <p id="modalMessage"></p>
+    <div class="modal-card rk-search-alert-modal">
+        <header class="modal-card-head">
+            <p class="modal-card-title">確認</p>
+            <button class="modal-closeProcess rk-search-alert-close-button" aria-label="close">×</button>
+        </header>
+        <section class="modal-card-body">
+            <p id="modalMessage" class="rk-search-alert-message"></p>
+        </section>
+        <footer class="modal-card-foot rk-search-alert-actions">
             <button class="button is-primary modal-closeProcess">閉じる</button>
-        </div>
+        </footer>
     </div>
-    <button class="modal-close is-large modal-closeProcess" aria-label="close"></button>
 </div>
 
 <div class="rk-toast" id="search-result-toast" role="status" aria-live="polite" aria-atomic="true">
