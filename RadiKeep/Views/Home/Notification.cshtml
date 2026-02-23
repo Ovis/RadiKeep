@@ -8,7 +8,7 @@
         <p class="rk-page-subtitle">録音結果・警告・エラーの通知履歴を確認できます。</p>
     </div>
     <div class="rk-panel">
-        <div class="rk-table-wrap">
+        <div class="rk-table-wrap hidden md:block">
             <table class="table is-fullwidth">
                 <thead>
                 <tr>
@@ -24,6 +24,7 @@
                 </tbody>
             </table>
         </div>
+        <div id="notifications-mobile-list" class="md:hidden space-y-2"></div>
         <nav class="pagination" role="navigation" aria-label="pagination">
             <ul class="pagination-list" id="pagination-list">
             </ul>
@@ -35,7 +36,7 @@
 </section>
 
 
-@section scripts {
+@section Scripts {
     <script src="~/lib/hls.js/hls.min.js" asp-append-version="true"></script>
     <script type="module" src="~/js/notification.js" asp-append-version="true"></script>
 }

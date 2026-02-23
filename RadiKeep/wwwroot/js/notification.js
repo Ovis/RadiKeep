@@ -5,6 +5,19 @@ const createTableCell = (content) => {
     cell.textContent = content;
     return cell;
 };
+const createMobileItem = (notice) => {
+    const item = document.createElement('article');
+    item.className = 'rounded-xl border border-slate-200 bg-white p-3 shadow-sm';
+    const date = document.createElement('p');
+    date.className = 'text-xs text-zinc-500';
+    date.textContent = new Date(notice.timestamp).toLocaleString();
+    const message = document.createElement('p');
+    message.className = 'mt-2 text-sm text-slate-800';
+    message.textContent = notice.message;
+    item.appendChild(date);
+    item.appendChild(message);
+    return item;
+};
 document.addEventListener('DOMContentLoaded', () => {
     let currentPage = 1;
     const pageSize = 10;
@@ -17,7 +30,11 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     const renderRecordings = (recordings) => {
         const tableBody = document.getElementById('recordings-table-body');
+        const mobileList = document.getElementById('notifications-mobile-list');
         tableBody.innerHTML = '';
+        if (mobileList) {
+            mobileList.innerHTML = '';
+        }
         recordings.forEach((notice) => {
             const row = document.createElement('tr');
             const titleCell = createTableCell(notice.message);
@@ -25,6 +42,9 @@ document.addEventListener('DOMContentLoaded', () => {
             row.appendChild(dateTimeCell);
             row.appendChild(titleCell);
             tableBody.appendChild(row);
+            if (mobileList) {
+                mobileList.appendChild(createMobileItem(notice));
+            }
         });
     };
     const renderPagination = (totalRecords, currentPage, pageSize) => {
