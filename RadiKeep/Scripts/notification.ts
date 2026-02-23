@@ -8,6 +8,23 @@ const createTableCell = (content: string): HTMLTableCellElement => {
     return cell;
 };
 
+const createMobileItem = (notice: Notification): HTMLElement => {
+    const item = document.createElement('article');
+    item.className = 'rounded-xl border border-slate-200 bg-white p-3 shadow-sm';
+
+    const date = document.createElement('p');
+    date.className = 'text-xs text-zinc-500';
+    date.textContent = new Date(notice.timestamp).toLocaleString();
+
+    const message = document.createElement('p');
+    message.className = 'mt-2 text-sm text-slate-800';
+    message.textContent = notice.message;
+
+    item.appendChild(date);
+    item.appendChild(message);
+    return item;
+};
+
 document.addEventListener('DOMContentLoaded', () => {
 
     let currentPage: number = 1;
@@ -26,7 +43,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const renderRecordings = (recordings: Notification[]): void => {
         const tableBody: HTMLElement = document.getElementById('recordings-table-body') as HTMLElement;
+        const mobileList: HTMLElement | null = document.getElementById('notifications-mobile-list');
         tableBody.innerHTML = '';
+        if (mobileList) {
+            mobileList.innerHTML = '';
+        }
 
         recordings.forEach((notice: Notification) => {
             const row: HTMLTableRowElement = document.createElement('tr');
@@ -38,6 +59,10 @@ document.addEventListener('DOMContentLoaded', () => {
             row.appendChild(titleCell);
 
             tableBody.appendChild(row);
+
+            if (mobileList) {
+                mobileList.appendChild(createMobileItem(notice));
+            }
         });
     };
 
