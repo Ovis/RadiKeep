@@ -305,7 +305,7 @@
         }
 
         @media (max-width: 768px) {
-            .rk-table-wrap {
+            #recordings-mobile-list + .rk-table-wrap {
                 display: none;
             }
 
