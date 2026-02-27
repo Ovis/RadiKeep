@@ -3,7 +3,6 @@ using RadiKeep.Features.Shared.Models;
 using RadiKeep.Logics.Extensions;
 using RadiKeep.Logics.Logics.ProgramScheduleLogic;
 using RadiKeep.Logics.Logics.RadikoLogic;
-using RadiKeep.Logics.Logics.RecordedRadioLogic;
 using RadiKeep.Logics.Logics.ReserveLogic;
 using RadiKeep.Logics.Models.NhkRadiru;
 using RadiKeep.Logics.Primitives.DataAnnotations;
@@ -249,6 +248,7 @@ public static class SettingEndpoints
         ILogger<SettingEndpointsMarker> logger,
         IAppConfigurationService appConfigurationService,
         ProgramScheduleLobLogic programScheduleLobLogic,
+        ProgramUpdateRunner programUpdateRunner,
         RadikoUniqueProcessLogic radikoUniqueProcessLogic,
         UpdateRadikoLoginEntity entity)
     {
@@ -278,10 +278,13 @@ public static class SettingEndpoints
                 return TypedResults.Ok(ApiResponse.Ok("更新しました。エリアフリー会員の番組表データは最新範囲まで取得済みのため、更新処理はスキップしました。"));
             }
 
-            var (isScheduled, scheduleError) = await programScheduleLobLogic.ScheduleImmediateUpdateProgramJobAsync();
-            if (!isScheduled)
+            try
             {
-                logger.ZLogError(scheduleError, $"radikoログイン成功後の番組表即時更新ジョブ登録に失敗しました。");
+                _ = Task.Run(async () => await programUpdateRunner.ExecuteAsync("radiko-login"));
+            }
+            catch (Exception ex)
+            {
+                logger.ZLogError(ex, $"radikoログイン成功後の番組表即時更新ジョブ起動に失敗しました。");
                 return TypedResults.BadRequest(ApiResponse.Fail("radikoログイン情報は保存しましたが、自動予約反映のための更新処理開始に失敗しました。番組表更新を手動実行してください。"));
             }
 
@@ -458,7 +461,6 @@ public static class SettingEndpoints
     /// </summary>
     private static async Task<Results<Ok<ApiResponse<object?>>, BadRequest<ApiResponse<object?>>>> HandleUpdateDuplicateDetectionIntervalAsync(
         IAppConfigurationService appConfigurationService,
-        RecordedDuplicateDetectionLobLogic duplicateDetectionLobLogic,
         UpdateDuplicateDetectionIntervalEntity entity)
     {
         if (entity.DayOfWeek is < 0 or > 6)
@@ -479,7 +481,6 @@ public static class SettingEndpoints
             entity.DayOfWeek,
             entity.Hour,
             entity.Minute);
-        await duplicateDetectionLobLogic.SchedulePeriodicJobAsync();
         return TypedResults.Ok(ApiResponse.Ok("更新しました。"));
     }
 

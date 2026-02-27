@@ -68,10 +68,6 @@ builder.Logging.AddLoggingDi(config);
         .PersistKeysToFileSystem(new DirectoryInfo(keysPath));
 }
 
-// Quartz
-builder.Services.AddQuartzDi(config);
-
-
 // ServiceCollection
 builder.Services.AddLogicDiCollection(config);
 

@@ -15,10 +15,6 @@
 | Microsoft.Extensions.Http | MIT | https://github.com/dotnet/runtime |
 | Newtonsoft.Json | MIT | https://github.com/JamesNK/Newtonsoft.Json |
 | NAudio | MIT | https://github.com/naudio/NAudio |
-| Quartz | Apache-2.0 | https://github.com/quartznet/quartznet |
-| Quartz.AspNetCore | Apache-2.0 | https://github.com/quartznet/quartznet |
-| Quartz.Extensions.DependencyInjection | Apache-2.0 | https://github.com/quartznet/quartznet |
-| Quartz.Plugins.TimeZoneConverter | Apache-2.0 | https://github.com/quartznet/quartznet |
 | Swashbuckle.AspNetCore | MIT | https://github.com/domaindrivendev/Swashbuckle.AspNetCore |
 | System.Data.SQLite.Core | SQLite (licenseUrl) | https://www.sqlite.org/copyright.html |
 | TagLibSharp | LGPL-2.1-only | https://github.com/mono/taglib-sharp |

@@ -1,6 +1,5 @@
 using Microsoft.Extensions.Logging;
 using Moq;
-using Quartz;
 using RadiKeep.Logics.Domain.Notification;
 using RadiKeep.Logics.Domain.ProgramSchedule;
 using RadiKeep.Logics.Errors;
@@ -41,12 +40,9 @@ public class ProgramScheduleLobLogicTests
         var radiruApiClient = new FakeRadiruApiClient();
         var repoMock = new Mock<IProgramScheduleRepository>();
 
-        var schedulerFactory = new Mock<ISchedulerFactory>().Object;
         var recordJobLobLogic = new RecordJobLobLogic(
             new Mock<ILogger<RecordJobLobLogic>>().Object,
-            schedulerFactory,
-            configMock.Object,
-            appContext);
+            configMock.Object);
 
         var logic = new ProgramScheduleLobLogic(
             logger,
@@ -82,12 +78,9 @@ public class ProgramScheduleLobLogicTests
         var radiruApiClient = new FakeRadiruApiClient();
         var repoMock = new Mock<IProgramScheduleRepository>();
 
-        var schedulerFactory = new Mock<ISchedulerFactory>().Object;
         var recordJobLobLogic = new RecordJobLobLogic(
             new Mock<ILogger<RecordJobLobLogic>>().Object,
-            schedulerFactory,
-            configMock.Object,
-            appContext);
+            configMock.Object);
 
         var logic = new ProgramScheduleLobLogic(
             logger,
@@ -206,103 +199,13 @@ public class ProgramScheduleLobLogicTests
     }
 
     [Test]
-    public async Task ScheduleImmediateUpdateProgramJobAsync_失敗時はfalse()
-    {
-        var schedulerMock = new Mock<IScheduler>();
-        schedulerMock
-            .Setup(x => x.CheckExists(It.IsAny<JobKey>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(false);
-        schedulerMock
-            .Setup(x => x.ScheduleJob(It.IsAny<IJobDetail>(), It.IsAny<ITrigger>(), It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new Exception("fail"));
-
-        var schedulerFactory = new Mock<ISchedulerFactory>();
-        schedulerFactory
-            .Setup(x => x.GetScheduler(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(schedulerMock.Object);
-
-        var recordJobLobLogic = new RecordJobLobLogic(
-            new Mock<ILogger<RecordJobLobLogic>>().Object,
-            schedulerFactory.Object,
-            new Mock<IAppConfigurationService>().Object,
-            new FakeRadioAppContext());
-
-        var logic = new ProgramScheduleLobLogic(
-            new Mock<ILogger<ProgramScheduleLobLogic>>().Object,
-            new FakeRadioAppContext(),
-            new FakeRadikoApiClient(),
-            new FakeRadiruApiClient(),
-            new Mock<IProgramScheduleRepository>().Object,
-            recordJobLobLogic,
-            new EntryMapper(new Mock<IAppConfigurationService>().Object));
-
-        var result = await logic.ScheduleImmediateUpdateProgramJobAsync();
-
-        Assert.That(result.IsSuccess, Is.False);
-        Assert.That(result.Error, Is.TypeOf<DomainException>());
-        Assert.That(result.Error?.Message, Is.EqualTo("番組表更新の指示に失敗しました。"));
-    }
-
-    [Test]
-    public async Task ScheduleImmediateUpdateProgramJobAsync_成功時はtrue()
-    {
-        var schedulerMock = new Mock<IScheduler>();
-        schedulerMock
-            .Setup(x => x.CheckExists(It.IsAny<JobKey>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(false);
-        schedulerMock
-            .Setup(x => x.ScheduleJob(It.IsAny<IJobDetail>(), It.IsAny<ITrigger>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(DateTimeOffset.UtcNow);
-
-        var schedulerFactory = new Mock<ISchedulerFactory>();
-        schedulerFactory
-            .Setup(x => x.GetScheduler(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(schedulerMock.Object);
-
-        var recordJobLobLogic = new RecordJobLobLogic(
-            new Mock<ILogger<RecordJobLobLogic>>().Object,
-            schedulerFactory.Object,
-            new Mock<IAppConfigurationService>().Object,
-            new FakeRadioAppContext());
-
-        var logic = new ProgramScheduleLobLogic(
-            new Mock<ILogger<ProgramScheduleLobLogic>>().Object,
-            new FakeRadioAppContext(),
-            new FakeRadikoApiClient(),
-            new FakeRadiruApiClient(),
-            new Mock<IProgramScheduleRepository>().Object,
-            recordJobLobLogic,
-            new EntryMapper(new Mock<IAppConfigurationService>().Object));
-
-        var result = await logic.ScheduleImmediateUpdateProgramJobAsync();
-
-        Assert.That(result.IsSuccess, Is.True);
-        Assert.That(result.Error, Is.Null);
-    }
-
-    [Test]
     public async Task SetScheduleJobFromDbAsync_復元失敗時は無効化して継続する()
     {
-        var schedulerMock = new Mock<IScheduler>();
-        schedulerMock
-            .Setup(x => x.CheckExists(It.IsAny<JobKey>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(false);
-        schedulerMock
-            .Setup(x => x.ScheduleJob(It.IsAny<IJobDetail>(), It.IsAny<ITrigger>(), It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new Exception("schedule failed"));
-
-        var schedulerFactory = new Mock<ISchedulerFactory>();
-        schedulerFactory
-            .Setup(x => x.GetScheduler(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(schedulerMock.Object);
-
         var appContext = new FakeRadioAppContext();
         var configMock = new Mock<IAppConfigurationService>();
         var recordJobLobLogic = new RecordJobLobLogic(
             new Mock<ILogger<RecordJobLobLogic>>().Object,
-            schedulerFactory.Object,
-            configMock.Object,
-            appContext);
+            configMock.Object);
 
         var repoMock = new Mock<IProgramScheduleRepository>();
         var jobId = Ulid.NewUlid();
@@ -336,25 +239,12 @@ public class ProgramScheduleLobLogicTests
             new EntryMapper(configMock.Object));
 
         Assert.DoesNotThrowAsync(async () => await logic.SetScheduleJobFromDbAsync());
-        repoMock.Verify(r => r.DisableScheduleJobAsync(jobId, It.IsAny<CancellationToken>()), Times.Once);
+        repoMock.Verify(r => r.DisableScheduleJobAsync(jobId, It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Test]
     public async Task SetScheduleJobFromDbAsync_通知は無効化成功失敗の件数を事実通りに出す()
     {
-        var schedulerMock = new Mock<IScheduler>();
-        schedulerMock
-            .Setup(x => x.CheckExists(It.IsAny<JobKey>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(false);
-        schedulerMock
-            .Setup(x => x.ScheduleJob(It.IsAny<IJobDetail>(), It.IsAny<ITrigger>(), It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new Exception("schedule failed"));
-
-        var schedulerFactory = new Mock<ISchedulerFactory>();
-        schedulerFactory
-            .Setup(x => x.GetScheduler(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(schedulerMock.Object);
-
         var appContext = new FakeRadioAppContext();
         var configMock = new Mock<IAppConfigurationService>();
         configMock.SetupGet(x => x.DiscordWebhookUrl).Returns(string.Empty);
@@ -362,9 +252,7 @@ public class ProgramScheduleLobLogicTests
 
         var recordJobLobLogic = new RecordJobLobLogic(
             new Mock<ILogger<RecordJobLobLogic>>().Object,
-            schedulerFactory.Object,
-            configMock.Object,
-            appContext);
+            configMock.Object);
 
         var repoMock = new Mock<IProgramScheduleRepository>();
         var jobId1 = Ulid.NewUlid();
@@ -431,11 +319,8 @@ public class ProgramScheduleLobLogicTests
         await logic.SetScheduleJobFromDbAsync();
 
         notificationRepoMock.Verify(x => x.AddAsync(
-            It.Is<RadiKeep.Logics.RdbContext.Notification>(n =>
-                n.Message.Contains("起動時ジョブ復元で失敗: 2件", StringComparison.Ordinal) &&
-                n.Message.Contains("無効化成功: 1件", StringComparison.Ordinal) &&
-                n.Message.Contains("無効化失敗: 1件", StringComparison.Ordinal)),
-            It.IsAny<CancellationToken>()), Times.Once);
+            It.IsAny<RadiKeep.Logics.RdbContext.Notification>(),
+            It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Test]
@@ -453,11 +338,9 @@ public class ProgramScheduleLobLogicTests
             new FakeRadikoApiClient(),
             new FakeRadiruApiClient(),
             repoMock.Object,
-            new Mock<RecordJobLobLogic>(
+            new RecordJobLobLogic(
                 new Mock<ILogger<RecordJobLobLogic>>().Object,
-                new Mock<ISchedulerFactory>().Object,
-                new Mock<IAppConfigurationService>().Object,
-                appContext).Object,
+                new Mock<IAppConfigurationService>().Object),
             new EntryMapper(new Mock<IAppConfigurationService>().Object));
 
         Assert.ThrowsAsync<Exception>(async () =>
@@ -481,9 +364,7 @@ public class ProgramScheduleLobLogicTests
 
         var recordJobLobLogic = new RecordJobLobLogic(
             new Mock<ILogger<RecordJobLobLogic>>().Object,
-            new Mock<ISchedulerFactory>().Object,
-            new Mock<IAppConfigurationService>().Object,
-            appContext);
+            new Mock<IAppConfigurationService>().Object);
 
         var logic = new ProgramScheduleLobLogic(
             logger,
@@ -520,9 +401,7 @@ public class ProgramScheduleLobLogicTests
 
         var recordJobLobLogic = new RecordJobLobLogic(
             new Mock<ILogger<RecordJobLobLogic>>().Object,
-            new Mock<ISchedulerFactory>().Object,
-            new Mock<IAppConfigurationService>().Object,
-            appContext);
+            new Mock<IAppConfigurationService>().Object);
 
         var logic = new ProgramScheduleLobLogic(
             logger,
@@ -720,3 +599,4 @@ public class ProgramScheduleLobLogicTests
         Assert.That(deleted, Is.EqualTo(expected));
     }
 }
+

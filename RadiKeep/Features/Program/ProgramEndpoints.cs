@@ -362,12 +362,32 @@ public static class ProgramEndpoints
     /// 番組表更新ジョブを起動する。
     /// </summary>
     private static async Task<Results<Ok<ApiResponse<object?>>, BadRequest<ApiResponse<object?>>>> HandleUpdateProgramsAsync(
-        ProgramScheduleLobLogic programScheduleLobLogic)
+        ILogger<ProgramEndpointsMarker> logger,
+        IServiceScopeFactory serviceScopeFactory)
     {
-        var (isSuccess, error) = await programScheduleLobLogic.ScheduleImmediateUpdateProgramJobAsync();
-        if (!isSuccess)
+        try
         {
-            return TypedResults.BadRequest(ApiResponse.Fail(error?.Message ?? "番組表更新ジョブの起動に失敗しました。"));
+            // API は即時応答し、番組表更新本体は独立スコープでバックグラウンド実行する。
+            // スコープを作り直して、リクエスト終了後の破棄済み DbContext 参照を防ぐ。
+            _ = Task.Run(
+                async () =>
+                {
+                    try
+                    {
+                        using var scope = serviceScopeFactory.CreateScope();
+                        var programUpdateRunner = scope.ServiceProvider.GetRequiredService<ProgramUpdateRunner>();
+                        await programUpdateRunner.ExecuteAsync("manual");
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.ZLogError(ex, $"番組表更新バックグラウンド実行でエラーが発生しました。");
+                    }
+                });
+        }
+        catch (Exception ex)
+        {
+            logger.ZLogError(ex, $"番組表更新処理の起動に失敗しました。");
+            return TypedResults.BadRequest(ApiResponse.Fail("番組表更新ジョブの起動に失敗しました。"));
         }
 
         return TypedResults.Ok(ApiResponse.Ok("番組表更新処理を実行中です。通常数分で更新が完了します。"));

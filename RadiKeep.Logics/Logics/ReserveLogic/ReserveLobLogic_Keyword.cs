@@ -128,7 +128,7 @@ namespace RadiKeep.Logics.Logics.ReserveLogic
         {
             try
             {
-                // Quartzから該当のジョブを削除
+                // スケジューラから該当のジョブを削除
                 {
                     var (isSuccess, error) = await DeleteKeywordReserveScheduleAsync(id);
                     if (!isSuccess)

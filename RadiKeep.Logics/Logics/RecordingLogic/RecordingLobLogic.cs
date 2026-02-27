@@ -151,8 +151,8 @@ namespace RadiKeep.Logics.Logics.RecordingLogic
                     reserveIds.Add(schedule.KeywordReserveId.Value);
                 }
 
-                // 既存データ移行や再登録揺れで関連が偏っていても、
-                // 同一番組に紐づくキーワード予約ルールを補完してタグ統合の取りこぼしを防ぐ。
+                // 同一番組に複数予約経路がある場合も、関連キーワード予約を補完して
+                // タグ統合の取りこぼしを防ぐ。
                 var sameProgramRows = await dbContext.ScheduleJob
                     .AsNoTracking()
                     .Where(x => x.ProgramId == schedule.ProgramId && x.ReserveType == ReserveType.Keyword)

@@ -248,7 +248,7 @@ namespace RadiKeep.Logics.Logics.ReserveLogic
                     return (true, null);
                 }
 
-                // Quartzからジョブを削除
+                // スケジューラからジョブを削除
                 await recordJobLobLogic.DeleteScheduleJobAsync(job.Id);
 
                 try

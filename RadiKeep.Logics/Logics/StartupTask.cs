@@ -19,7 +19,8 @@ namespace RadiKeep.Logics.Logics
         TemporaryStorageMaintenanceLobLogic temporaryStorageMaintenanceLobLogic,
         StorageCapacityMonitorLobLogic storageCapacityMonitorLobLogic,
         StationLobLogic stationLobLogic,
-        NotificationLobLogic notificationLobLogic)
+        NotificationLobLogic notificationLobLogic,
+        ProgramUpdateRunner? programUpdateRunner = null)
     {
         public async Task InitializeAsync()
         {
@@ -70,28 +71,20 @@ namespace RadiKeep.Logics.Logics
                 }
 
 
-                // Quartzのジョブ情報をDBから取得して設定
+                // ジョブ情報をDBから取得して実行登録
                 {
                     await programScheduleLogic.SetScheduleJobFromDbAsync();
                 }
 
                 // 番組表更新関係
                 {
-                    // 番組表更新ジョブのスケジュール
-                    await programScheduleLogic.ScheduleDailyUpdateProgramJobAsync();
-                    await programScheduleLogic.ScheduleDailyMaintenanceCleanupJobAsync();
-                    await programScheduleLogic.ScheduleStorageCapacityMonitorJobAsync();
-                    await programScheduleLogic.ScheduleReleaseCheckJobAsync();
-                    await programScheduleLogic.ScheduleDuplicateDetectionJobAsync(
-                        enabled: config.DuplicateDetectionIntervalDays > 0,
-                        dayOfWeek: config.DuplicateDetectionScheduleDayOfWeek,
-                        hour: config.DuplicateDetectionScheduleHour,
-                        minute: config.DuplicateDetectionScheduleMinute);
-
-                    // 24時間以内に番組表更新が行われていない場合、即時更新ジョブをスケジュール
+                    // 24時間以内に番組表更新が行われていない場合のみ、起動時に即時更新を実行する。
                     if (await programScheduleLogic.HasProgramScheduleBeenUpdatedWithin24Hours() is false)
                     {
-                        await programScheduleLogic.ScheduleImmediateUpdateProgramJobAsync();
+                        if (programUpdateRunner != null)
+                        {
+                            _ = Task.Run(async () => await programUpdateRunner.ExecuteAsync("startup"));
+                        }
                     }
                 }
 

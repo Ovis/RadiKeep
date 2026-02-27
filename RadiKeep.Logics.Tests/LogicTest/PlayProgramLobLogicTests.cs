@@ -2,7 +2,6 @@ using System.Net;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Moq;
-using Quartz;
 using RadiKeep.Logics.Context;
 using RadiKeep.Logics.Domain.ProgramSchedule;
 using RadiKeep.Logics.Errors;
@@ -91,12 +90,9 @@ public class PlayProgramLobLogicTests
         configMock.SetupGet(c => c.RecordStartDuration).Returns(TimeSpan.Zero);
         configMock.SetupGet(c => c.RecordEndDuration).Returns(TimeSpan.Zero);
 
-        var schedulerFactory = new Mock<ISchedulerFactory>().Object;
         var recordJobLobLogic = new RecordJobLobLogic(
             new Mock<ILogger<RecordJobLobLogic>>().Object,
-            schedulerFactory,
-            configMock.Object,
-            appContext);
+            configMock.Object);
 
         return new ProgramScheduleLobLogic(
             logger,
@@ -262,3 +258,4 @@ public class PlayProgramLobLogicTests
         Assert.That(url, Is.EqualTo("https://f-radiko.smartstream.ne.jp/TBS/_definst_/simul-stream.stream/playlist.m3u8"));
     }
 }
+

@@ -1,6 +1,5 @@
 using Microsoft.Extensions.Logging;
 using RadiKeep.Logics.Context;
-using RadiKeep.Logics.Errors;
 using RadiKeep.Logics.Extensions;
 using RadiKeep.Logics.Domain.ProgramSchedule;
 using RadiKeep.Logics.Interfaces;
@@ -56,96 +55,6 @@ namespace RadiKeep.Logics.Logics.ProgramScheduleLogic
 
             return lastUpdated.Value.UtcDateTime.UtcToJst().AddHours(24) > appContext.StandardDateTimeOffset;
         }
-
-        /// <summary>
-        /// 番組表更新即時実行ジョブをスケジュール
-        /// </summary>
-        /// <returns></returns>
-        public async ValueTask<(bool IsSuccess, Exception? Error)> ScheduleImmediateUpdateProgramJobAsync()
-        {
-            var (isSuccess, error) = await recordJobLobLogic.SetImmediateUpdateProgramListAsync();
-
-            if (!isSuccess)
-            {
-                logger.ZLogError(error, $"番組表更新ジョブのスケジュールに失敗しました。");
-                return (false, new DomainException("番組表更新の指示に失敗しました。"));
-            }
-
-            return (true, null);
-        }
-
-
-        /// <summary>
-        /// 毎日午前8時に番組表更新ジョブをスケジュール
-        /// </summary>
-        /// <returns></returns>
-        public async ValueTask ScheduleDailyUpdateProgramJobAsync()
-        {
-            var (isSuccess, error) = await recordJobLobLogic.SetDailyUpdateProgramJobAsync();
-
-            if (!isSuccess)
-            {
-                logger.ZLogError(error, $"番組表更新ジョブのスケジュールに失敗しました。");
-            }
-        }
-
-        /// <summary>
-        /// 毎日実行するメンテナンスクリーンアップジョブをスケジュール
-        /// </summary>
-        /// <returns></returns>
-        public async ValueTask ScheduleDailyMaintenanceCleanupJobAsync()
-        {
-            var (isSuccess, error) = await recordJobLobLogic.SetDailyMaintenanceCleanupJobAsync();
-
-            if (!isSuccess)
-            {
-                logger.ZLogError(error, $"メンテナンスクリーンアップジョブのスケジュールに失敗しました。");
-            }
-        }
-
-        /// <summary>
-        /// ストレージ空き容量監視ジョブをスケジュール
-        /// </summary>
-        /// <returns></returns>
-        public async ValueTask ScheduleStorageCapacityMonitorJobAsync()
-        {
-            var (isSuccess, error) = await recordJobLobLogic.SetStorageCapacityMonitorJobAsync();
-
-            if (!isSuccess)
-            {
-                logger.ZLogError(error, $"ストレージ空き容量監視ジョブのスケジュールに失敗しました。");
-            }
-        }
-
-        /// <summary>
-        /// 新しいリリース確認ジョブをスケジュール
-        /// </summary>
-        public async ValueTask ScheduleReleaseCheckJobAsync()
-        {
-            var (isSuccess, error) = await recordJobLobLogic.SetReleaseCheckJobAsync();
-
-            if (!isSuccess)
-            {
-                logger.ZLogError(error, $"新しいリリース確認ジョブのスケジュールに失敗しました。");
-            }
-        }
-
-        /// <summary>
-        /// 類似録音抽出ジョブをスケジュール
-        /// </summary>
-        public async ValueTask ScheduleDuplicateDetectionJobAsync(
-            bool enabled,
-            int dayOfWeek,
-            int hour,
-            int minute)
-        {
-            var (isSuccess, error) = await recordJobLobLogic.SetDuplicateDetectionJobAsync(enabled, dayOfWeek, hour, minute);
-            if (!isSuccess)
-            {
-                logger.ZLogError(error, $"類似録音抽出ジョブのスケジュールに失敗しました。");
-            }
-        }
-
 
         /// <summary>
         /// DBに保存された録音スケジュールをもとにスケジュールジョブを作成

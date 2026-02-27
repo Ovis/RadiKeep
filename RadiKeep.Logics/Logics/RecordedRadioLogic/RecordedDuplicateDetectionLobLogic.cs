@@ -1,8 +1,7 @@
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.DependencyInjection;
 using RadiKeep.Logics.Logics.NotificationLogic;
-using RadiKeep.Logics.Logics.RecordJobLogic;
 using RadiKeep.Logics.Models;
-using RadiKeep.Logics.Services;
 using ZLogger;
 
 namespace RadiKeep.Logics.Logics.RecordedRadioLogic;
@@ -12,8 +11,7 @@ namespace RadiKeep.Logics.Logics.RecordedRadioLogic;
 /// </summary>
 public class RecordedDuplicateDetectionLobLogic(
     ILogger<RecordedDuplicateDetectionLobLogic> logger,
-    IAppConfigurationService appConfigurationService,
-    RecordJobLobLogic recordJobLobLogic,
+    IServiceScopeFactory serviceScopeFactory,
     RecordedProgramDuplicateDetectionService detectionService,
     NotificationLobLogic notificationLobLogic)
 {
@@ -33,15 +31,28 @@ public class RecordedDuplicateDetectionLobLogic(
         var normalizedMaxPhase1Groups = NormalizeMaxPhase1Groups(maxPhase1Groups);
         var normalizedPhase2Mode = NormalizePhase2Mode(phase2Mode);
         var normalizedBroadcastClusterWindowHours = NormalizeBroadcastClusterWindowHours(broadcastClusterWindowHours);
-        var (isSuccess, error) = await recordJobLobLogic.SetImmediateDuplicateDetectionJobAsync(
-            normalizedLookbackDays,
-            normalizedMaxPhase1Groups,
-            normalizedPhase2Mode,
-            normalizedBroadcastClusterWindowHours);
-        if (!isSuccess)
-        {
-            return (false, "同一番組候補チェックジョブの開始に失敗しました。", error);
-        }
+
+        // 即時実行はスケジューラを介さず、バックグラウンドタスクとして直接起動する。
+        _ = Task.Run(
+            async () =>
+            {
+                try
+                {
+                    // バックグラウンド用にスコープを作り直し、破棄済みスコープ参照を回避する。
+                    using var scope = serviceScopeFactory.CreateScope();
+                    var scopedLogic = scope.ServiceProvider.GetRequiredService<RecordedDuplicateDetectionLobLogic>();
+                    await scopedLogic.ExecuteAsync(
+                        "manual",
+                        normalizedLookbackDays,
+                        normalizedMaxPhase1Groups,
+                        normalizedPhase2Mode,
+                        normalizedBroadcastClusterWindowHours);
+                }
+                catch (Exception ex)
+                {
+                    logger.ZLogError(ex, $"同一番組候補チェックジョブの起動後実行で例外が発生しました。");
+                }
+            });
 
         return (true, "同一番組候補チェックジョブを開始しました。完了後にお知らせへ通知されます。", null);
     }
@@ -187,20 +198,6 @@ public class RecordedDuplicateDetectionLobLogic(
         finally
         {
             ExecutionGate.Release();
-        }
-    }
-
-    public async ValueTask SchedulePeriodicJobAsync()
-    {
-        var enabled = appConfigurationService.DuplicateDetectionIntervalDays > 0;
-        var (isSuccess, error) = await recordJobLobLogic.SetDuplicateDetectionJobAsync(
-            enabled,
-            appConfigurationService.DuplicateDetectionScheduleDayOfWeek,
-            appConfigurationService.DuplicateDetectionScheduleHour,
-            appConfigurationService.DuplicateDetectionScheduleMinute);
-        if (!isSuccess)
-        {
-            logger.ZLogError(error, $"類似録音抽出定期ジョブのスケジュールに失敗しました。 enabled={enabled}");
         }
     }
 

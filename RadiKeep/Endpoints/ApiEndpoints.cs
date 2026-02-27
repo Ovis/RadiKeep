@@ -5,7 +5,7 @@ using Microsoft.AspNetCore.Routing;
 namespace RadiKeep.Endpoints;
 
 /// <summary>
-/// Api 向けの暫定エンドポイントを登録する。
+/// Api 系の共通エンドポイントを登録する。
 /// </summary>
 public static class ApiEndpoints
 {
