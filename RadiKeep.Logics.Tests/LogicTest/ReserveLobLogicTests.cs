@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Moq;
 using RadiKeep.Logics.Context;
 using RadiKeep.Logics.Domain.ProgramSchedule;
+using RadiKeep.Logics.Domain.Notification;
 using RadiKeep.Logics.Domain.Reserve;
 using RadiKeep.Logics.Infrastructure.Notification;
 using RadiKeep.Logics.Infrastructure.ProgramSchedule;
@@ -67,7 +68,8 @@ namespace RadiKeep.Logics.Tests.LogicTest
                 _configServiceMock.Object,
                 _entryMapper,
                 new FakeHttpClientFactory(new HttpClient(new FakeHttpMessageHandler())),
-                new NotificationRepository(DbContext)
+                new NotificationRepository(DbContext),
+                Mock.Of<INotificationEventPublisher>()
             );
 
             _radikoUniqueProcessLogicMock = new Mock<RadikoUniqueProcessLogic>(
