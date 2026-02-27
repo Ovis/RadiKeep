@@ -68,10 +68,7 @@ builder.Services.AddLogicDiCollection(config);
 
 // for API
 builder.Services.AddEndpointsApiExplorer();
-
-#if DEBUG
-builder.Services.AddSwaggerGen();
-#endif
+builder.Services.AddOpenApi();
 
 
 var app = builder.Build();
@@ -139,13 +136,7 @@ app.UseEndpoints(endpoints =>
 
 if (app.Environment.IsDevelopment())
 {
-#if DEBUG
-    app.UseSwagger();
-    app.UseSwaggerUI(c =>
-    {
-        c.SwaggerEndpoint("/swagger/v1/swagger.json", "RadiKeep API");
-    });
-#endif
+    app.MapOpenApi();
 
     // TypeScriptマップ用
     app.UseFileServer(new FileServerOptions()
