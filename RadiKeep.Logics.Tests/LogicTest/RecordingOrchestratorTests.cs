@@ -47,13 +47,15 @@ public class RecordingOrchestratorTests
         var storage = new FakeMediaStorageService();
         var transcoder = new FakeMediaTranscodeService(true);
         var repo = new InMemoryRecordingRepository();
+        var publisher = new Mock<IRecordingStateEventPublisher>().Object;
 
         var orchestrator = new RecordingOrchestrator(
             logger,
             new[] { source },
             storage,
             transcoder,
-            repo);
+            repo,
+            publisher);
 
         var command = new RecordingCommand(
             ServiceKind: RadioServiceKind.Radiko,
@@ -113,13 +115,15 @@ public class RecordingOrchestratorTests
             committed: new MediaPath("temp.m4a", "record/Test_duplicate_123.m4a", "record/Test_duplicate_123.m4a"));
         var transcoder = new FakeMediaTranscodeService(true);
         var repo = new InMemoryRecordingRepository();
+        var publisher = new Mock<IRecordingStateEventPublisher>().Object;
 
         var orchestrator = new RecordingOrchestrator(
             logger,
             new[] { source },
             storage,
             transcoder,
-            repo);
+            repo,
+            publisher);
 
         var command = new RecordingCommand(
             ServiceKind: RadioServiceKind.Radiko,
@@ -176,13 +180,15 @@ public class RecordingOrchestratorTests
         var storage = new FakeMediaStorageService();
         var transcoder = new FakeMediaTranscodeService(false);
         var repo = new InMemoryRecordingRepository();
+        var publisher = new Mock<IRecordingStateEventPublisher>().Object;
 
         var orchestrator = new RecordingOrchestrator(
             logger,
             new[] { source },
             storage,
             transcoder,
-            repo);
+            repo,
+            publisher);
 
         var command = new RecordingCommand(
             ServiceKind: RadioServiceKind.Radiko,
@@ -214,13 +220,15 @@ public class RecordingOrchestratorTests
         var storage = new FakeMediaStorageService();
         var transcoder = new FakeMediaTranscodeService(true);
         var repo = new InMemoryRecordingRepository();
+        var publisher = new Mock<IRecordingStateEventPublisher>().Object;
 
         var orchestrator = new RecordingOrchestrator(
             logger,
             Array.Empty<IRecordingSource>(),
             storage,
             transcoder,
-            repo);
+            repo,
+            publisher);
 
         var command = new RecordingCommand(
             ServiceKind: RadioServiceKind.Radiko,
@@ -279,13 +287,15 @@ public class RecordingOrchestratorTests
         var storage = new FakeMediaStorageService();
         var transcoder = new FakeMediaTranscodeService(true);
         var repo = new InMemoryRecordingRepository();
+        var publisher = new Mock<IRecordingStateEventPublisher>().Object;
 
         var orchestrator = new RecordingOrchestrator(
             logger,
             new[] { source },
             storage,
             transcoder,
-            repo);
+            repo,
+            publisher);
 
         var command = new RecordingCommand(
             ServiceKind: RadioServiceKind.Radiko,
@@ -340,13 +350,15 @@ public class RecordingOrchestratorTests
         var storage = new ThrowingMediaStorageService();
         var transcoder = new FakeMediaTranscodeService(true);
         var repo = new InMemoryRecordingRepository();
+        var publisher = new Mock<IRecordingStateEventPublisher>().Object;
 
         var orchestrator = new RecordingOrchestrator(
             logger,
             new[] { source },
             storage,
             transcoder,
-            repo);
+            repo,
+            publisher);
 
         var command = new RecordingCommand(
             ServiceKind: RadioServiceKind.Radiko,
@@ -399,13 +411,15 @@ public class RecordingOrchestratorTests
         var storage = new FakeMediaStorageService();
         var transcoder = new FakeMediaTranscodeService(false);
         var repo = new ThrowingUpdateStateRepository();
+        var publisher = new Mock<IRecordingStateEventPublisher>().Object;
 
         var orchestrator = new RecordingOrchestrator(
             logger,
             new[] { source },
             storage,
             transcoder,
-            repo);
+            repo,
+            publisher);
 
         var command = new RecordingCommand(
             ServiceKind: RadioServiceKind.Radiko,

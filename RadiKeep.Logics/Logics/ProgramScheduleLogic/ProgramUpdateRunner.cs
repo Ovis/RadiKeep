@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using RadiKeep.Logics.Domain.AppEvent;
 using RadiKeep.Logics.Logics.NotificationLogic;
 using RadiKeep.Logics.Logics.RadikoLogic;
 using RadiKeep.Logics.Logics.ReserveLogic;
@@ -16,7 +17,10 @@ public class ProgramUpdateRunner(
     RadikoUniqueProcessLogic radikoUniqueProcessLogic,
     ReserveLobLogic reserveLobLogic,
     ProgramScheduleLobLogic programScheduleLobLogic,
-    NotificationLobLogic notificationLobLogic)
+    NotificationLobLogic notificationLobLogic,
+    IProgramUpdateStatusService programUpdateStatusService,
+    IProgramUpdateStatusPublisher? programUpdateStatusPublisher = null,
+    IAppToastEventPublisher? appToastEventPublisher = null)
 {
     private static readonly SemaphoreSlim ExecutionGate = new(1, 1);
 
@@ -35,6 +39,7 @@ public class ProgramUpdateRunner(
 
         try
         {
+            await PublishStatusChangedSafeAsync(programUpdateStatusService.MarkStarted(triggerSource), cancellationToken);
             logger.ZLogInformation($"番組表更新を開始します。 source={triggerSource}");
             await notificationLobLogic.SetNotificationAsync(
                 logLevel: LogLevel.Information,
@@ -67,6 +72,11 @@ public class ProgramUpdateRunner(
                 logLevel: LogLevel.Information,
                 category: NoticeCategory.UpdateProgramEnd,
                 message: "番組表の更新が完了しました。");
+            await PublishStatusChangedSafeAsync(programUpdateStatusService.MarkSucceeded(), cancellationToken);
+            await PublishGlobalToastSafeAsync(
+                message: "番組表の更新が完了しました。",
+                isSuccess: true,
+                cancellationToken: cancellationToken);
         }
         catch (Exception ex)
         {
@@ -75,10 +85,57 @@ public class ProgramUpdateRunner(
                 logLevel: LogLevel.Error,
                 category: NoticeCategory.UpdateProgramError,
                 message: "番組表の更新に失敗しました。");
+            await PublishStatusChangedSafeAsync(programUpdateStatusService.MarkFailed(), cancellationToken);
+            await PublishGlobalToastSafeAsync(
+                message: "番組表の更新に失敗しました。",
+                isSuccess: false,
+                cancellationToken: cancellationToken);
         }
         finally
         {
             ExecutionGate.Release();
+        }
+    }
+
+    /// <summary>
+    /// 番組表更新状態イベント通知を安全に実行する。
+    /// </summary>
+    private async ValueTask PublishStatusChangedSafeAsync(ProgramUpdateStatusSnapshot status, CancellationToken cancellationToken)
+    {
+        if (programUpdateStatusPublisher is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await programUpdateStatusPublisher.PublishAsync(status, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            logger.ZLogWarning(ex, $"番組表更新状態イベント通知に失敗しました。");
+        }
+    }
+
+    /// <summary>
+    /// 全画面トーストイベント通知を安全に実行する。
+    /// </summary>
+    private async ValueTask PublishGlobalToastSafeAsync(string message, bool isSuccess, CancellationToken cancellationToken)
+    {
+        if (appToastEventPublisher is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await appToastEventPublisher.PublishAsync(
+                new AppToastEvent(message, isSuccess, DateTimeOffset.UtcNow),
+                cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            logger.ZLogWarning(ex, $"全画面トーストイベント通知に失敗しました。");
         }
     }
 }

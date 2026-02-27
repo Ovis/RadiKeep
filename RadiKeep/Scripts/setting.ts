@@ -25,6 +25,16 @@ import type {
 import { showConfirmDialog } from './feedback.js';
 import { initExternalImport } from './setting-external-import.js';
 import { initSettingMaintenance } from './setting-maintenance.js';
+import type { SignalRHubConnection, SignalRWindow } from './signalr-types.js';
+
+type ProgramUpdateStatusResponse = {
+    isRunning: boolean;
+    triggerSource: string | null;
+    message: string;
+    startedAtUtc: string | null;
+    lastCompletedAtUtc: string | null;
+    lastSucceeded: boolean | null;
+};
 
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -45,6 +55,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     const updateRadiruRequestSettingsBtn = document.getElementById('update-radiru-request-settings-btn') as HTMLButtonElement | null;
     const updateRadiruRequestSettingsBtnDesktop = document.getElementById('update-radiru-request-settings-btn-desktop') as HTMLButtonElement | null;
     const programUpdateButton = document.getElementById('update-program-btn') as HTMLButtonElement;
+    const programUpdateStatusText = document.getElementById('program-update-status-text') as HTMLSpanElement | null;
+    const programUpdateLastCompletedText = document.getElementById('program-update-last-completed-text') as HTMLSpanElement | null;
     const radikoLoginUpdateButton = document.getElementById('update-radiko-login-btn') as HTMLButtonElement;
     const radikoLoginClearButton = document.getElementById('clear-radiko-login-btn') as HTMLButtonElement;
     const refreshRadikoAreaButton = document.getElementById('refresh-radiko-area-btn') as HTMLButtonElement;
@@ -82,6 +94,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     let tagsLoaded = false;
     let settingTags: Tag[] = [];
     let selectedTagId: string | null = null;
+    let programUpdateHubConnection: SignalRHubConnection | null = null;
 
     let toastTimerId: number | undefined;
 
@@ -159,6 +172,72 @@ document.addEventListener('DOMContentLoaded', async () => {
             tagsTabButton.classList.add(...inactiveClass);
             externalImportTabButton.classList.add(...inactiveClass);
             maintenanceTabButton.classList.add(...activeClass);
+        }
+    };
+
+    /**
+     * 番組表更新状態を表示へ反映する。
+     */
+    const renderProgramUpdateStatus = (status: ProgramUpdateStatusResponse): void => {
+        if (programUpdateStatusText) {
+            programUpdateStatusText.textContent = status.message;
+        }
+
+        if (programUpdateLastCompletedText) {
+            programUpdateLastCompletedText.textContent = status.lastCompletedAtUtc
+                ? new Date(status.lastCompletedAtUtc).toLocaleString('ja-JP')
+                : '-';
+        }
+
+    };
+
+    /**
+     * 番組表更新状態を取得して表示する。
+     */
+    const loadProgramUpdateStatusAsync = async (): Promise<void> => {
+        try {
+            const response = await fetch(API_ENDPOINTS.SETTING_PROGRAM_UPDATE_STATUS, { method: 'GET' });
+            const result = await response.json() as ApiResponseContract<ProgramUpdateStatusResponse>;
+            if (result.data) {
+                renderProgramUpdateStatus(result.data);
+            }
+        } catch (error) {
+            console.error('番組表更新状態の取得に失敗しました。', error);
+        }
+    };
+
+    /**
+     * 番組表更新状態のSignalR接続を初期化する。
+     */
+    const initializeProgramUpdateHubConnectionAsync = async (): Promise<void> => {
+        const signalRNamespace = (window as SignalRWindow).signalR;
+        if (!signalRNamespace) {
+            return;
+        }
+
+        const connection = new signalRNamespace.HubConnectionBuilder()
+            .withUrl('/hubs/program-updates')
+            .withAutomaticReconnect()
+            .configureLogging(signalRNamespace.LogLevel.Warning)
+            .build();
+
+        connection.on('programUpdateStatusChanged', (...args: unknown[]) => {
+            const payload = (args[0] ?? null) as ProgramUpdateStatusResponse | null;
+            if (!payload) {
+                return;
+            }
+            renderProgramUpdateStatus(payload);
+        });
+
+        connection.onreconnected(() => {
+            void loadProgramUpdateStatusAsync();
+        });
+
+        try {
+            await connection.start();
+            programUpdateHubConnection = connection;
+        } catch (error) {
+            console.warn('番組表更新SignalR接続の開始に失敗しました。', error);
         }
     };
 
@@ -339,6 +418,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     initExternalImport(verificationToken, showToast);
     initSettingMaintenance(verificationToken, showToast);
+    await loadProgramUpdateStatusAsync();
+    await initializeProgramUpdateHubConnectionAsync();
 
     tagCreateButton?.addEventListener('click', async () => {
         const name = tagCreateInput?.value.trim() ?? '';
@@ -682,7 +763,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     programUpdateButton.addEventListener('click', async () => {
         try {
             const requestBody: EmptyRequestContract = {};
-            const data = await postData(API_ENDPOINTS.SETTING_PROGRAM_UPDATE, requestBody);
+            await postData(API_ENDPOINTS.SETTING_PROGRAM_UPDATE, requestBody);
             showToast('番組表の更新を開始しました。');
         } catch (error) {
             const message = error instanceof Error ? error.message : '予期せぬエラーが発生しました。';
@@ -1016,6 +1097,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                     icon.classList.toggle('fa-angle-up');
                 }
             });
+        }
+    });
+
+    window.addEventListener('beforeunload', () => {
+        if (programUpdateHubConnection) {
+            void programUpdateHubConnection.stop();
+            programUpdateHubConnection = null;
         }
     });
 });

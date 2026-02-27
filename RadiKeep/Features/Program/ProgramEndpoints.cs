@@ -56,6 +56,9 @@ public static class ProgramEndpoints
         group.MapPost("/update", HandleUpdateProgramsAsync)
             .WithName("ApiProgramUpdate")
             .WithSummary("番組表更新ジョブを起動する");
+        group.MapGet("/update-status", HandleGetProgramUpdateStatus)
+            .WithName("ApiProgramUpdateStatus")
+            .WithSummary("番組表更新状態を取得する");
         group.MapPost("/reserve", HandleReserveProgramAsync)
             .WithName("ApiProgramReserve")
             .WithSummary("番組録音予約を登録する");
@@ -391,6 +394,23 @@ public static class ProgramEndpoints
     }
 
     /// <summary>
+    /// 番組表更新状態を取得する。
+    /// </summary>
+    private static Ok<ApiResponse<ProgramUpdateStatusResponse>> HandleGetProgramUpdateStatus(
+        IProgramUpdateStatusService programUpdateStatusService)
+    {
+        var status = programUpdateStatusService.GetCurrent();
+        var response = new ProgramUpdateStatusResponse(
+            status.IsRunning,
+            status.TriggerSource,
+            status.Message,
+            status.StartedAtUtc,
+            status.LastCompletedAtUtc,
+            status.LastSucceeded);
+        return TypedResults.Ok(ApiResponse.Ok(response));
+    }
+
+    /// <summary>
     /// 番組の録音予約を登録する。
     /// </summary>
     private static async Task<Results<Ok<ApiResponse<EmptyData?>>, BadRequest<ApiResponse<EmptyData?>>>> HandleReserveProgramAsync(
@@ -472,6 +492,17 @@ public static class ProgramEndpoints
     /// 再生開始に必要な情報レスポンス。
     /// </summary>
     private sealed record ProgramPlaybackInfoResponse(string? Token, string? Url);
+
+    /// <summary>
+    /// 番組表更新状態レスポンス。
+    /// </summary>
+    private sealed record ProgramUpdateStatusResponse(
+        bool IsRunning,
+        string? TriggerSource,
+        string Message,
+        DateTimeOffset? StartedAtUtc,
+        DateTimeOffset? LastCompletedAtUtc,
+        bool? LastSucceeded);
 }
 
 

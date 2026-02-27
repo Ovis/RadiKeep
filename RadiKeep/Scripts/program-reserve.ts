@@ -4,6 +4,7 @@ import { RadioServiceKind, ReserveType, RecordingType, RecordingTypeMap, Reserve
 import type { ReserveEntryRequestContract } from './openapi-contract.js';
 import { setTextContent, setEventListener, setInnerHtml, sanitizeHtml } from './utils.js';
 import { createInlineToast, wireInlineToastClose } from './inline-toast.js';
+import type { SignalRHubConnection, SignalRWindow } from './signalr-types.js';
 
 let recordingsCache: ProgramReserve[] = [];
 type SortKey = 'title' | 'time' | 'recordingType' | 'reserveType' | 'status';
@@ -11,6 +12,9 @@ type SortDirection = 'asc' | 'desc';
 let currentSortKey: SortKey = 'time';
 let currentSortDirection: SortDirection = 'asc';
 const showToast = createInlineToast('program-reserve-result-toast', 'program-reserve-result-toast-message');
+let reserveHubConnection: SignalRHubConnection | null = null;
+let isRealtimeReloadRunning = false;
+let hasRealtimeReloadPending = false;
 // API由来の録音種別値を表示文字列へ変換する。
 const getRecordingTypeDisplayName = (value: string | number | null | undefined): string =>
     RecordingTypeMap[Number(value) as keyof typeof RecordingTypeMap]?.displayName ?? '未定義';
@@ -144,7 +148,73 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     await loadRecordings();
+    await initializeReserveHubConnectionAsync();
+
+    window.addEventListener('beforeunload', () => {
+        if (reserveHubConnection) {
+            void reserveHubConnection.stop();
+            reserveHubConnection = null;
+        }
+    });
 });
+
+/**
+ * SignalR経由の変更通知を受けた際に予約一覧を再同期する
+ */
+const reloadReservesFromRealtimeAsync = async (): Promise<void> => {
+    if (isRealtimeReloadRunning) {
+        hasRealtimeReloadPending = true;
+        return;
+    }
+
+    isRealtimeReloadRunning = true;
+    try {
+        do {
+            hasRealtimeReloadPending = false;
+            await loadRecordings();
+        } while (hasRealtimeReloadPending);
+    } finally {
+        isRealtimeReloadRunning = false;
+    }
+};
+
+/**
+ * 録音予定更新のSignalR接続を初期化する
+ */
+const initializeReserveHubConnectionAsync = async (): Promise<void> => {
+    const signalRNamespace = (window as SignalRWindow).signalR;
+    if (!signalRNamespace) {
+        console.warn('SignalRクライアントが読み込まれていないため、録音予定Push同期を無効化します。');
+        return;
+    }
+
+    const connection = new signalRNamespace.HubConnectionBuilder()
+        .withUrl('/hubs/reserves')
+        .withAutomaticReconnect()
+        .configureLogging(signalRNamespace.LogLevel.Warning)
+        .build();
+
+    connection.on('reserveScheduleChanged', () => {
+        void reloadReservesFromRealtimeAsync();
+    });
+
+    connection.onreconnected(() => {
+        void reloadReservesFromRealtimeAsync();
+    });
+
+    connection.onclose((error) => {
+        if (error) {
+            console.warn('録音予定SignalR接続が切断されました。', error);
+        }
+    });
+
+    try {
+        await connection.start();
+        reserveHubConnection = connection;
+    } catch (error) {
+        console.warn('録音予定SignalR接続の開始に失敗しました。', error);
+    }
+};
 
 const loadRecordings = async (): Promise<void> => {
     try {

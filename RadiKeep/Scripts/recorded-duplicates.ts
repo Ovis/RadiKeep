@@ -12,6 +12,7 @@ import { escapeHtml } from './utils.js';
 import { playerPlaybackRateOptions, resetPlaybackRate } from './player-rate-control.js';
 import { createStandardPlayerJumpControls } from './player-jump-controls.js';
 import type { HlsInstance, HlsWindow } from './hls-types.js';
+import type { SignalRHubConnection, SignalRWindow } from './signalr-types.js';
 
 type DuplicateGroupMember = RecordedDuplicateSide & {
     bestScore: number;
@@ -61,6 +62,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentHls: HlsInstance | null = null;
     let currentPlayingRecordingId: string | null = null;
     let pollTimer: number | null = null;
+    let duplicateHubConnection: SignalRHubConnection | null = null;
 
     const isCurrentDuplicateRecordingPlaying = (recordId: string): boolean => {
         return currentPlayingRecordingId === recordId;
@@ -522,6 +524,47 @@ document.addEventListener('DOMContentLoaded', () => {
         }, 5000);
     };
 
+    /**
+     * 同一番組候補チェック状態のSignalR接続を初期化する
+     */
+    const initializeDuplicateDetectionHubConnectionAsync = async (): Promise<void> => {
+        const signalRNamespace = (window as SignalRWindow).signalR;
+        if (!signalRNamespace) {
+            return;
+        }
+
+        const connection = new signalRNamespace.HubConnectionBuilder()
+            .withUrl('/hubs/duplicate-detection')
+            .withAutomaticReconnect()
+            .configureLogging(signalRNamespace.LogLevel.Warning)
+            .build();
+
+        connection.on('duplicateDetectionStatusChanged', (...args: unknown[]) => {
+            const status = (args[0] ?? null) as RecordedDuplicateDetectionStatus | null;
+            if (!status) {
+                return;
+            }
+
+            renderStatus(status);
+            setLoading(status.isRunning);
+            if (lastRunningState && !status.isRunning) {
+                void fetchCandidates();
+            }
+            lastRunningState = status.isRunning;
+        });
+
+        connection.onreconnected(() => {
+            void fetchStatus();
+        });
+
+        try {
+            await connection.start();
+            duplicateHubConnection = connection;
+        } catch {
+            // 接続失敗時はポーリングのみで継続する
+        }
+    };
+
     runButton.addEventListener('click', async () => {
         setError('');
         setLoading(true);
@@ -633,6 +676,18 @@ document.addEventListener('DOMContentLoaded', () => {
         setError(message);
     });
     startPolling();
+    void initializeDuplicateDetectionHubConnectionAsync();
+
+    window.addEventListener('beforeunload', () => {
+        if (pollTimer !== null) {
+            window.clearInterval(pollTimer);
+            pollTimer = null;
+        }
+        if (duplicateHubConnection) {
+            void duplicateHubConnection.stop();
+            duplicateHubConnection = null;
+        }
+    });
 });
 
 function createPlayerJumpControls(audioElm: HTMLAudioElement): HTMLDivElement {

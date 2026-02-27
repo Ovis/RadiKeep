@@ -55,6 +55,7 @@ export const API_ENDPOINTS = {
     EXTERNAL_IMPORT_MAINTENANCE_RELINK_MISSING: `/api/settings/external-import/maintenance/relink-missing`,
     EXTERNAL_IMPORT_MAINTENANCE_DELETE_MISSING: `/api/settings/external-import/maintenance/delete-missing`,
     SETTING_PROGRAM_UPDATE: `/api/programs/update`,
+    SETTING_PROGRAM_UPDATE_STATUS: `/api/programs/update-status`,
     NOTIFICATION_LIST: `/api/notifications`,
     NOTIFICATION_COUNT: `/api/notifications/count`,
     NOTIFICATION_UNREAD: `/api/notifications/latest`,

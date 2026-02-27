@@ -80,13 +80,15 @@ public class RecordingLobLogicTests : UnitTestBase
         var storage = new FakeMediaStorageService();
         var transcoder = new FakeMediaTranscodeService(transcodeResult);
         var repo = new InMemoryRecordingRepository();
+        var publisher = new Mock<IRecordingStateEventPublisher>().Object;
 
         return new RecordingOrchestrator(
             logger,
             new[] { source },
             storage,
             transcoder,
-            repo);
+            repo,
+            publisher);
     }
 
     private RecordingOrchestrator CreateDbOrchestrator(bool transcodeResult)
@@ -122,13 +124,15 @@ public class RecordingLobLogicTests : UnitTestBase
         var storage = new FakeMediaStorageService();
         var transcoder = new FakeMediaTranscodeService(transcodeResult);
         var repo = new RecordingRepository(new Mock<ILogger<RecordingRepository>>().Object, DbContext);
+        var publisher = new Mock<IRecordingStateEventPublisher>().Object;
 
         return new RecordingOrchestrator(
             logger,
             new[] { source },
             storage,
             transcoder,
-            repo);
+            repo,
+            publisher);
     }
 
     private static ScheduleJob CreateScheduleJob(Ulid id)

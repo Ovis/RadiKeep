@@ -6,11 +6,27 @@ import {
 import { API_ENDPOINTS } from './const.js';
 import { showGlobalToast } from './feedback.js';
 import { sanitizeHtml } from './utils.js';
+import type { SignalRHubConnection, SignalRWindow } from './signalr-types.js';
+
+type GlobalToastEventPayload = {
+    message: string;
+    isSuccess: boolean;
+};
+
+type GlobalOperationEventPayload = {
+    category: string;
+    action: string;
+    succeeded: boolean;
+    message: string;
+    occurredAtUtc: string;
+};
 
 document.addEventListener('DOMContentLoaded', async () => {
 
     const notificationButton = document.getElementById('notification-button') as HTMLButtonElement;
     const notificationPopup = document.getElementById('notification-popup') as HTMLElement;
+    let notificationHubConnection: SignalRHubConnection | null = null;
+    let appEventHubConnection: SignalRHubConnection | null = null;
 
     const notificationCount = async (): Promise<number | null> => {
 
@@ -67,6 +83,98 @@ document.addEventListener('DOMContentLoaded', async () => {
     await notificationCount().then(count => {
         createNotificationCountBadge(count);
     });
+
+    /**
+     * お知らせHubへ接続して未読バッジをリアルタイム同期する
+     */
+    const initializeNotificationHubConnectionAsync = async (): Promise<void> => {
+        const signalRNamespace = (window as SignalRWindow).signalR;
+        if (!signalRNamespace) {
+            console.warn('SignalRクライアントが読み込まれていないため、お知らせPush同期を無効化します。');
+            return;
+        }
+
+        const connection = new signalRNamespace.HubConnectionBuilder()
+            .withUrl('/hubs/notifications')
+            .withAutomaticReconnect()
+            .configureLogging(signalRNamespace.LogLevel.Warning)
+            .build();
+
+        const refreshBadgeAsync = async (): Promise<void> => {
+            const count = await notificationCount();
+            await createNotificationCountBadge(count);
+        };
+
+        connection.on('notificationChanged', () => {
+            void refreshBadgeAsync();
+        });
+
+        connection.onreconnected(() => {
+            void refreshBadgeAsync();
+        });
+
+        connection.onclose((error) => {
+            if (error) {
+                console.warn('お知らせSignalR接続が切断されました。', error);
+            }
+        });
+
+        try {
+            await connection.start();
+            notificationHubConnection = connection;
+        } catch (error) {
+            console.warn('お知らせSignalR接続の開始に失敗しました。', error);
+        }
+    };
+
+    /**
+     * 全画面トーストイベントHubへ接続する。
+     */
+    const initializeAppEventHubConnectionAsync = async (): Promise<void> => {
+        const signalRNamespace = (window as SignalRWindow).signalR;
+        if (!signalRNamespace) {
+            return;
+        }
+
+        const connection = new signalRNamespace.HubConnectionBuilder()
+            .withUrl('/hubs/app-events')
+            .withAutomaticReconnect()
+            .configureLogging(signalRNamespace.LogLevel.Warning)
+            .build();
+
+        connection.on('toast', (...args: unknown[]) => {
+            const payload = (args[0] ?? null) as GlobalToastEventPayload | null;
+            if (!payload || !payload.message) {
+                return;
+            }
+
+            showGlobalToast(payload.message, payload.isSuccess);
+        });
+
+        connection.on('operation', (...args: unknown[]) => {
+            const payload = (args[0] ?? null) as GlobalOperationEventPayload | null;
+            if (!payload) {
+                return;
+            }
+
+            window.dispatchEvent(new CustomEvent<GlobalOperationEventPayload>('radikeep:operation-event', {
+                detail: payload
+            }));
+        });
+
+        connection.onclose((error) => {
+            if (error) {
+                console.warn('全画面トーストSignalR接続が切断されました。', error);
+            }
+        });
+
+        try {
+            await connection.start();
+            appEventHubConnection = connection;
+        } catch (error) {
+            console.warn('全画面トーストSignalR接続の開始に失敗しました。', error);
+        }
+    };
 
 
     notificationButton.addEventListener('click', async (event: MouseEvent) => {
@@ -259,6 +367,20 @@ document.addEventListener('DOMContentLoaded', async () => {
             elm.classList.remove('is-active');
         });
     });
+
+    window.addEventListener('beforeunload', () => {
+        if (notificationHubConnection) {
+            void notificationHubConnection.stop();
+            notificationHubConnection = null;
+        }
+        if (appEventHubConnection) {
+            void appEventHubConnection.stop();
+            appEventHubConnection = null;
+        }
+    });
+
+    await initializeNotificationHubConnectionAsync();
+    await initializeAppEventHubConnectionAsync();
 });
 
 

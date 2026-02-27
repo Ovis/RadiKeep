@@ -26,7 +26,8 @@ namespace RadiKeep.Logics.Logics.ReserveLogic
         ProgramScheduleLobLogic programScheduleLobLogic,
         NotificationLobLogic notificationLobLogic,
         TagLobLogic tagLobLogic,
-        IEntryMapper entryMapper)
+        IEntryMapper entryMapper,
+        IReserveScheduleEventPublisher? reserveScheduleEventPublisher = null)
     {
         /// <summary>
         /// 録音予約リスト取得
@@ -226,6 +227,7 @@ namespace RadiKeep.Logics.Logics.ReserveLogic
                 return (false, new DomainException("録音予約に失敗しました。"));
             }
 
+            await PublishReserveScheduleChangedSafeAsync();
             return (true, default);
         }
 
@@ -259,6 +261,7 @@ namespace RadiKeep.Logics.Logics.ReserveLogic
                 {
                     // 実行中処理との競合で既に削除されていた場合も成功扱い
                 }
+                await PublishReserveScheduleChangedSafeAsync();
 
                 return (true, null);
             }
@@ -290,6 +293,8 @@ namespace RadiKeep.Logics.Logics.ReserveLogic
                     await recordJobLobLogic.DeleteScheduleJobAsync(job.Id);
                     await recordJobLobLogic.SetScheduleJobAsync(job);
                 }
+
+                await PublishReserveScheduleChangedSafeAsync();
             }
             catch (Exception e)
             {
@@ -318,10 +323,31 @@ namespace RadiKeep.Logics.Logics.ReserveLogic
                 }
 
                 await reserveRepository.RemoveScheduleJobsAsync(scheduleJob);
+                await PublishReserveScheduleChangedSafeAsync();
             }
             catch (Exception e)
             {
                 logger.ZLogError(e, $"古い予約情報の削除処理に失敗");
+            }
+        }
+
+        /// <summary>
+        /// 録音予定更新イベント通知を安全に実行する。
+        /// </summary>
+        protected async ValueTask PublishReserveScheduleChangedSafeAsync()
+        {
+            if (reserveScheduleEventPublisher is null)
+            {
+                return;
+            }
+
+            try
+            {
+                await reserveScheduleEventPublisher.PublishAsync(new ReserveScheduleChangedEvent(DateTimeOffset.UtcNow));
+            }
+            catch (Exception ex)
+            {
+                logger.ZLogWarning(ex, $"録音予定更新イベント通知に失敗しました。");
             }
         }
     }

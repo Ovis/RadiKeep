@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.EntityFrameworkCore;
 using RadiKeep.Logics.Domain.Recording;
+using RadiKeep.Logics.Domain.Reserve;
 using RadiKeep.Logics.Errors;
 using RadiKeep.Logics.Logics.NotificationLogic;
 using RadiKeep.Logics.Logics.TagLogic;
@@ -21,7 +22,8 @@ namespace RadiKeep.Logics.Logics.RecordingLogic
         RadioDbContext dbContext,
         NotificationLobLogic notificationLobLogic,
         IAppConfigurationService appConfigurationService,
-        TagLobLogic tagLobLogic)
+        TagLobLogic tagLobLogic,
+        IReserveScheduleEventPublisher? reserveScheduleEventPublisher = null)
     {
         /// <summary>
         /// 録音処理
@@ -107,6 +109,7 @@ namespace RadiKeep.Logics.Logics.RecordingLogic
                     dbContext.ScheduleJob.Remove(scheduleJob);
                     await dbContext.SaveChangesAsync();
                     await transaction.CommitAsync();
+                    await PublishReserveScheduleChangedSafeAsync();
                 }
             }
             catch (Exception e)
@@ -120,6 +123,26 @@ namespace RadiKeep.Logics.Logics.RecordingLogic
                     category: NoticeCategory.RecordingError,
                     message: $"{programName}の録音に成功しましたが、スケジュールからの削除に失敗しました。"
                 );
+            }
+        }
+
+        /// <summary>
+        /// 録音予定更新イベント通知を安全に実行する。
+        /// </summary>
+        private async ValueTask PublishReserveScheduleChangedSafeAsync()
+        {
+            if (reserveScheduleEventPublisher is null)
+            {
+                return;
+            }
+
+            try
+            {
+                await reserveScheduleEventPublisher.PublishAsync(new ReserveScheduleChangedEvent(DateTimeOffset.UtcNow));
+            }
+            catch (Exception ex)
+            {
+                logger.ZLogWarning(ex, $"録音予定更新イベント通知に失敗しました。");
             }
         }
 

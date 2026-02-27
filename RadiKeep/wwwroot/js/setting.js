@@ -18,6 +18,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     const updateRadiruRequestSettingsBtn = document.getElementById('update-radiru-request-settings-btn');
     const updateRadiruRequestSettingsBtnDesktop = document.getElementById('update-radiru-request-settings-btn-desktop');
     const programUpdateButton = document.getElementById('update-program-btn');
+    const programUpdateStatusText = document.getElementById('program-update-status-text');
+    const programUpdateLastCompletedText = document.getElementById('program-update-last-completed-text');
     const radikoLoginUpdateButton = document.getElementById('update-radiko-login-btn');
     const radikoLoginClearButton = document.getElementById('clear-radiko-login-btn');
     const refreshRadikoAreaButton = document.getElementById('refresh-radiko-area-btn');
@@ -55,6 +57,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     let tagsLoaded = false;
     let settingTags = [];
     let selectedTagId = null;
+    let programUpdateHubConnection = null;
     let toastTimerId;
     const showToast = (message, isSuccess = true) => {
         if (!resultToast || !resultToastMessage) {
@@ -127,6 +130,65 @@ document.addEventListener('DOMContentLoaded', async () => {
             tagsTabButton.classList.add(...inactiveClass);
             externalImportTabButton.classList.add(...inactiveClass);
             maintenanceTabButton.classList.add(...activeClass);
+        }
+    };
+    /**
+     * 番組表更新状態を表示へ反映する。
+     */
+    const renderProgramUpdateStatus = (status) => {
+        if (programUpdateStatusText) {
+            programUpdateStatusText.textContent = status.message;
+        }
+        if (programUpdateLastCompletedText) {
+            programUpdateLastCompletedText.textContent = status.lastCompletedAtUtc
+                ? new Date(status.lastCompletedAtUtc).toLocaleString('ja-JP')
+                : '-';
+        }
+    };
+    /**
+     * 番組表更新状態を取得して表示する。
+     */
+    const loadProgramUpdateStatusAsync = async () => {
+        try {
+            const response = await fetch(API_ENDPOINTS.SETTING_PROGRAM_UPDATE_STATUS, { method: 'GET' });
+            const result = await response.json();
+            if (result.data) {
+                renderProgramUpdateStatus(result.data);
+            }
+        }
+        catch (error) {
+            console.error('番組表更新状態の取得に失敗しました。', error);
+        }
+    };
+    /**
+     * 番組表更新状態のSignalR接続を初期化する。
+     */
+    const initializeProgramUpdateHubConnectionAsync = async () => {
+        const signalRNamespace = window.signalR;
+        if (!signalRNamespace) {
+            return;
+        }
+        const connection = new signalRNamespace.HubConnectionBuilder()
+            .withUrl('/hubs/program-updates')
+            .withAutomaticReconnect()
+            .configureLogging(signalRNamespace.LogLevel.Warning)
+            .build();
+        connection.on('programUpdateStatusChanged', (...args) => {
+            const payload = (args[0] ?? null);
+            if (!payload) {
+                return;
+            }
+            renderProgramUpdateStatus(payload);
+        });
+        connection.onreconnected(() => {
+            void loadProgramUpdateStatusAsync();
+        });
+        try {
+            await connection.start();
+            programUpdateHubConnection = connection;
+        }
+        catch (error) {
+            console.warn('番組表更新SignalR接続の開始に失敗しました。', error);
         }
     };
     const scrollToGeneralSection = (hash, smooth = true) => {
@@ -286,6 +348,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     initExternalImport(verificationToken, showToast);
     initSettingMaintenance(verificationToken, showToast);
+    await loadProgramUpdateStatusAsync();
+    await initializeProgramUpdateHubConnectionAsync();
     tagCreateButton?.addEventListener('click', async () => {
         const name = tagCreateInput?.value.trim() ?? '';
         if (!name) {
@@ -595,7 +659,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     programUpdateButton.addEventListener('click', async () => {
         try {
             const requestBody = {};
-            const data = await postData(API_ENDPOINTS.SETTING_PROGRAM_UPDATE, requestBody);
+            await postData(API_ENDPOINTS.SETTING_PROGRAM_UPDATE, requestBody);
             showToast('番組表の更新を開始しました。');
         }
         catch (error) {
@@ -898,6 +962,12 @@ document.addEventListener('DOMContentLoaded', async () => {
                     icon.classList.toggle('fa-angle-up');
                 }
             });
+        }
+    });
+    window.addEventListener('beforeunload', () => {
+        if (programUpdateHubConnection) {
+            void programUpdateHubConnection.stop();
+            programUpdateHubConnection = null;
         }
     });
 });

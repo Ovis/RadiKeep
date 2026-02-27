@@ -2,6 +2,8 @@ using System;
 using System.Net;
 using Microsoft.EntityFrameworkCore;
 using RadiKeep.Application;
+using RadiKeep.Hubs;
+using RadiKeep.Logics.Domain.AppEvent;
 using RadiKeep.Logics.ApiClients;
 using RadiKeep.Logics.Application;
 using RadiKeep.Logics.BackgroundServices;
@@ -148,6 +150,7 @@ public static class ServiceCollectionExtensions
         return services
             .AddHttpClients()
             .AddMappings()
+            .AddRealtimeEventServices()
             .AddApiClients()
             .AddRecordingServices()
             .AddProgramScheduleServices()
@@ -210,11 +213,19 @@ public static class ServiceCollectionExtensions
         return services;
     }
 
+    private static IServiceCollection AddRealtimeEventServices(this IServiceCollection services)
+    {
+        services.AddScoped<IAppToastEventPublisher, AppToastSignalRPublisher>();
+        services.AddScoped<IAppOperationEventPublisher, AppOperationSignalRPublisher>();
+        return services;
+    }
+
     private static IServiceCollection AddRecordingServices(this IServiceCollection services)
     {
         services.AddScoped<RecordingOrchestrator>();
         services.AddScoped<IRecordingSource, RadikoRecordingSource>();
         services.AddScoped<IRecordingSource, RadiruRecordingSource>();
+        services.AddScoped<IRecordingStateEventPublisher, RecordingStateSignalRPublisher>();
         services.AddScoped<IMediaStorageService, MediaStorageService>();
         services.AddScoped<IMediaTranscodeService, MediaTranscodeService>();
         services.AddScoped<IRecordingRepository, RecordingRepository>();
@@ -226,6 +237,8 @@ public static class ServiceCollectionExtensions
 
     private static IServiceCollection AddProgramScheduleServices(this IServiceCollection services)
     {
+        services.AddSingleton<IProgramUpdateStatusService, ProgramUpdateStatusService>();
+        services.AddScoped<IProgramUpdateStatusPublisher, ProgramUpdateStatusSignalRPublisher>();
         services.AddScoped<IRadioAppContext, RadioAppContext>();
         services.AddScoped<IStationRepository, StationRepository>();
         services.AddScoped<IProgramScheduleRepository, ProgramScheduleRepository>();
@@ -236,6 +249,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<RecordedProgramMediaService>();
         services.AddScoped<RecordedProgramDuplicateDetectionService>();
         services.AddScoped<RecordedDuplicateDetectionLobLogic>();
+        services.AddScoped<IRecordedDuplicateDetectionStatusPublisher, RecordedDuplicateDetectionStatusSignalRPublisher>();
         services.AddScoped<RecordedRadioLobLogic>();
         services.AddScoped<ExternalRecordingImportLobLogic>();
         services.AddScoped<RecordingFileMaintenanceLobLogic>();
@@ -251,6 +265,7 @@ public static class ServiceCollectionExtensions
 
     private static IServiceCollection AddReserveServices(this IServiceCollection services)
     {
+        services.AddScoped<IReserveScheduleEventPublisher, ReserveScheduleSignalRPublisher>();
         services.AddScoped<IReserveRepository, ReserveRepository>();
         services.AddScoped<ReserveLobLogic>();
         services.AddScoped<TagLobLogic>();
@@ -260,6 +275,7 @@ public static class ServiceCollectionExtensions
     private static IServiceCollection AddNotificationServices(this IServiceCollection services)
     {
         services.AddScoped<INotificationRepository, NotificationRepository>();
+        services.AddScoped<INotificationEventPublisher, NotificationSignalRPublisher>();
         services.AddScoped<NotificationLobLogic>();
         return services;
     }

@@ -10,6 +10,12 @@ import { showConfirmDialog } from './feedback.js';
 import { withButtonLoading } from './loading.js';
 
 type ShowToastFn = (message: string, isSuccess?: boolean) => void;
+type AppOperationEventDetail = {
+    category: string;
+    action: string;
+    succeeded: boolean;
+    message: string;
+};
 
 export const initSettingMaintenance = (verificationToken: string, showToast: ShowToastFn): void => {
     const panel = document.getElementById('setting-panel-maintenance') as HTMLDivElement | null;
@@ -132,6 +138,21 @@ export const initSettingMaintenance = (verificationToken: string, showToast: Sho
         renderMaintenance();
         showToast(result.message ?? '欠損レコードを抽出しました。');
     };
+
+    /**
+     * 他画面/他タブのメンテナンス実行完了を受けて一覧を再同期する
+     */
+    window.addEventListener('radikeep:operation-event', (event: Event) => {
+        const customEvent = event as CustomEvent<AppOperationEventDetail>;
+        const detail = customEvent.detail;
+        if (!detail || detail.category !== 'maintenance' || !detail.succeeded) {
+            return;
+        }
+
+        void scanMaintenance().catch(() => {
+            // 再同期失敗時は明示トーストを追加しない
+        });
+    });
 
     maintenanceSelectAll.addEventListener('change', () => {
         const checked = maintenanceSelectAll.checked;

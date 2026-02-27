@@ -18,6 +18,7 @@ import { createStandardPlayerJumpControls } from './player-jump-controls.js';
 import { readPersistedPlayerState, writePersistedPlayerState, clearPersistedPlayerState } from './player-state-store.js';
 import { clearMultiSelect, renderSelectedTagChips, enableTouchLikeMultiSelect } from './tag-select-ui.js';
 import type { HlsInstance, HlsWindow } from './hls-types.js';
+import type { SignalRHubConnection, SignalRWindow } from './signalr-types.js';
 
 const sortingElements: { [key: string]: string } = {
     'sort-title': 'Title',
@@ -46,6 +47,9 @@ let currentPlayingSourceUrl: string | null = null;
 let currentPlayingSourceToken: string | null = null;
 let currentPlayingTitle: string | null = null;
 const defaultDocumentTitle = document.title;
+let recordingHubConnection: SignalRHubConnection | null = null;
+let isRealtimeReloadRunning = false;
+let hasRealtimeReloadPending = false;
 
 function updateDocumentTitleByRecordingId(recordId: string | null): void {
     if (currentPlayingTitle && currentPlayingTitle.trim().length > 0) {
@@ -171,6 +175,64 @@ function applySortSelectValue(value: string): void {
 
 function normalizeTagName(value: string): string {
     return value.trim().toLocaleLowerCase();
+}
+
+/**
+ * SignalR経由の変更通知を受けた際に録音一覧を再同期する
+ */
+async function reloadRecordingsFromRealtimeAsync(): Promise<void> {
+    if (isRealtimeReloadRunning) {
+        hasRealtimeReloadPending = true;
+        return;
+    }
+
+    isRealtimeReloadRunning = true;
+    try {
+        do {
+            hasRealtimeReloadPending = false;
+            await loadRecordings(currentPage, sortBy, isDescending, searchQuery);
+        } while (hasRealtimeReloadPending);
+    } finally {
+        isRealtimeReloadRunning = false;
+    }
+}
+
+/**
+ * 録音状態変更のSignalR接続を初期化する
+ */
+async function initializeRecordingHubConnectionAsync(): Promise<void> {
+    const signalRNamespace = (window as SignalRWindow).signalR;
+    if (!signalRNamespace) {
+        console.warn('SignalRクライアントが読み込まれていないため、録音Push同期を無効化します。');
+        return;
+    }
+
+    const connection = new signalRNamespace.HubConnectionBuilder()
+        .withUrl('/hubs/recordings')
+        .withAutomaticReconnect()
+        .configureLogging(signalRNamespace.LogLevel.Warning)
+        .build();
+
+    connection.on('recordingStateChanged', () => {
+        void reloadRecordingsFromRealtimeAsync();
+    });
+
+    connection.onreconnected(() => {
+        void reloadRecordingsFromRealtimeAsync();
+    });
+
+    connection.onclose((error) => {
+        if (error) {
+            console.warn('SignalR接続が切断されました。', error);
+        }
+    });
+
+    try {
+        await connection.start();
+        recordingHubConnection = connection;
+    } catch (error) {
+        console.warn('SignalR接続の開始に失敗しました。', error);
+    }
 }
 
 let tagsModalElement: HTMLDivElement | null = null;
@@ -592,10 +654,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     renderSelectedTagChips(tagBulkSelect, tagBulkChipsContainer, recordedTagChipOptions);
     window.addEventListener('beforeunload', () => {
         persistCurrentPlaybackState();
+        if (recordingHubConnection) {
+            void recordingHubConnection.stop();
+            recordingHubConnection = null;
+        }
     });
 
     await loadRecordings(currentPage, sortBy, isDescending, searchQuery);
     await tryResumePersistedPlayback();
+    await initializeRecordingHubConnectionAsync();
 
     window.addEventListener('resize', () => {
         const currentMobileView = isMobileView();

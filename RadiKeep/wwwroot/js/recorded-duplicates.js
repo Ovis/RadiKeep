@@ -36,6 +36,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentHls = null;
     let currentPlayingRecordingId = null;
     let pollTimer = null;
+    let duplicateHubConnection = null;
     const isCurrentDuplicateRecordingPlaying = (recordId) => {
         return currentPlayingRecordingId === recordId;
     };
@@ -441,6 +442,42 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }, 5000);
     };
+    /**
+     * 同一番組候補チェック状態のSignalR接続を初期化する
+     */
+    const initializeDuplicateDetectionHubConnectionAsync = async () => {
+        const signalRNamespace = window.signalR;
+        if (!signalRNamespace) {
+            return;
+        }
+        const connection = new signalRNamespace.HubConnectionBuilder()
+            .withUrl('/hubs/duplicate-detection')
+            .withAutomaticReconnect()
+            .configureLogging(signalRNamespace.LogLevel.Warning)
+            .build();
+        connection.on('duplicateDetectionStatusChanged', (...args) => {
+            const status = (args[0] ?? null);
+            if (!status) {
+                return;
+            }
+            renderStatus(status);
+            setLoading(status.isRunning);
+            if (lastRunningState && !status.isRunning) {
+                void fetchCandidates();
+            }
+            lastRunningState = status.isRunning;
+        });
+        connection.onreconnected(() => {
+            void fetchStatus();
+        });
+        try {
+            await connection.start();
+            duplicateHubConnection = connection;
+        }
+        catch {
+            // 接続失敗時はポーリングのみで継続する
+        }
+    };
     runButton.addEventListener('click', async () => {
         setError('');
         setLoading(true);
@@ -539,6 +576,17 @@ document.addEventListener('DOMContentLoaded', () => {
         setError(message);
     });
     startPolling();
+    void initializeDuplicateDetectionHubConnectionAsync();
+    window.addEventListener('beforeunload', () => {
+        if (pollTimer !== null) {
+            window.clearInterval(pollTimer);
+            pollTimer = null;
+        }
+        if (duplicateHubConnection) {
+            void duplicateHubConnection.stop();
+            duplicateHubConnection = null;
+        }
+    });
 });
 function createPlayerJumpControls(audioElm) {
     return createStandardPlayerJumpControls(audioElm, {

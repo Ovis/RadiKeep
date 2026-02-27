@@ -32,6 +32,9 @@ let currentPlayingSourceUrl = null;
 let currentPlayingSourceToken = null;
 let currentPlayingTitle = null;
 const defaultDocumentTitle = document.title;
+let recordingHubConnection = null;
+let isRealtimeReloadRunning = false;
+let hasRealtimeReloadPending = false;
 function updateDocumentTitleByRecordingId(recordId) {
     if (currentPlayingTitle && currentPlayingTitle.trim().length > 0) {
         document.title = `${currentPlayingTitle.trim()} - RadiKeep`;
@@ -137,6 +140,58 @@ function applySortSelectValue(value) {
 }
 function normalizeTagName(value) {
     return value.trim().toLocaleLowerCase();
+}
+/**
+ * SignalR経由の変更通知を受けた際に録音一覧を再同期する
+ */
+async function reloadRecordingsFromRealtimeAsync() {
+    if (isRealtimeReloadRunning) {
+        hasRealtimeReloadPending = true;
+        return;
+    }
+    isRealtimeReloadRunning = true;
+    try {
+        do {
+            hasRealtimeReloadPending = false;
+            await loadRecordings(currentPage, sortBy, isDescending, searchQuery);
+        } while (hasRealtimeReloadPending);
+    }
+    finally {
+        isRealtimeReloadRunning = false;
+    }
+}
+/**
+ * 録音状態変更のSignalR接続を初期化する
+ */
+async function initializeRecordingHubConnectionAsync() {
+    const signalRNamespace = window.signalR;
+    if (!signalRNamespace) {
+        console.warn('SignalRクライアントが読み込まれていないため、録音Push同期を無効化します。');
+        return;
+    }
+    const connection = new signalRNamespace.HubConnectionBuilder()
+        .withUrl('/hubs/recordings')
+        .withAutomaticReconnect()
+        .configureLogging(signalRNamespace.LogLevel.Warning)
+        .build();
+    connection.on('recordingStateChanged', () => {
+        void reloadRecordingsFromRealtimeAsync();
+    });
+    connection.onreconnected(() => {
+        void reloadRecordingsFromRealtimeAsync();
+    });
+    connection.onclose((error) => {
+        if (error) {
+            console.warn('SignalR接続が切断されました。', error);
+        }
+    });
+    try {
+        await connection.start();
+        recordingHubConnection = connection;
+    }
+    catch (error) {
+        console.warn('SignalR接続の開始に失敗しました。', error);
+    }
 }
 let tagsModalElement = null;
 let tagsModalTitleElement = null;
@@ -509,9 +564,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     renderSelectedTagChips(tagBulkSelect, tagBulkChipsContainer, recordedTagChipOptions);
     window.addEventListener('beforeunload', () => {
         persistCurrentPlaybackState();
+        if (recordingHubConnection) {
+            void recordingHubConnection.stop();
+            recordingHubConnection = null;
+        }
     });
     await loadRecordings(currentPage, sortBy, isDescending, searchQuery);
     await tryResumePersistedPlayback();
+    await initializeRecordingHubConnectionAsync();
     window.addEventListener('resize', () => {
         const currentMobileView = isMobileView();
         if (currentMobileView !== previousMobileView) {

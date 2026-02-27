@@ -138,6 +138,11 @@ app.UseEndpoints(endpoints =>
     endpoints.MapTagEndpoints();
     endpoints.MapReserveEndpoints();
     endpoints.MapHub<RecordingHub>("/hubs/recordings");
+    endpoints.MapHub<NotificationHub>("/hubs/notifications");
+    endpoints.MapHub<ReserveHub>("/hubs/reserves");
+    endpoints.MapHub<ProgramUpdateHub>("/hubs/program-updates");
+    endpoints.MapHub<AppEventHub>("/hubs/app-events");
+    endpoints.MapHub<RecordedDuplicateDetectionHub>("/hubs/duplicate-detection");
 
     endpoints.MapControllerRoute(
         name: "areas",

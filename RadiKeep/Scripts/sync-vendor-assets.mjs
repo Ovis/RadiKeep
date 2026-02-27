@@ -5,6 +5,10 @@ const mappings = [
     {
         source: resolve('node_modules/hls.js/dist/hls.min.js'),
         destination: resolve('wwwroot/lib/hls.js/hls.min.js')
+    },
+    {
+        source: resolve('node_modules/@microsoft/signalr/dist/browser/signalr.min.js'),
+        destination: resolve('wwwroot/lib/signalr/signalr.min.js')
     }
 ];
 

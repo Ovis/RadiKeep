@@ -108,6 +108,7 @@ namespace RadiKeep.Logics.Logics.ReserveLogic
                     }
                 }
 
+                await PublishReserveScheduleChangedSafeAsync();
                 return (true, null);
             }
             catch (Exception e)
@@ -146,6 +147,8 @@ namespace RadiKeep.Logics.Logics.ReserveLogic
                 {
                     return (false, new DomainException("指定されたIDのデータが見つかりません。"));
                 }
+
+                await PublishReserveScheduleChangedSafeAsync();
 
             }
             catch (Exception e)
@@ -233,6 +236,7 @@ namespace RadiKeep.Logics.Logics.ReserveLogic
                 await tagLobLogic.SetKeywordReserveTagsAsync(id, entry.TagIds);
 
                 await SetRadioProgramScheduleInternalAsync(keywordReserve, radioStation);
+                await PublishReserveScheduleChangedSafeAsync();
             }
             catch (Exception e)
             {
@@ -288,6 +292,7 @@ namespace RadiKeep.Logics.Logics.ReserveLogic
                     await recordJobLobLogic.DeleteScheduleJobAsync(scheduleJob.Id);
                 }
 
+                await PublishReserveScheduleChangedSafeAsync();
 
             }
             catch (Exception e)
