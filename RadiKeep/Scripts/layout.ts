@@ -1,4 +1,8 @@
-import { Notification } from './ApiInterface';
+import {
+    ApiResponseContract,
+    NotificationEntryResponseContract as Notification,
+    NotificationLatestResponseContract
+} from './openapi-response-contract.js';
 import { API_ENDPOINTS } from './const.js';
 import { showGlobalToast } from './feedback.js';
 import { sanitizeHtml } from './utils.js';
@@ -19,7 +23,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 throw new Error('Network response was not ok');
             }
 
-            const result = await response.json();
+            const result = await response.json() as ApiResponseContract<number>;
             const count = result.data as number;
 
             if (isNaN(count)) {
@@ -80,7 +84,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 throw new Error('Network response was not ok');
             }
 
-            const result = await response.json();
+            const result = await response.json() as ApiResponseContract<NotificationLatestResponseContract>;
             const list = result.data;
 
             // お知らせアイテムを生成して追加
@@ -93,7 +97,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     notificationContent.removeChild(notificationContent.firstChild);
                 }
 
-                const count = list.count as number;
+                const count = list.count;
 
                 createNotificationCountBadge(count);
 
@@ -114,7 +118,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     notificationContent.appendChild(item);
                 }
                 else {
-                    const notifications = list.list as Notification[];
+                    const notifications = list.list;
 
                     notifications.forEach(notification => {
                         const item = document.createElement('div');
@@ -271,3 +275,4 @@ function formatDate(isoDateString: string): string {
     // yyyy/MM/dd hh:mm 形式でフォーマット
     return `${year}/${month}/${day} ${hours}:${minutes}`;
 }
+

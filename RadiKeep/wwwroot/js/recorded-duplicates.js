@@ -168,13 +168,14 @@ document.addEventListener('DOMContentLoaded', () => {
             currentHls.destroy();
             currentHls = null;
         }
-        if (window.Hls?.isSupported()) {
-            const hls = new window.Hls();
+        const hlsConstructor = window.Hls;
+        if (hlsConstructor?.isSupported()) {
+            const hls = new hlsConstructor();
             resetPlaybackRate(audio);
             currentHls = hls;
             hls.loadSource(m3u8Url);
             hls.attachMedia(audio);
-            hls.on(window.Hls.Events.MANIFEST_PARSED, () => {
+            hls.on(hlsConstructor.Events.MANIFEST_PARSED, () => {
                 void playAudioWithStartOffset(audio, startOffsetSeconds);
             });
         }
@@ -447,18 +448,19 @@ document.addEventListener('DOMContentLoaded', () => {
             const lookbackDaysValue = Number.parseInt(lookbackDaysSelect.value, 10);
             const maxPhase1GroupsValue = Number.parseInt(maxGroupsSelect.value, 10);
             const broadcastClusterWindowHoursValue = Number.parseInt(clusterWindowHoursSelect.value, 10);
+            const requestBody = {
+                lookbackDays: Number.isNaN(lookbackDaysValue) ? 30 : lookbackDaysValue,
+                maxPhase1Groups: Number.isNaN(maxPhase1GroupsValue) ? 100 : maxPhase1GroupsValue,
+                phase2Mode: phase2ModeSelect.value || 'light',
+                broadcastClusterWindowHours: Number.isNaN(broadcastClusterWindowHoursValue) ? 48 : broadcastClusterWindowHoursValue
+            };
             const response = await fetch(API_ENDPOINTS.PROGRAM_RECORDED_DUPLICATES_RUN, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'RequestVerificationToken': verificationToken
                 },
-                body: JSON.stringify({
-                    lookbackDays: Number.isNaN(lookbackDaysValue) ? 30 : lookbackDaysValue,
-                    maxPhase1Groups: Number.isNaN(maxPhase1GroupsValue) ? 100 : maxPhase1GroupsValue,
-                    phase2Mode: phase2ModeSelect.value || 'light',
-                    broadcastClusterWindowHours: Number.isNaN(broadcastClusterWindowHoursValue) ? 48 : broadcastClusterWindowHoursValue
-                })
+                body: JSON.stringify(requestBody)
             });
             const result = await response.json();
             if (!response.ok || !result.success) {
@@ -500,6 +502,10 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         const recordingIds = Array.from(selectedRecordingIds);
+        const requestBody = {
+            recordingIds,
+            deleteFiles: true
+        };
         try {
             const response = await fetch(API_ENDPOINTS.DELETE_PROGRAM_BULK, {
                 method: 'POST',
@@ -507,10 +513,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     'Content-Type': 'application/json',
                     'RequestVerificationToken': verificationToken
                 },
-                body: JSON.stringify({
-                    recordingIds,
-                    deleteFiles: true
-                })
+                body: JSON.stringify(requestBody)
             });
             const result = await response.json();
             if (!response.ok || !result.success) {

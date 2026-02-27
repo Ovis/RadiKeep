@@ -2,7 +2,7 @@
 
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $outDir = Join-Path $projectRoot "Scripts/generated"
-$outFile = Join-Path $outDir "openapi-types.ts"
+$outFile = Join-Path $outDir "openapi-types.d.ts"
 $openApiPath = Join-Path $projectRoot "openapi/openapi.json"
 $baseUrl = if ($env:RADIKEEP_OPENAPI_BASEURL) { $env:RADIKEEP_OPENAPI_BASEURL } else { "https://127.0.0.1:7262" }
 

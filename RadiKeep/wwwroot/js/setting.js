@@ -200,7 +200,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         try {
             const response = await fetch(API_ENDPOINTS.TAGS);
             const result = await response.json();
-            const tags = (result.data ?? []);
+            const tags = result.data ?? [];
             settingTags = tags;
             tagTableBody.innerHTML = '';
             tags.forEach((tag) => {
@@ -293,10 +293,11 @@ document.addEventListener('DOMContentLoaded', async () => {
             return;
         }
         try {
+            const requestBody = { name };
             const response = await fetch(API_ENDPOINTS.TAGS, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name })
+                body: JSON.stringify(requestBody)
             });
             const createResult = await response.json();
             if (!createResult.success) {
@@ -331,10 +332,11 @@ document.addEventListener('DOMContentLoaded', async () => {
             return;
         }
         try {
+            const requestBody = { name };
             const response = await fetch(`${API_ENDPOINTS.TAGS}/${selectedTagId}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name })
+                body: JSON.stringify(requestBody)
             });
             const patchResult = await response.json();
             if (!patchResult.success) {
@@ -360,10 +362,11 @@ document.addEventListener('DOMContentLoaded', async () => {
             return;
         }
         try {
+            const requestBody = { fromTagId: selectedTagId, toTagId };
             const response = await fetch(`${API_ENDPOINTS.TAGS}/merge`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ fromTagId: selectedTagId, toTagId })
+                body: JSON.stringify(requestBody)
             });
             const mergeResult = await response.json();
             if (!mergeResult.success) {
@@ -401,6 +404,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
         return fallbackMessage;
     };
+    // 更新APIの共通POST。呼び出し側で必要なdata型を明示して受け取る。
     const postData = async (url, data) => {
         try {
             const response = await fetch(url, {
@@ -436,11 +440,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     };
     recordDirectoryPathUpdateButton.addEventListener('click', async () => {
         const recordDirectoryPathInputElm = document.getElementById('record-directory-path-value');
-        const postDataObj = {
+        const requestBody = {
             directoryPath: recordDirectoryPathInputElm.value
         };
         try {
-            await postData(API_ENDPOINTS.SETTING_RECORD_DIC_PATH, postDataObj);
+            await postData(API_ENDPOINTS.SETTING_RECORD_DIC_PATH, requestBody);
             showToast('保存しました。');
         }
         catch (error) {
@@ -450,11 +454,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
     recordFileNameTemplateUpdateButton.addEventListener('click', async () => {
         const recordFileNameTemplateInputElm = document.getElementById('RecordFileNameTemplateValue');
-        const postDataObj = {
+        const requestBody = {
             fileNameTemplate: recordFileNameTemplateInputElm.value
         };
         try {
-            await postData(API_ENDPOINTS.SETTING_RECORD_FILENAME_TEMPLATE, postDataObj);
+            await postData(API_ENDPOINTS.SETTING_RECORD_FILENAME_TEMPLATE, requestBody);
             showToast('保存しました。');
         }
         catch (error) {
@@ -475,12 +479,12 @@ document.addEventListener('DOMContentLoaded', async () => {
             showToast('録音時間のマージンには数値を入力してください。', false);
             return;
         }
-        const postDataObj = {
+        const requestBody = {
             startDuration: recordStartDuration,
             endDuration: recordEndDuration
         };
         try {
-            await postData(API_ENDPOINTS.SETTING_DURATION, postDataObj);
+            await postData(API_ENDPOINTS.SETTING_DURATION, requestBody);
             showToast('保存しました。');
         }
         catch (error) {
@@ -493,11 +497,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     updateRadiruAreaBtn.addEventListener('click', async () => {
         const radiruAreaSelect = document.getElementById('RadiruArea');
         const selectedValue = radiruAreaSelect.value;
-        const postDataObj = {
+        const requestBody = {
             radiruArea: selectedValue
         };
         try {
-            await postData(API_ENDPOINTS.SETTING_RADIRU_AREA, postDataObj);
+            await postData(API_ENDPOINTS.SETTING_RADIRU_AREA, requestBody);
             showToast('保存しました。');
         }
         catch (error) {
@@ -512,11 +516,11 @@ document.addEventListener('DOMContentLoaded', async () => {
             showToast('User-Agent を入力してください。', false);
             return;
         }
-        const postDataObj = {
+        const requestBody = {
             userAgent
         };
         try {
-            await postData(API_ENDPOINTS.SETTING_EXTERNAL_SERVICE_USER_AGENT, postDataObj);
+            await postData(API_ENDPOINTS.SETTING_EXTERNAL_SERVICE_USER_AGENT, requestBody);
             showToast('保存しました。');
         }
         catch (error) {
@@ -542,10 +546,11 @@ document.addEventListener('DOMContentLoaded', async () => {
             return;
         }
         try {
-            await postData(API_ENDPOINTS.SETTING_EXTERNAL_SERVICE_RADIRU_REQUEST, {
+            const requestBody = {
                 minRequestIntervalMs,
                 requestJitterMs
-            });
+            };
+            await postData(API_ENDPOINTS.SETTING_EXTERNAL_SERVICE_RADIRU_REQUEST, requestBody);
             showToast('保存しました。');
         }
         catch (error) {
@@ -559,12 +564,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         const discordWebhookUrlInputElm = document.getElementById('DiscordWebhookUrl');
         const checkboxes = document.querySelectorAll('input[name="SelectedNoticeCategory"]:checked');
         const selectedValues = Array.from(checkboxes).map(checkbox => parseInt(checkbox.value));
-        const postDataObj = {
+        const requestBody = {
             discordWebhookUrl: discordWebhookUrlInputElm.value,
             notificationCategories: selectedValues
         };
         try {
-            await postData(API_ENDPOINTS.SETTING_NOTICE, postDataObj);
+            await postData(API_ENDPOINTS.SETTING_NOTICE, requestBody);
             showToast('保存しました。');
         }
         catch (error) {
@@ -575,11 +580,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     unreadBadgeNoticeCategoriesUpdateButton?.addEventListener('click', async () => {
         const checkboxes = document.querySelectorAll('input[name="SelectedUnreadBadgeNoticeCategory"]:checked');
         const selectedValues = Array.from(checkboxes).map(checkbox => parseInt(checkbox.value));
-        const postDataObj = {
+        const requestBody = {
             notificationCategories: selectedValues
         };
         try {
-            await postData(API_ENDPOINTS.SETTING_UNREAD_BADGE_NOTICE_CATEGORIES, postDataObj);
+            await postData(API_ENDPOINTS.SETTING_UNREAD_BADGE_NOTICE_CATEGORIES, requestBody);
             showToast('保存しました。');
         }
         catch (error) {
@@ -589,7 +594,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
     programUpdateButton.addEventListener('click', async () => {
         try {
-            const data = await postData(API_ENDPOINTS.SETTING_PROGRAM_UPDATE, {});
+            const requestBody = {};
+            const data = await postData(API_ENDPOINTS.SETTING_PROGRAM_UPDATE, requestBody);
             showToast('番組表の更新を開始しました。');
         }
         catch (error) {
@@ -620,12 +626,12 @@ document.addEventListener('DOMContentLoaded', async () => {
             showToast('メールアドレスとパスワードを入力してください。', false);
             return;
         }
-        const postDataObj = {
+        const requestBody = {
             userId,
             password
         };
         try {
-            await postData(API_ENDPOINTS.SETTING_RADIKO_LOGIN, postDataObj);
+            await postData(API_ENDPOINTS.SETTING_RADIKO_LOGIN, requestBody);
             ensureRadikoPasswordSavedNote();
             showToast('保存しました。');
         }
@@ -640,7 +646,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             return;
         }
         try {
-            await postData(API_ENDPOINTS.SETTING_RADIKO_LOGOUT, {});
+            const requestBody = {};
+            await postData(API_ENDPOINTS.SETTING_RADIKO_LOGOUT, requestBody);
             document.getElementById('RadikoUserId').value = '';
             document.getElementById('RadikoPassword').value = '';
             const passwordSavedNote = document.getElementById('RadikoPasswordSavedNote');
@@ -656,7 +663,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
     refreshRadikoAreaButton?.addEventListener('click', async () => {
         try {
-            const result = await postData(API_ENDPOINTS.SETTING_RADIKO_AREA_REFRESH, {});
+            const requestBody = {};
+            const result = await postData(API_ENDPOINTS.SETTING_RADIKO_AREA_REFRESH, requestBody);
             showToast(result?.message ?? 'radikoエリア情報を再判定しました。');
         }
         catch (error) {
@@ -672,7 +680,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             return;
         }
         try {
-            await postData(API_ENDPOINTS.SETTING_EXTERNAL_IMPORT_TIMEZONE, { timeZoneId });
+            const requestBody = { timeZoneId };
+            await postData(API_ENDPOINTS.SETTING_EXTERNAL_IMPORT_TIMEZONE, requestBody);
             showToast('保存しました。');
         }
         catch (error) {
@@ -693,7 +702,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             return;
         }
         try {
-            await postData(API_ENDPOINTS.SETTING_STORAGE_LOW_SPACE_THRESHOLD, { thresholdMb });
+            const requestBody = { thresholdMb };
+            await postData(API_ENDPOINTS.SETTING_STORAGE_LOW_SPACE_THRESHOLD, requestBody);
             showToast('保存しました。');
         }
         catch (error) {
@@ -727,11 +737,12 @@ document.addEventListener('DOMContentLoaded', async () => {
             return;
         }
         try {
-            await postData(API_ENDPOINTS.SETTING_MONITORING_ADVANCED, {
+            const requestBody = {
                 logRetentionDays,
                 storageLowSpaceCheckIntervalMinutes,
                 storageLowSpaceNotificationCooldownHours
-            });
+            };
+            await postData(API_ENDPOINTS.SETTING_MONITORING_ADVANCED, requestBody);
             showToast('保存しました。');
         }
         catch (error) {
@@ -745,7 +756,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         const enabledInput = document.getElementById('merge-tags-from-matched-rules-enabled');
         const enabled = enabledInput?.checked ?? false;
         try {
-            await postData(API_ENDPOINTS.SETTING_MERGE_TAGS_FROM_MATCHED_RULES, { enabled });
+            const requestBody = { enabled };
+            await postData(API_ENDPOINTS.SETTING_MERGE_TAGS_FROM_MATCHED_RULES, requestBody);
             showToast('保存しました。');
         }
         catch (error) {
@@ -757,7 +769,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         const enabledInput = document.getElementById('embed-program-image-on-record');
         const enabled = enabledInput?.checked ?? false;
         try {
-            await postData(API_ENDPOINTS.SETTING_EMBED_PROGRAM_IMAGE_ON_RECORD, { enabled });
+            const requestBody = { enabled };
+            await postData(API_ENDPOINTS.SETTING_EMBED_PROGRAM_IMAGE_ON_RECORD, requestBody);
             showToast('保存しました。');
         }
         catch (error) {
@@ -769,7 +782,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         const enabledInput = document.getElementById('resume-playback-across-pages');
         const enabled = enabledInput?.checked ?? false;
         try {
-            await postData(API_ENDPOINTS.SETTING_RESUME_PLAYBACK_ACROSS_PAGES, { enabled });
+            const requestBody = { enabled };
+            await postData(API_ENDPOINTS.SETTING_RESUME_PLAYBACK_ACROSS_PAGES, requestBody);
             showToast('保存しました。');
         }
         catch (error) {
@@ -786,7 +800,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             return;
         }
         try {
-            await postData(API_ENDPOINTS.SETTING_RELEASE_CHECK_INTERVAL, { intervalDays });
+            const requestBody = { intervalDays };
+            await postData(API_ENDPOINTS.SETTING_RELEASE_CHECK_INTERVAL, requestBody);
             showToast('保存しました。');
         }
         catch (error) {
@@ -821,12 +836,13 @@ document.addEventListener('DOMContentLoaded', async () => {
             return;
         }
         try {
-            await postData(API_ENDPOINTS.SETTING_DUPLICATE_DETECTION_INTERVAL, {
+            const requestBody = {
                 enabled,
                 dayOfWeek,
                 hour,
                 minute
-            });
+            };
+            await postData(API_ENDPOINTS.SETTING_DUPLICATE_DETECTION_INTERVAL, requestBody);
             showToast('保存しました。');
         }
         catch (error) {

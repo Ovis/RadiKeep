@@ -136,13 +136,14 @@ export const initSettingMaintenance = (verificationToken, showToast) => {
         await withButtonLoading(maintenanceRelinkButton, async () => {
             updateMaintenanceButtons(true);
             try {
+                const requestBody = { recordingIds };
                 const response = await fetch(API_ENDPOINTS.EXTERNAL_IMPORT_MAINTENANCE_RELINK_MISSING, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                         'RequestVerificationToken': verificationToken
                     },
-                    body: JSON.stringify({ recordingIds })
+                    body: JSON.stringify(requestBody)
                 });
                 if (!response.ok) {
                     throw new Error(await parseErrorResponse(response));
@@ -176,13 +177,14 @@ export const initSettingMaintenance = (verificationToken, showToast) => {
         await withButtonLoading(maintenanceDeleteButton, async () => {
             updateMaintenanceButtons(true);
             try {
+                const requestBody = { recordingIds };
                 const response = await fetch(API_ENDPOINTS.EXTERNAL_IMPORT_MAINTENANCE_DELETE_MISSING, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                         'RequestVerificationToken': verificationToken
                     },
-                    body: JSON.stringify({ recordingIds })
+                    body: JSON.stringify(requestBody)
                 });
                 if (!response.ok) {
                     throw new Error(await parseErrorResponse(response));

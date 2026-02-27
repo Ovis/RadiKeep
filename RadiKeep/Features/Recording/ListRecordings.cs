@@ -37,7 +37,7 @@ public static class ListRecordings
         return endpoints;
     }
 
-    private static async Task<Results<Ok<ApiResponse<ListRecordingsResponse>>, BadRequest<ApiResponse<object?>>>> HandleAsync(
+    private static async Task<Results<Ok<ApiResponse<ListRecordingsResponse>>, BadRequest<ApiResponse<EmptyData?>>>> HandleAsync(
         [AsParameters] ListRecordingsQuery query,
         [FromServices] RecordedRadioLobLogic recordedRadioLobLogic)
     {
@@ -79,7 +79,7 @@ public static class ListRecordings
     /// <summary>
     /// 録音済み一覧で使用する放送局フィルタ候補を取得する。
     /// </summary>
-    private static async Task<Results<Ok<ApiResponse<List<RecordedStationFilterEntry>>>, BadRequest<ApiResponse<object?>>>> HandleStationsAsync(
+    private static async Task<Results<Ok<ApiResponse<List<RecordedStationFilterEntry>>>, BadRequest<ApiResponse<EmptyData?>>>> HandleStationsAsync(
         [FromServices] RecordedRadioLobLogic recordedRadioLobLogic)
     {
         var (isSuccess, list, _) = await recordedRadioLobLogic.GetRecordedStationFiltersAsync();
@@ -112,7 +112,7 @@ public static class ListRecordings
     /// <summary>
     /// 類似録音抽出ジョブを即時実行する。
     /// </summary>
-    private static async Task<Results<Ok<ApiResponse<object?>>, BadRequest<ApiResponse<object?>>>> HandleDuplicateRunAsync(
+    private static async Task<Results<Ok<ApiResponse<EmptyData?>>, BadRequest<ApiResponse<EmptyData?>>>> HandleDuplicateRunAsync(
         [FromBody] DuplicateDetectionRunRequest? request,
         [FromServices] RecordedDuplicateDetectionLobLogic duplicateDetectionLobLogic)
     {
@@ -162,5 +162,6 @@ public sealed record ListRecordingsResponse(
     int Page,
     int PageSize,
     List<RecordedProgramEntry> Recordings);
+
 
 

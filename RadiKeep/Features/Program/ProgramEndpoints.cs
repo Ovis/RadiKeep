@@ -86,32 +86,32 @@ public static class ProgramEndpoints
     /// <summary>
     /// radiko放送局一覧を取得する。
     /// </summary>
-    private static async Task<Ok<ApiResponse<object>>> HandleGetRadikoStationsAsync(
+    private static async Task<Ok<ApiResponse<Dictionary<string, List<RadikoStationInformationEntry>>>>> HandleGetRadikoStationsAsync(
         StationLobLogic stationLobLogic)
     {
         var stations = (await stationLobLogic.GetRadikoStationAsync())
             .GroupBy(r => r.RegionId)
             .OrderBy(r => r.First().RegionOrder)
             .ToDictionary(r => r.First().RegionName, r => r.OrderBy(s => s.StationOrder).ToList());
-        return TypedResults.Ok(ApiResponse.Ok((object)stations));
+        return TypedResults.Ok(ApiResponse.Ok(stations));
     }
 
     /// <summary>
     /// らじる放送局一覧を取得する。
     /// </summary>
-    private static Ok<ApiResponse<object>> HandleGetRadiruStationsAsync(
+    private static Ok<ApiResponse<Dictionary<string, List<RadiruStationEntry>>>> HandleGetRadiruStationsAsync(
         StationLobLogic stationLobLogic)
     {
         var stations = stationLobLogic.GetRadiruStationAsync()
             .GroupBy(r => r.AreaName)
             .ToDictionary(group => group.Key, group => group.ToList());
-        return TypedResults.Ok(ApiResponse.Ok((object)stations));
+        return TypedResults.Ok(ApiResponse.Ok(stations));
     }
 
     /// <summary>
     /// radiko番組一覧を取得する。
     /// </summary>
-    private static async Task<Results<Ok<ApiResponse<List<RadioProgramEntry>>>, BadRequest<ApiResponse<object?>>>> HandleGetRadikoProgramsAsync(
+    private static async Task<Results<Ok<ApiResponse<List<RadioProgramEntry>>>, BadRequest<ApiResponse<EmptyData?>>>> HandleGetRadikoProgramsAsync(
         ILogger<ProgramEndpointsMarker> logger,
         IAppConfigurationService config,
         RadikoUniqueProcessLogic radikoUniqueProcessLogic,
@@ -143,7 +143,7 @@ public static class ProgramEndpoints
     /// <summary>
     /// らじる番組一覧を取得する。
     /// </summary>
-    private static async Task<Results<Ok<ApiResponse<List<RadioProgramEntry>>>, BadRequest<ApiResponse<object?>>>> HandleGetRadiruProgramsAsync(
+    private static async Task<Results<Ok<ApiResponse<List<RadioProgramEntry>>>, BadRequest<ApiResponse<EmptyData?>>>> HandleGetRadiruProgramsAsync(
         ILogger<ProgramEndpointsMarker> logger,
         ProgramScheduleLobLogic programScheduleLobLogic,
         string d,
@@ -163,7 +163,7 @@ public static class ProgramEndpoints
     /// <summary>
     /// 現在放送中の番組一覧を取得する。
     /// </summary>
-    private static async Task<Ok<ApiResponse<object>>> HandleGetNowOnAirProgramsAsync(
+    private static async Task<Ok<ApiResponse<ProgramNowOnAirResponse>>> HandleGetNowOnAirProgramsAsync(
         ILogger<ProgramEndpointsMarker> logger,
         IRadioAppContext appContext,
         IAppConfigurationService config,
@@ -241,21 +241,18 @@ public static class ProgramEndpoints
             .ThenBy(r => r.AreaName, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
-        var data = new
-        {
-            Programs = programs,
-            Areas = areaList,
-            CurrentAreaStations = currentAreaStationsForUi,
-            IsAreaFree = config.IsRadikoAreaFree
-        };
-
-        return TypedResults.Ok(ApiResponse.Ok((object)data));
+        var data = new ProgramNowOnAirResponse(
+            programs,
+            areaList,
+            currentAreaStationsForUi,
+            config.IsRadikoAreaFree);
+        return TypedResults.Ok(ApiResponse.Ok(data));
     }
 
     /// <summary>
     /// 番組詳細を取得する。
     /// </summary>
-    private static async Task<Results<Ok<ApiResponse<RadioProgramEntry?>>, BadRequest<ApiResponse<object?>>>> HandleGetProgramDetailAsync(
+    private static async Task<Results<Ok<ApiResponse<RadioProgramEntry?>>, BadRequest<ApiResponse<EmptyData?>>>> HandleGetProgramDetailAsync(
         ProgramScheduleLobLogic programScheduleLobLogic,
         string? id,
         string? kind)
@@ -330,7 +327,7 @@ public static class ProgramEndpoints
     /// <summary>
     /// キーワード予約を登録する。
     /// </summary>
-    private static async Task<Results<Ok<ApiResponse<object?>>, BadRequest<ApiResponse<object?>>>> HandleSetKeywordReserveAsync(
+    private static async Task<Results<Ok<ApiResponse<EmptyData?>>, BadRequest<ApiResponse<EmptyData?>>>> HandleSetKeywordReserveAsync(
         ReserveLobLogic reserveLobLogic,
         KeywordReserveEntry entry)
     {
@@ -361,7 +358,7 @@ public static class ProgramEndpoints
     /// <summary>
     /// 番組表更新ジョブを起動する。
     /// </summary>
-    private static async Task<Results<Ok<ApiResponse<object?>>, BadRequest<ApiResponse<object?>>>> HandleUpdateProgramsAsync(
+    private static async Task<Results<Ok<ApiResponse<EmptyData?>>, BadRequest<ApiResponse<EmptyData?>>>> HandleUpdateProgramsAsync(
         ILogger<ProgramEndpointsMarker> logger,
         IServiceScopeFactory serviceScopeFactory)
     {
@@ -396,7 +393,7 @@ public static class ProgramEndpoints
     /// <summary>
     /// 番組の録音予約を登録する。
     /// </summary>
-    private static async Task<Results<Ok<ApiResponse<object?>>, BadRequest<ApiResponse<object?>>>> HandleReserveProgramAsync(
+    private static async Task<Results<Ok<ApiResponse<EmptyData?>>, BadRequest<ApiResponse<EmptyData?>>>> HandleReserveProgramAsync(
         ReserveLobLogic reserveLobLogic,
         ProgramInformationRequestEntry program)
     {
@@ -421,7 +418,7 @@ public static class ProgramEndpoints
     /// <summary>
     /// 番組再生情報を取得する。
     /// </summary>
-    private static async Task<Results<Ok<ApiResponse<object>>, BadRequest<ApiResponse<object?>>>> HandlePlayProgramAsync(
+    private static async Task<Results<Ok<ApiResponse<ProgramPlaybackInfoResponse>>, BadRequest<ApiResponse<EmptyData?>>>> HandlePlayProgramAsync(
         PlayProgramLobLogic playProgramLobLogic,
         ProgramInformationRequestEntry program)
     {
@@ -435,7 +432,7 @@ public static class ProgramEndpoints
                     return TypedResults.BadRequest(ApiResponse.Fail(error?.Message ?? "再生準備に失敗しました。"));
                 }
 
-                return TypedResults.Ok(ApiResponse.Ok((object)new { Token = token, Url = url }));
+                return TypedResults.Ok(ApiResponse.Ok(new ProgramPlaybackInfoResponse(token, url)));
             }
             case RadioServiceKind.Radiru:
             {
@@ -445,7 +442,7 @@ public static class ProgramEndpoints
                     return TypedResults.BadRequest(ApiResponse.Fail(error?.Message ?? "番組の再生ができませんでした。"));
                 }
 
-                return TypedResults.Ok(ApiResponse.Ok((object)new { Token = token, Url = url }));
+                return TypedResults.Ok(ApiResponse.Ok(new ProgramPlaybackInfoResponse(token, url)));
             }
             default:
                 return TypedResults.BadRequest(ApiResponse.Fail("サービス種別が不正です。"));
@@ -461,6 +458,21 @@ public static class ProgramEndpoints
     /// エリア一覧表示用の内部モデル。
     /// </summary>
     private sealed record ProgramAreaEntry(string AreaId, string AreaName, int AreaOrder, int ServiceOrder);
+
+    /// <summary>
+    /// 現在放送中番組一覧レスポンス。
+    /// </summary>
+    private sealed record ProgramNowOnAirResponse(
+        List<RadioProgramEntry> Programs,
+        List<ProgramAreaEntry> Areas,
+        List<string> CurrentAreaStations,
+        bool IsAreaFree);
+
+    /// <summary>
+    /// 再生開始に必要な情報レスポンス。
+    /// </summary>
+    private sealed record ProgramPlaybackInfoResponse(string? Token, string? Url);
 }
+
 
 

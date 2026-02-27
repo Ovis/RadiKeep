@@ -1,4 +1,6 @@
-﻿import { API_ENDPOINTS } from './const.js';
+import { API_ENDPOINTS } from './const.js'
+import type { ProgramInformationRequestContract } from './openapi-contract.js';
+import type { ApiResponseContract } from './openapi-response-contract.js';
 
 /**
 * 折り畳み可能なCardの生成
@@ -91,15 +93,21 @@ export function createColumns(label: string, value: string): HTMLDivElement {
 
 export async function reserveProgram(programId: string, serviceKind: number, type: number): Promise<void> {
     try {
+        const requestBody: ProgramInformationRequestContract = {
+            programId: programId,
+            radioServiceKind: serviceKind,
+            recordingType: type
+        };
+
         const response = await fetch(API_ENDPOINTS.PROGRAM_RESERVE, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ programId: programId, radioServiceKind: serviceKind, recordingType: type })
+            body: JSON.stringify(requestBody)
         });
 
-        const result = await response.json();
+        const result = await response.json() as ApiResponseContract<null>;
         if (result.success) {
             showModal(result.message ?? '録音予約を開始しました');
         } else {
@@ -125,3 +133,4 @@ export function closeModal(): void {
     const modal = document.getElementById('recordingModal') as HTMLElement;
     modal.classList.remove('is-active');
 }
+

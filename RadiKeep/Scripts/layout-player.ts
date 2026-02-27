@@ -6,12 +6,13 @@ import {
 import type { PersistedPlayerState } from './player-state-store.js';
 import { createStandardPlayerJumpControls } from './player-jump-controls.js';
 import { applyPlaybackRate, playerPlaybackRateOptions } from './player-rate-control.js';
+import type { HlsInstance, HlsWindow } from './hls-types.js';
 
 const resumeWindowMs = 15 * 60 * 1000;
 const defaultDocumentTitle = document.title;
 
 let currentState: PersistedPlayerState | null = null;
-let currentHls: any | null = null;
+let currentHls: HlsInstance | null = null;
 
 function updateDocumentTitle(title: string | null | undefined): void {
     const normalized = title?.trim();
@@ -19,14 +20,15 @@ function updateDocumentTitle(title: string | null | undefined): void {
 }
 
 async function ensureHlsScriptLoaded(): Promise<boolean> {
-    if ((window as any).Hls) {
+    const hlsWindow = window as HlsWindow<HlsInstance>;
+    if (hlsWindow.Hls) {
         return true;
     }
 
     const existing = document.getElementById('global-hls-script') as HTMLScriptElement | null;
     if (existing) {
         await new Promise<void>((resolve, reject) => {
-            if ((window as any).Hls) {
+            if (hlsWindow.Hls) {
                 resolve();
                 return;
             }
@@ -34,7 +36,7 @@ async function ensureHlsScriptLoaded(): Promise<boolean> {
             existing.addEventListener('load', () => resolve(), { once: true });
             existing.addEventListener('error', () => reject(new Error('hls.js load error')), { once: true });
         }).catch(() => undefined);
-        return !!(window as any).Hls;
+        return !!hlsWindow.Hls;
     }
 
     const script = document.createElement('script');
@@ -46,7 +48,7 @@ async function ensureHlsScriptLoaded(): Promise<boolean> {
         script.addEventListener('error', () => reject(new Error('hls.js load error')), { once: true });
     }).catch(() => undefined);
 
-    return !!(window as any).Hls;
+    return !!hlsWindow.Hls;
 }
 
 function createPlayerShell(): HTMLAudioElement | null {
@@ -164,7 +166,13 @@ async function tryRestorePlayer(): Promise<void> {
     const canUseHlsJs = await ensureHlsScriptLoaded();
 
     if (canUseHlsJs) {
-        const hls: any = new (window as any).Hls();
+        const hlsConstructor = (window as HlsWindow<HlsInstance>).Hls;
+        if (!hlsConstructor) {
+            clearPersistedPlayerState();
+            updateDocumentTitle(null);
+            return;
+        }
+        const hls = new hlsConstructor();
         if (state.sourceToken) {
             hls.config.xhrSetup = (xhr: XMLHttpRequest) => {
                 xhr.setRequestHeader('X-Radiko-AuthToken', state.sourceToken ?? '');
@@ -174,7 +182,7 @@ async function tryRestorePlayer(): Promise<void> {
         currentHls = hls;
         hls.loadSource(state.sourceUrl);
         hls.attachMedia(audioElm);
-        hls.on((window as any).Hls.Events.MANIFEST_PARSED, () => {
+        hls.on(hlsConstructor.Events.MANIFEST_PARSED, () => {
             if (Number.isFinite(state.currentTime ?? NaN) && (state.currentTime ?? 0) > 0) {
                 audioElm.currentTime = state.currentTime as number;
             }

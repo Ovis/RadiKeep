@@ -4,6 +4,7 @@ using RadiKeep.Features.Shared.Models;
 using RadiKeep.Logics.Errors;
 using RadiKeep.Logics.Logics.RecordedRadioLogic;
 using RadiKeep.Logics.Logics.TagLogic;
+using RadiKeep.Logics.Models;
 
 namespace RadiKeep.Features.Recording;
 
@@ -44,7 +45,7 @@ public static class MutateRecordings
     /// <summary>
     /// 録音済み番組を1件削除する。
     /// </summary>
-    private static async Task<Results<Ok<ApiResponse<bool>>, BadRequest<ApiResponse<object?>>>> HandleDeleteAsync(
+    private static async Task<Results<Ok<ApiResponse<bool>>, BadRequest<ApiResponse<EmptyData?>>>> HandleDeleteAsync(
         string id,
         [FromQuery] bool deleteFiles,
         [FromServices] RecordedRadioLobLogic recordedRadioLobLogic)
@@ -72,7 +73,7 @@ public static class MutateRecordings
     /// <summary>
     /// 録音済み番組を一括削除する。
     /// </summary>
-    private static async Task<Results<Ok<ApiResponse<object>>, BadRequest<ApiResponse<object?>>>> HandleBulkDeleteAsync(
+    private static async Task<Results<Ok<ApiResponse<RecordingBulkDeleteResponse>>, BadRequest<ApiResponse<EmptyData?>>>> HandleBulkDeleteAsync(
         [FromBody] RecordingBulkDeleteRequest request,
         [FromServices] RecordedRadioLobLogic recordedRadioLobLogic)
     {
@@ -129,20 +130,18 @@ public static class MutateRecordings
             }
         }
 
-        var data = new
-        {
-            SuccessCount = successCount,
-            SkipCount = skipCount,
-            FailCount = failCount,
-            FailedRecordingIds = failedRecordingIds,
-            SkippedRecordingIds = skippedRecordingIds
-        };
+        var data = new RecordingBulkDeleteResponse(
+            successCount,
+            skipCount,
+            failCount,
+            failedRecordingIds,
+            skippedRecordingIds);
 
         if (successCount == 0)
         {
             if (skipCount > 0 && failCount == 0)
             {
-                return TypedResults.Ok(ApiResponse.Ok((object)data, "削除対象はすでに削除されています。"));
+                return TypedResults.Ok(ApiResponse.Ok(data, "削除対象はすでに削除されています。"));
             }
 
             return TypedResults.BadRequest(ApiResponse.Fail("削除に失敗しました。"));
@@ -154,13 +153,13 @@ public static class MutateRecordings
             _ => $"{successCount}件削除、{skipCount}件スキップ、{failCount}件失敗しました。"
         };
 
-        return TypedResults.Ok(ApiResponse.Ok((object)data, message));
+        return TypedResults.Ok(ApiResponse.Ok(data, message));
     }
 
     /// <summary>
     /// 録音済み番組へタグを付与する。
     /// </summary>
-    private static async Task<Results<Ok<ApiResponse<object?>>, BadRequest<ApiResponse<object?>>>> HandleAddTagsAsync(
+    private static async Task<Results<Ok<ApiResponse<EmptyData?>>, BadRequest<ApiResponse<EmptyData?>>>> HandleAddTagsAsync(
         string id,
         [FromBody] RecordingTagsRequest request,
         [FromServices] TagLobLogic tagLobLogic)
@@ -184,7 +183,7 @@ public static class MutateRecordings
     /// <summary>
     /// 録音済み番組からタグを解除する。
     /// </summary>
-    private static async Task<Results<Ok<ApiResponse<object?>>, BadRequest<ApiResponse<object?>>>> HandleRemoveTagAsync(
+    private static async Task<Results<Ok<ApiResponse<EmptyData?>>, BadRequest<ApiResponse<EmptyData?>>>> HandleRemoveTagAsync(
         string id,
         Guid tagId,
         [FromServices] TagLobLogic tagLobLogic)
@@ -201,7 +200,7 @@ public static class MutateRecordings
     /// <summary>
     /// 録音済み番組へタグを一括付与する。
     /// </summary>
-    private static async Task<Results<Ok<ApiResponse<object>>, BadRequest<ApiResponse<object?>>>> HandleBulkAddTagsAsync(
+    private static async Task<Results<Ok<ApiResponse<TagBulkOperationResult>>, BadRequest<ApiResponse<EmptyData?>>>> HandleBulkAddTagsAsync(
         [FromBody] RecordingBulkTagRequest request,
         [FromServices] TagLobLogic tagLobLogic)
     {
@@ -215,7 +214,7 @@ public static class MutateRecordings
         try
         {
             var result = await tagLobLogic.BulkAddTagsToRecordingsAsync(recordingIds, request.TagIds);
-            return TypedResults.Ok(ApiResponse.Ok((object)result));
+            return TypedResults.Ok(ApiResponse.Ok(result));
         }
         catch (DomainException ex)
         {
@@ -226,7 +225,7 @@ public static class MutateRecordings
     /// <summary>
     /// 録音済み番組からタグを一括解除する。
     /// </summary>
-    private static async Task<Results<Ok<ApiResponse<object>>, BadRequest<ApiResponse<object?>>>> HandleBulkRemoveTagsAsync(
+    private static async Task<Results<Ok<ApiResponse<TagBulkOperationResult>>, BadRequest<ApiResponse<EmptyData?>>>> HandleBulkRemoveTagsAsync(
         [FromBody] RecordingBulkTagRequest request,
         [FromServices] TagLobLogic tagLobLogic)
     {
@@ -239,7 +238,7 @@ public static class MutateRecordings
         try
         {
             var result = await tagLobLogic.BulkRemoveTagsFromRecordingsAsync(recordingIds, request.TagIds);
-            return TypedResults.Ok(ApiResponse.Ok((object)result));
+            return TypedResults.Ok(ApiResponse.Ok(result));
         }
         catch (DomainException ex)
         {
@@ -250,7 +249,7 @@ public static class MutateRecordings
     /// <summary>
     /// 録音済み番組の視聴済み状態を一括更新する。
     /// </summary>
-    private static async Task<Results<Ok<ApiResponse<object>>, BadRequest<ApiResponse<object?>>>> HandleBulkUpdateListenedAsync(
+    private static async Task<Results<Ok<ApiResponse<RecordingBulkListenedResponse>>, BadRequest<ApiResponse<EmptyData?>>>> HandleBulkUpdateListenedAsync(
         [FromBody] RecordingBulkListenedRequest request,
         [FromServices] RecordedRadioLobLogic recordedRadioLobLogic)
     {
@@ -272,14 +271,12 @@ public static class MutateRecordings
         }
 
         var result = await recordedRadioLobLogic.BulkUpdateListenedStateAsync(recordingIds, request.IsListened);
-        var data = new
-        {
+        var data = new RecordingBulkListenedResponse(
             result.SuccessCount,
             result.SkipCount,
             result.FailCount,
             result.FailedRecordingIds,
-            result.SkippedRecordingIds
-        };
+            result.SkippedRecordingIds);
 
         var message = request.IsListened
             ? $"{result.SuccessCount}件を視聴済みに更新しました。"
@@ -290,7 +287,7 @@ public static class MutateRecordings
             message = $"{message} スキップ:{result.SkipCount}件 / 失敗:{result.FailCount}件";
         }
 
-        return TypedResults.Ok(ApiResponse.Ok((object)data, message));
+        return TypedResults.Ok(ApiResponse.Ok(data, message));
     }
 
     /// <summary>
@@ -306,6 +303,27 @@ public static class MutateRecordings
 
         return Ulid.TryParse(id, out value);
     }
+
+    /// <summary>
+    /// 一括削除結果レスポンス。
+    /// </summary>
+    private sealed record RecordingBulkDeleteResponse(
+        int SuccessCount,
+        int SkipCount,
+        int FailCount,
+        List<string> FailedRecordingIds,
+        List<string> SkippedRecordingIds);
+
+    /// <summary>
+    /// 一括視聴状態更新結果レスポンス。
+    /// </summary>
+    private sealed record RecordingBulkListenedResponse(
+        int SuccessCount,
+        int SkipCount,
+        int FailCount,
+        List<string> FailedRecordingIds,
+        List<string> SkippedRecordingIds);
 }
+
 
 

@@ -1,5 +1,27 @@
-import { Tag } from './ApiInterface';
+import { ApiResponseContract, TagEntryResponseContract as Tag } from './openapi-response-contract.js';
 import { API_ENDPOINTS } from './const.js';
+import type {
+    TagMergeRequestContract,
+    TagUpsertRequestContract,
+    EmptyRequestContract,
+    UpdateDuplicateDetectionIntervalContract,
+    UpdateDurationContract,
+    UpdateEmbedProgramImageOnRecordContract,
+    UpdateExternalImportTimeZoneContract,
+    UpdateExternalServiceUserAgentContract,
+    UpdateMergeTagsFromMatchedRulesContract,
+    UpdateMonitoringAdvancedContract,
+    UpdateNotificationSettingContract,
+    UpdateRadikoLoginContract,
+    UpdateRadiruAreaContract,
+    UpdateRadiruRequestSettingsContract,
+    UpdateRecordDirectoryPathContract,
+    UpdateRecordFileNameTemplateContract,
+    UpdateReleaseCheckIntervalContract,
+    UpdateResumePlaybackAcrossPagesContract,
+    UpdateStorageLowSpaceThresholdContract,
+    UpdateUnreadBadgeNoticeCategoriesContract
+} from './openapi-contract.js';
 import { showConfirmDialog } from './feedback.js';
 import { initExternalImport } from './setting-external-import.js';
 import { initSettingMaintenance } from './setting-maintenance.js';
@@ -221,8 +243,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         try {
             const response = await fetch(API_ENDPOINTS.TAGS);
-            const result = await response.json();
-            const tags = (result.data ?? []) as Tag[];
+            const result = await response.json() as ApiResponseContract<Tag[]>;
+            const tags = result.data ?? [];
             settingTags = tags;
 
             tagTableBody.innerHTML = '';
@@ -246,7 +268,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
                     try {
                         const response = await fetch(`${API_ENDPOINTS.TAGS}/${tag.id}`, { method: 'DELETE' });
-                        const deleteResult = await response.json();
+                        const deleteResult = await response.json() as ApiResponseContract<null>;
                         if (!deleteResult.success) {
                             showToast(deleteResult.message ?? '削除に失敗しました。', false);
                             return;
@@ -326,12 +348,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
 
         try {
+            const requestBody: TagUpsertRequestContract = { name };
             const response = await fetch(API_ENDPOINTS.TAGS, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name })
+                body: JSON.stringify(requestBody)
             });
-            const createResult = await response.json();
+            const createResult = await response.json() as ApiResponseContract<Tag>;
             if (!createResult.success) {
                 showToast(createResult.message ?? '作成に失敗しました。', false);
                 return;
@@ -368,12 +391,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
 
         try {
+            const requestBody: TagUpsertRequestContract = { name };
             const response = await fetch(`${API_ENDPOINTS.TAGS}/${selectedTagId}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name })
+                body: JSON.stringify(requestBody)
             });
-            const patchResult = await response.json();
+            const patchResult = await response.json() as ApiResponseContract<Tag>;
             if (!patchResult.success) {
                 showToast(patchResult.message ?? '更新に失敗しました。', false);
                 return;
@@ -399,12 +423,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
 
         try {
+            const requestBody: TagMergeRequestContract = { fromTagId: selectedTagId, toTagId };
             const response = await fetch(`${API_ENDPOINTS.TAGS}/merge`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ fromTagId: selectedTagId, toTagId })
+                body: JSON.stringify(requestBody)
             });
-            const mergeResult = await response.json();
+            const mergeResult = await response.json() as ApiResponseContract<null>;
             if (!mergeResult.success) {
                 showToast(mergeResult.message ?? '統合に失敗しました。', false);
                 return;
@@ -424,7 +449,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         try {
             const contentType = response.headers.get('content-type') ?? '';
             if (contentType.includes('application/json')) {
-                const body = await response.json();
+                const body = await response.json() as ApiResponseContract<null>;
                 if (body?.message && typeof body.message === 'string') {
                     return body.message;
                 }
@@ -441,7 +466,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         return fallbackMessage;
     };
 
-    const postData = async (url: string, data: object) => {
+    // 更新APIの共通POST。呼び出し側で必要なdata型を明示して受け取る。
+    const postData = async <TData>(url: string, data: object): Promise<ApiResponseContract<TData>> => {
         try {
             const response = await fetch(url, {
                 method: 'POST',
@@ -456,7 +482,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 throw new Error(await parseErrorMessage(response));
             }
 
-            const result = await response.json();
+            const result = await response.json() as ApiResponseContract<TData>;
             if (!result.success) {
                 throw new Error(result.message ?? '更新に失敗しました。');
             }
@@ -482,12 +508,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         const recordDirectoryPathInputElm = document.getElementById('record-directory-path-value') as HTMLInputElement;
 
-        const postDataObj = {
+        const requestBody: UpdateRecordDirectoryPathContract = {
             directoryPath: recordDirectoryPathInputElm.value
         };
 
         try {
-            await postData(API_ENDPOINTS.SETTING_RECORD_DIC_PATH, postDataObj);
+            await postData(API_ENDPOINTS.SETTING_RECORD_DIC_PATH, requestBody);
             showToast('保存しました。');
         } catch (error) {
             const message = error instanceof Error ? error.message : `${error}`;
@@ -498,12 +524,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     recordFileNameTemplateUpdateButton.addEventListener('click', async () => {
         const recordFileNameTemplateInputElm = document.getElementById('RecordFileNameTemplateValue') as HTMLInputElement;
 
-        const postDataObj = {
+        const requestBody: UpdateRecordFileNameTemplateContract = {
             fileNameTemplate: recordFileNameTemplateInputElm.value
         };
 
         try {
-            await postData(API_ENDPOINTS.SETTING_RECORD_FILENAME_TEMPLATE, postDataObj);
+            await postData(API_ENDPOINTS.SETTING_RECORD_FILENAME_TEMPLATE, requestBody);
             showToast('保存しました。');
         } catch (error) {
             const message = error instanceof Error ? error.message : `${error}`;
@@ -526,13 +552,13 @@ document.addEventListener('DOMContentLoaded', async () => {
             return;
         }
 
-        const postDataObj = {
+        const requestBody: UpdateDurationContract = {
             startDuration: recordStartDuration,
             endDuration: recordEndDuration
         };
 
         try {
-            await postData(API_ENDPOINTS.SETTING_DURATION, postDataObj);
+            await postData(API_ENDPOINTS.SETTING_DURATION, requestBody);
             showToast('保存しました。');
         } catch (error) {
             const message = error instanceof Error ? error.message : `${error}`;
@@ -547,12 +573,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         const radiruAreaSelect = document.getElementById('RadiruArea') as HTMLSelectElement;
         const selectedValue = radiruAreaSelect.value;
 
-        const postDataObj = {
+        const requestBody: UpdateRadiruAreaContract = {
             radiruArea: selectedValue
         };
 
         try {
-            await postData(API_ENDPOINTS.SETTING_RADIRU_AREA, postDataObj);
+            await postData(API_ENDPOINTS.SETTING_RADIRU_AREA, requestBody);
             showToast('保存しました。');
         } catch (error) {
             const message = error instanceof Error ? error.message : `${error}`;
@@ -569,12 +595,12 @@ document.addEventListener('DOMContentLoaded', async () => {
             return;
         }
 
-        const postDataObj = {
+        const requestBody: UpdateExternalServiceUserAgentContract = {
             userAgent
         };
 
         try {
-            await postData(API_ENDPOINTS.SETTING_EXTERNAL_SERVICE_USER_AGENT, postDataObj);
+            await postData(API_ENDPOINTS.SETTING_EXTERNAL_SERVICE_USER_AGENT, requestBody);
             showToast('保存しました。');
         } catch (error) {
             const message = error instanceof Error ? error.message : `${error}`;
@@ -602,10 +628,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
 
         try {
-            await postData(API_ENDPOINTS.SETTING_EXTERNAL_SERVICE_RADIRU_REQUEST, {
+            const requestBody: UpdateRadiruRequestSettingsContract = {
                 minRequestIntervalMs,
                 requestJitterMs
-            });
+            };
+            await postData(API_ENDPOINTS.SETTING_EXTERNAL_SERVICE_RADIRU_REQUEST, requestBody);
             showToast('保存しました。');
         } catch (error) {
             const message = error instanceof Error ? error.message : `${error}`;
@@ -621,13 +648,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         const checkboxes = document.querySelectorAll('input[name="SelectedNoticeCategory"]:checked') as NodeListOf<HTMLInputElement>;
         const selectedValues = Array.from(checkboxes).map(checkbox => parseInt(checkbox.value));
 
-        const postDataObj = {
+        const requestBody: UpdateNotificationSettingContract = {
             discordWebhookUrl: discordWebhookUrlInputElm.value,
             notificationCategories: selectedValues
         };
 
         try {
-            await postData(API_ENDPOINTS.SETTING_NOTICE, postDataObj);
+            await postData(API_ENDPOINTS.SETTING_NOTICE, requestBody);
             showToast('保存しました。');
         } catch (error) {
             const message = error instanceof Error ? error.message : `${error}`;
@@ -639,12 +666,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         const checkboxes = document.querySelectorAll('input[name="SelectedUnreadBadgeNoticeCategory"]:checked') as NodeListOf<HTMLInputElement>;
         const selectedValues = Array.from(checkboxes).map(checkbox => parseInt(checkbox.value));
 
-        const postDataObj = {
+        const requestBody: UpdateUnreadBadgeNoticeCategoriesContract = {
             notificationCategories: selectedValues
         };
 
         try {
-            await postData(API_ENDPOINTS.SETTING_UNREAD_BADGE_NOTICE_CATEGORIES, postDataObj);
+            await postData(API_ENDPOINTS.SETTING_UNREAD_BADGE_NOTICE_CATEGORIES, requestBody);
             showToast('保存しました。');
         } catch (error) {
             const message = error instanceof Error ? error.message : `${error}`;
@@ -654,7 +681,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     programUpdateButton.addEventListener('click', async () => {
         try {
-            const data = await postData(API_ENDPOINTS.SETTING_PROGRAM_UPDATE, {});
+            const requestBody: EmptyRequestContract = {};
+            const data = await postData(API_ENDPOINTS.SETTING_PROGRAM_UPDATE, requestBody);
             showToast('番組表の更新を開始しました。');
         } catch (error) {
             const message = error instanceof Error ? error.message : '予期せぬエラーが発生しました。';
@@ -690,13 +718,13 @@ document.addEventListener('DOMContentLoaded', async () => {
             return;
         }
 
-        const postDataObj = {
+        const requestBody: UpdateRadikoLoginContract = {
             userId,
             password
         };
 
         try {
-            await postData(API_ENDPOINTS.SETTING_RADIKO_LOGIN, postDataObj);
+            await postData(API_ENDPOINTS.SETTING_RADIKO_LOGIN, requestBody);
             ensureRadikoPasswordSavedNote();
             showToast('保存しました。');
         } catch (error) {
@@ -712,7 +740,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
 
         try {
-            await postData(API_ENDPOINTS.SETTING_RADIKO_LOGOUT, {});
+            const requestBody: EmptyRequestContract = {};
+            await postData(API_ENDPOINTS.SETTING_RADIKO_LOGOUT, requestBody);
             (document.getElementById('RadikoUserId') as HTMLInputElement).value = '';
             (document.getElementById('RadikoPassword') as HTMLInputElement).value = '';
             const passwordSavedNote = document.getElementById('RadikoPasswordSavedNote');
@@ -728,7 +757,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     refreshRadikoAreaButton?.addEventListener('click', async () => {
         try {
-            const result = await postData(API_ENDPOINTS.SETTING_RADIKO_AREA_REFRESH, {});
+            const requestBody: EmptyRequestContract = {};
+            const result = await postData(API_ENDPOINTS.SETTING_RADIKO_AREA_REFRESH, requestBody);
             showToast(result?.message ?? 'radikoエリア情報を再判定しました。');
         } catch (error) {
             const message = error instanceof Error ? error.message : `${error}`;
@@ -745,7 +775,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
 
         try {
-            await postData(API_ENDPOINTS.SETTING_EXTERNAL_IMPORT_TIMEZONE, { timeZoneId });
+            const requestBody: UpdateExternalImportTimeZoneContract = { timeZoneId };
+            await postData(API_ENDPOINTS.SETTING_EXTERNAL_IMPORT_TIMEZONE, requestBody);
             showToast('保存しました。');
         } catch (error) {
             const message = error instanceof Error ? error.message : `${error}`;
@@ -768,7 +799,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
 
         try {
-            await postData(API_ENDPOINTS.SETTING_STORAGE_LOW_SPACE_THRESHOLD, { thresholdMb });
+            const requestBody: UpdateStorageLowSpaceThresholdContract = { thresholdMb };
+            await postData(API_ENDPOINTS.SETTING_STORAGE_LOW_SPACE_THRESHOLD, requestBody);
             showToast('保存しました。');
         } catch (error) {
             const message = error instanceof Error ? error.message : `${error}`;
@@ -804,11 +836,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
 
         try {
-            await postData(API_ENDPOINTS.SETTING_MONITORING_ADVANCED, {
+            const requestBody: UpdateMonitoringAdvancedContract = {
                 logRetentionDays,
                 storageLowSpaceCheckIntervalMinutes,
                 storageLowSpaceNotificationCooldownHours
-            });
+            };
+            await postData(API_ENDPOINTS.SETTING_MONITORING_ADVANCED, requestBody);
             showToast('保存しました。');
         } catch (error) {
             const message = error instanceof Error ? error.message : `${error}`;
@@ -823,7 +856,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         const enabled = enabledInput?.checked ?? false;
 
         try {
-            await postData(API_ENDPOINTS.SETTING_MERGE_TAGS_FROM_MATCHED_RULES, { enabled });
+            const requestBody: UpdateMergeTagsFromMatchedRulesContract = { enabled };
+            await postData(API_ENDPOINTS.SETTING_MERGE_TAGS_FROM_MATCHED_RULES, requestBody);
             showToast('保存しました。');
         } catch (error) {
             const message = error instanceof Error ? error.message : `${error}`;
@@ -836,7 +870,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         const enabled = enabledInput?.checked ?? false;
 
         try {
-            await postData(API_ENDPOINTS.SETTING_EMBED_PROGRAM_IMAGE_ON_RECORD, { enabled });
+            const requestBody: UpdateEmbedProgramImageOnRecordContract = { enabled };
+            await postData(API_ENDPOINTS.SETTING_EMBED_PROGRAM_IMAGE_ON_RECORD, requestBody);
             showToast('保存しました。');
         } catch (error) {
             const message = error instanceof Error ? error.message : `${error}`;
@@ -849,7 +884,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         const enabled = enabledInput?.checked ?? false;
 
         try {
-            await postData(API_ENDPOINTS.SETTING_RESUME_PLAYBACK_ACROSS_PAGES, { enabled });
+            const requestBody: UpdateResumePlaybackAcrossPagesContract = { enabled };
+            await postData(API_ENDPOINTS.SETTING_RESUME_PLAYBACK_ACROSS_PAGES, requestBody);
             showToast('保存しました。');
         } catch (error) {
             const message = error instanceof Error ? error.message : `${error}`;
@@ -868,7 +904,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
 
         try {
-            await postData(API_ENDPOINTS.SETTING_RELEASE_CHECK_INTERVAL, { intervalDays });
+            const requestBody: UpdateReleaseCheckIntervalContract = { intervalDays };
+            await postData(API_ENDPOINTS.SETTING_RELEASE_CHECK_INTERVAL, requestBody);
             showToast('保存しました。');
         } catch (error) {
             const message = error instanceof Error ? error.message : `${error}`;
@@ -908,12 +945,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
 
         try {
-            await postData(API_ENDPOINTS.SETTING_DUPLICATE_DETECTION_INTERVAL, {
+            const requestBody: UpdateDuplicateDetectionIntervalContract = {
                 enabled,
                 dayOfWeek,
                 hour,
                 minute
-            });
+            };
+            await postData(API_ENDPOINTS.SETTING_DUPLICATE_DETECTION_INTERVAL, requestBody);
             showToast('保存しました。');
         } catch (error) {
             const message = error instanceof Error ? error.message : `${error}`;
@@ -981,4 +1019,5 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     });
 });
+
 

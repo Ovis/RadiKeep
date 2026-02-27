@@ -79,16 +79,17 @@ document.addEventListener('DOMContentLoaded', async () => {
             button.classList.add('is-static');
             button.classList.add('opacity-70');
             try {
+                const requestBody = {
+                    programId: programId,
+                    radioServiceKind: serviceKind,
+                    recordingType: recordingType
+                };
                 const response = await fetch(API_ENDPOINTS.PROGRAM_RESERVE, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({
-                        programId: programId,
-                        radioServiceKind: serviceKind,
-                        recordingType: recordingType
-                    })
+                    body: JSON.stringify(requestBody)
                 });
                 const result = await response.json();
                 if (response.ok && result.success) {
@@ -143,14 +144,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         let activeServiceKind = RadioServiceKind.Undefined;
         let activeAreaId = '';
         const activeAreaByService = new Map();
-        if (Array.isArray(data)) {
-            programs = data;
-        }
-        else {
-            programs = data?.programs ?? [];
-            areas = data?.areas ?? [];
-            currentAreaStations = data?.currentAreaStations ?? [];
-        }
+        programs = data.programs ?? [];
+        // OpenAPI生成型では数値が string になる場合があるため、画面ロジック用に数値化する。
+        areas = (data.areas ?? []).map((x) => ({
+            ...x,
+            areaOrder: Number(x.areaOrder),
+            serviceOrder: Number(x.serviceOrder)
+        }));
+        currentAreaStations = data.currentAreaStations ?? [];
         const normalizeAreas = () => {
             if (areas.length > 0) {
                 return areas;
@@ -166,7 +167,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             return Array.from(dedup.entries()).map(([areaId, areaName], index) => ({
                 areaId,
                 areaName,
-                areaOrder: index
+                areaOrder: index,
+                serviceOrder: 0
             }));
         };
         areas = normalizeAreas();
@@ -374,9 +376,9 @@ document.addEventListener('DOMContentLoaded', async () => {
  * @param serviceKind
  */
 async function playProgram(programId, serviceKind, programTitle) {
-    const data = {
-        "ProgramId": programId,
-        "RadioServiceKind": serviceKind
+    const requestBody = {
+        programId: programId,
+        radioServiceKind: serviceKind
     };
     try {
         const response = await fetch(API_ENDPOINTS.PROGRAM_PLAY, {
@@ -384,7 +386,7 @@ async function playProgram(programId, serviceKind, programTitle) {
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify(data)
+            body: JSON.stringify(requestBody)
         });
         if (response.ok) {
             const result = await response.json();

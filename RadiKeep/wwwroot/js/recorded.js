@@ -444,10 +444,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                 try {
                     const selectedFilterTagIds = Array.from(tagFilterSelect.selectedOptions).map(option => option.value);
                     const selectedBulkTagIds = Array.from(tagBulkSelect.selectedOptions).map(option => option.value);
+                    const requestBody = { name };
                     const response = await fetch(API_ENDPOINTS.TAGS, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ name })
+                        body: JSON.stringify(requestBody)
                     });
                     const result = await response.json();
                     if (!response.ok || !result.success) {
@@ -581,7 +582,7 @@ async function loadStationFilters() {
     try {
         const response = await fetch(API_ENDPOINTS.PROGRAM_RECORDED_STATIONS);
         const result = await response.json();
-        const stations = (result.data ?? []);
+        const stations = result.data ?? [];
         stations.forEach((station) => {
             const option = document.createElement('option');
             option.value = station.stationId;
@@ -605,7 +606,7 @@ async function loadTags() {
     try {
         const response = await fetch(API_ENDPOINTS.TAGS);
         const result = await response.json();
-        const tags = (result.data ?? []);
+        const tags = result.data ?? [];
         tagFilterSelect.innerHTML = '';
         tagBulkSelect.innerHTML = '';
         tags.forEach((tag) => {

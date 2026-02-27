@@ -85,7 +85,7 @@ public static class SettingEndpoints
     /// <summary>
     /// 番組の保存先フォルダパスを更新する。
     /// </summary>
-    private static async Task<Results<Ok<ApiResponse<object?>>, BadRequest<ApiResponse<object?>>>> HandleUpdateRecordDirectoryPathAsync(
+    private static async Task<Results<Ok<ApiResponse<EmptyData?>>, BadRequest<ApiResponse<EmptyData?>>>> HandleUpdateRecordDirectoryPathAsync(
         IAppConfigurationService appConfigurationService,
         UpdateRecordDirectoryPathEntity entity)
     {
@@ -101,7 +101,7 @@ public static class SettingEndpoints
     /// <summary>
     /// 番組録音時のファイル名設定を更新する。
     /// </summary>
-    private static async Task<Results<Ok<ApiResponse<object?>>, BadRequest<ApiResponse<object?>>>> HandleUpdateRecordFileNameTemplateAsync(
+    private static async Task<Results<Ok<ApiResponse<EmptyData?>>, BadRequest<ApiResponse<EmptyData?>>>> HandleUpdateRecordFileNameTemplateAsync(
         IAppConfigurationService appConfigurationService,
         UpdateRecordFileNameTemplateEntity entity)
     {
@@ -117,7 +117,7 @@ public static class SettingEndpoints
     /// <summary>
     /// 録音時間のマージン設定を更新する。
     /// </summary>
-    private static async Task<Results<Ok<ApiResponse<object?>>, BadRequest<ApiResponse<object?>>>> HandleUpdateDurationAsync(
+    private static async Task<Results<Ok<ApiResponse<EmptyData?>>, BadRequest<ApiResponse<EmptyData?>>>> HandleUpdateDurationAsync(
         ILogger<SettingEndpointsMarker> logger,
         IAppConfigurationService appConfigurationService,
         ReserveLobLogic reserveLobLogic,
@@ -140,7 +140,7 @@ public static class SettingEndpoints
     /// <summary>
     /// らじるエリア設定を更新する。
     /// </summary>
-    private static async Task<Results<Ok<ApiResponse<object?>>, BadRequest<ApiResponse<object?>>>> HandleUpdateRadiruAreaAsync(
+    private static async Task<Results<Ok<ApiResponse<EmptyData?>>, BadRequest<ApiResponse<EmptyData?>>>> HandleUpdateRadiruAreaAsync(
         ILogger<SettingEndpointsMarker> logger,
         IAppConfigurationService appConfigurationService,
         UpdateRadiruAreaEntity entity)
@@ -167,7 +167,7 @@ public static class SettingEndpoints
     /// <summary>
     /// 通知設定を更新する。
     /// </summary>
-    private static async Task<Ok<ApiResponse<object?>>> HandleUpdateNotificationSettingAsync(
+    private static async Task<Ok<ApiResponse<EmptyData?>>> HandleUpdateNotificationSettingAsync(
         IAppConfigurationService appConfigurationService,
         UpdateNotificationSettingEntity entity)
     {
@@ -180,7 +180,7 @@ public static class SettingEndpoints
     /// <summary>
     /// 未読バッジ件数対象カテゴリ設定を更新する。
     /// </summary>
-    private static async Task<Ok<ApiResponse<object?>>> HandleUpdateUnreadBadgeNoticeCategoriesAsync(
+    private static async Task<Ok<ApiResponse<EmptyData?>>> HandleUpdateUnreadBadgeNoticeCategoriesAsync(
         IAppConfigurationService appConfigurationService,
         UpdateUnreadBadgeNoticeCategoriesEntity entity)
     {
@@ -191,7 +191,7 @@ public static class SettingEndpoints
     /// <summary>
     /// 外部サービス接続時のUser-Agentを更新する。
     /// </summary>
-    private static async Task<Results<Ok<ApiResponse<object?>>, BadRequest<ApiResponse<object?>>>> HandleUpdateExternalServiceUserAgentAsync(
+    private static async Task<Results<Ok<ApiResponse<EmptyData?>>, BadRequest<ApiResponse<EmptyData?>>>> HandleUpdateExternalServiceUserAgentAsync(
         ILogger<SettingEndpointsMarker> logger,
         IAppConfigurationService appConfigurationService,
         UpdateExternalServiceUserAgentEntity entity)
@@ -222,7 +222,7 @@ public static class SettingEndpoints
     /// <summary>
     /// らじるAPIアクセス間隔設定を更新する。
     /// </summary>
-    private static async Task<Results<Ok<ApiResponse<object?>>, BadRequest<ApiResponse<object?>>>> HandleUpdateRadiruRequestSettingsAsync(
+    private static async Task<Results<Ok<ApiResponse<EmptyData?>>, BadRequest<ApiResponse<EmptyData?>>>> HandleUpdateRadiruRequestSettingsAsync(
         IAppConfigurationService appConfigurationService,
         UpdateRadiruRequestSettingsEntity entity)
     {
@@ -244,7 +244,7 @@ public static class SettingEndpoints
     /// <summary>
     /// radikoログイン情報を更新する。
     /// </summary>
-    private static async Task<Results<Ok<ApiResponse<object?>>, BadRequest<ApiResponse<object?>>>> HandleUpdateRadikoLoginAsync(
+    private static async Task<Results<Ok<ApiResponse<EmptyData?>>, BadRequest<ApiResponse<EmptyData?>>>> HandleUpdateRadikoLoginAsync(
         ILogger<SettingEndpointsMarker> logger,
         IAppConfigurationService appConfigurationService,
         ProgramScheduleLobLogic programScheduleLobLogic,
@@ -298,7 +298,7 @@ public static class SettingEndpoints
     /// <summary>
     /// radikoログイン情報を削除する。
     /// </summary>
-    private static async Task<Ok<ApiResponse<object?>>> HandleClearRadikoLoginAsync(
+    private static async Task<Ok<ApiResponse<EmptyData?>>> HandleClearRadikoLoginAsync(
         ILogger<SettingEndpointsMarker> logger,
         IAppConfigurationService appConfigurationService,
         RadikoUniqueProcessLogic radikoUniqueProcessLogic)
@@ -327,7 +327,7 @@ public static class SettingEndpoints
     /// <summary>
     /// radikoエリア情報を強制再判定する。
     /// </summary>
-    private static async Task<Results<Ok<ApiResponse<object?>>, BadRequest<ApiResponse<object?>>>> HandleRefreshRadikoAreaAsync(
+    private static async Task<Results<Ok<ApiResponse<EmptyData?>>, BadRequest<ApiResponse<EmptyData?>>>> HandleRefreshRadikoAreaAsync(
         RadikoUniqueProcessLogic radikoUniqueProcessLogic)
     {
         var (isSuccess, area) = await radikoUniqueProcessLogic.RefreshRadikoAreaCacheAsync();
@@ -342,7 +342,7 @@ public static class SettingEndpoints
     /// <summary>
     /// 外部取込時のファイル更新日時タイムゾーン設定を更新する。
     /// </summary>
-    private static async Task<Results<Ok<ApiResponse<object?>>, BadRequest<ApiResponse<object?>>>> HandleUpdateExternalImportTimeZoneAsync(
+    private static async Task<Results<Ok<ApiResponse<EmptyData?>>, BadRequest<ApiResponse<EmptyData?>>>> HandleUpdateExternalImportTimeZoneAsync(
         IAppConfigurationService appConfigurationService,
         UpdateExternalImportTimeZoneEntity entity)
     {
@@ -367,7 +367,7 @@ public static class SettingEndpoints
     /// <summary>
     /// 保存先ストレージ空き容量不足通知しきい値（MB）設定を更新する。
     /// </summary>
-    private static async Task<Results<Ok<ApiResponse<object?>>, BadRequest<ApiResponse<object?>>>> HandleUpdateStorageLowSpaceThresholdAsync(
+    private static async Task<Results<Ok<ApiResponse<EmptyData?>>, BadRequest<ApiResponse<EmptyData?>>>> HandleUpdateStorageLowSpaceThresholdAsync(
         IAppConfigurationService appConfigurationService,
         UpdateStorageLowSpaceThresholdEntity entity)
     {
@@ -383,7 +383,7 @@ public static class SettingEndpoints
     /// <summary>
     /// 監視関連設定を更新する。
     /// </summary>
-    private static async Task<Results<Ok<ApiResponse<object?>>, BadRequest<ApiResponse<object?>>>> HandleUpdateMonitoringAdvancedAsync(
+    private static async Task<Results<Ok<ApiResponse<EmptyData?>>, BadRequest<ApiResponse<EmptyData?>>>> HandleUpdateMonitoringAdvancedAsync(
         IAppConfigurationService appConfigurationService,
         UpdateMonitoringAdvancedEntity entity)
     {
@@ -410,7 +410,7 @@ public static class SettingEndpoints
     /// <summary>
     /// 複数キーワード一致時のタグ集約付与設定を更新する。
     /// </summary>
-    private static async Task<Ok<ApiResponse<object?>>> HandleUpdateMergeTagsFromMatchedRulesAsync(
+    private static async Task<Ok<ApiResponse<EmptyData?>>> HandleUpdateMergeTagsFromMatchedRulesAsync(
         IAppConfigurationService appConfigurationService,
         UpdateMergeTagsFromMatchedRulesEntity entity)
     {
@@ -421,7 +421,7 @@ public static class SettingEndpoints
     /// <summary>
     /// 録音時の番組イメージ埋め込み設定を更新する。
     /// </summary>
-    private static async Task<Ok<ApiResponse<object?>>> HandleUpdateEmbedProgramImageOnRecordAsync(
+    private static async Task<Ok<ApiResponse<EmptyData?>>> HandleUpdateEmbedProgramImageOnRecordAsync(
         IAppConfigurationService appConfigurationService,
         UpdateEmbedProgramImageOnRecordEntity entity)
     {
@@ -432,7 +432,7 @@ public static class SettingEndpoints
     /// <summary>
     /// ページ遷移時の再生復帰設定を更新する。
     /// </summary>
-    private static async Task<Ok<ApiResponse<object?>>> HandleUpdateResumePlaybackAcrossPagesAsync(
+    private static async Task<Ok<ApiResponse<EmptyData?>>> HandleUpdateResumePlaybackAcrossPagesAsync(
         IAppConfigurationService appConfigurationService,
         UpdateResumePlaybackAcrossPagesEntity entity)
     {
@@ -443,7 +443,7 @@ public static class SettingEndpoints
     /// <summary>
     /// 新しいリリース確認設定を更新する。
     /// </summary>
-    private static async Task<Results<Ok<ApiResponse<object?>>, BadRequest<ApiResponse<object?>>>> HandleUpdateReleaseCheckIntervalAsync(
+    private static async Task<Results<Ok<ApiResponse<EmptyData?>>, BadRequest<ApiResponse<EmptyData?>>>> HandleUpdateReleaseCheckIntervalAsync(
         IAppConfigurationService appConfigurationService,
         UpdateReleaseCheckIntervalEntity entity)
     {
@@ -460,7 +460,7 @@ public static class SettingEndpoints
     /// <summary>
     /// 類似録音抽出の定期実行設定を更新する。
     /// </summary>
-    private static async Task<Results<Ok<ApiResponse<object?>>, BadRequest<ApiResponse<object?>>>> HandleUpdateDuplicateDetectionIntervalAsync(
+    private static async Task<Results<Ok<ApiResponse<EmptyData?>>, BadRequest<ApiResponse<EmptyData?>>>> HandleUpdateDuplicateDetectionIntervalAsync(
         IAppConfigurationService appConfigurationService,
         UpdateDuplicateDetectionIntervalEntity entity)
     {
@@ -626,5 +626,6 @@ public static class SettingEndpoints
     /// </summary>
     private sealed class SettingEndpointsMarker;
 }
+
 
 

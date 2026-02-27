@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Http.HttpResults;
 using RadiKeep.Features.Shared.Models;
 using RadiKeep.Logics.Logics.NotificationLogic;
+using RadiKeep.Logics.Models;
 
 namespace RadiKeep.Features.Notification;
 
@@ -43,22 +44,18 @@ public static class NotificationEndpoints
     /// <summary>
     /// 未読のお知らせ一覧を取得する。
     /// </summary>
-    private static async Task<Ok<ApiResponse<object>>> HandleUnreadLatestAsync(
+    private static async Task<Ok<ApiResponse<NotificationLatestResponse>>> HandleUnreadLatestAsync(
         NotificationLobLogic notificationLobLogic)
     {
         var list = await notificationLobLogic.GetUnreadNotificationListAsync();
-        var data = new
-        {
-            Count = list.Count,
-            List = list.Take(5)
-        };
-        return TypedResults.Ok(ApiResponse.Ok((object)data));
+        var data = new NotificationLatestResponse(list.Count, list.Take(5).ToList());
+        return TypedResults.Ok(ApiResponse.Ok(data));
     }
 
     /// <summary>
     /// お知らせ一覧を取得する。
     /// </summary>
-    private static async Task<Results<Ok<ApiResponse<object>>, BadRequest<ApiResponse<object?>>>> HandleListAsync(
+    private static async Task<Results<Ok<ApiResponse<NotificationListResponse>>, BadRequest<ApiResponse<EmptyData?>>>> HandleListAsync(
         NotificationLobLogic notificationLobLogic,
         int page = 1,
         int pageSize = 20)
@@ -69,26 +66,30 @@ public static class NotificationEndpoints
             return TypedResults.BadRequest(ApiResponse.Fail("お知らせの取得に失敗しました。"));
         }
 
-        var data = new
-        {
-            TotalRecords = total,
-            Page = page,
-            PageSize = pageSize,
-            Recordings = list
-        };
-
-        return TypedResults.Ok(ApiResponse.Ok((object)data));
+        var data = new NotificationListResponse(total, page, pageSize, list ?? []);
+        return TypedResults.Ok(ApiResponse.Ok(data));
     }
 
     /// <summary>
     /// お知らせを全削除する。
     /// </summary>
-    private static async Task<Ok<ApiResponse<object?>>> HandleClearAsync(
+    private static async Task<Ok<ApiResponse<EmptyData?>>> HandleClearAsync(
         NotificationLobLogic notificationLobLogic)
     {
         await notificationLobLogic.DeleteAllNotificationAsync();
         return TypedResults.Ok(ApiResponse.Ok("削除しました。"));
     }
+
+    /// <summary>
+    /// 未読通知簡易一覧レスポンス。
+    /// </summary>
+    private sealed record NotificationLatestResponse(int Count, List<NotificationEntry> List);
+
+    /// <summary>
+    /// 通知一覧レスポンス。
+    /// </summary>
+    private sealed record NotificationListResponse(int TotalRecords, int Page, int PageSize, List<NotificationEntry> Recordings);
 }
+
 
 

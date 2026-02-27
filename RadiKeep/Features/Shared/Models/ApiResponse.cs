@@ -47,6 +47,11 @@ public record ApiError(
     string Message);
 
 /// <summary>
+/// データ本体を返さないAPIレスポンス用の空データ。
+/// </summary>
+public sealed record EmptyData;
+
+/// <summary>
 /// ApiResponse生成ヘルパー
 /// </summary>
 public static class ApiResponse
@@ -68,9 +73,9 @@ public static class ApiResponse
     /// </summary>
     /// <param name="message">メッセージ</param>
     /// <returns>成功レスポンス</returns>
-    public static ApiResponse<object?> Ok(string? message = null)
+    public static ApiResponse<EmptyData?> Ok(string? message = null)
     {
-        return ApiResponse<object?>.Ok(null, message);
+        return ApiResponse<EmptyData?>.Ok(null, message);
     }
 
     /// <summary>
@@ -91,9 +96,9 @@ public static class ApiResponse
     /// <param name="message">エラーメッセージ</param>
     /// <param name="code">エラーコード</param>
     /// <returns>失敗レスポンス</returns>
-    public static ApiResponse<object?> Fail(string message, string? code = null)
+    public static ApiResponse<EmptyData?> Fail(string message, string? code = null)
     {
-        return ApiResponse<object?>.Fail(message, code);
+        return ApiResponse<EmptyData?>.Fail(message, code);
     }
 }
 

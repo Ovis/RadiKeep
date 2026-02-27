@@ -25,24 +25,27 @@ public static class GeneralEndpoints
     /// <summary>
     /// 番組表で選択可能な日付を取得する。
     /// </summary>
-    private static Ok<ApiResponse<List<object>>> HandleGetRadioDates(IRadioAppContext context)
+    private static Ok<ApiResponse<List<RadioDateEntry>>> HandleGetRadioDates(IRadioAppContext context)
     {
         var today = context.StandardDateTimeOffset.ToRadioDate();
         var dates = Enumerable.Range(-7, 14)
             .Select(i =>
             {
                 var date = today.AddDays(i);
-                return (object)new
-                {
-                    Value = date.ToString("yyyyMMdd"),
-                    TextContent = date.ToString("yyyy/MM/dd(ddd)", context.CultureInfo),
-                    IsToday = date == today
-                };
+                return new RadioDateEntry(
+                    date.ToString("yyyyMMdd"),
+                    date.ToString("yyyy/MM/dd(ddd)", context.CultureInfo),
+                    date == today);
             })
             .ToList();
 
         return TypedResults.Ok(ApiResponse.Ok(dates));
     }
+
+    /// <summary>
+    /// 番組表日付表示用レスポンス。
+    /// </summary>
+    private sealed record RadioDateEntry(string Value, string TextContent, bool IsToday);
 }
 
 

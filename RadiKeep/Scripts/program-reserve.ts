@@ -1,6 +1,7 @@
-import { ProgramReserve, Program } from './ApiInterface';
+import { ApiResponseContract, ScheduleEntryResponseContract as ProgramReserve, RadioProgramResponseContract as Program } from './openapi-response-contract.js';
 import { API_ENDPOINTS } from './const.js';
-import { RadioServiceKind, ReserveType, RecordingTypeMap, ReserveTypeMap } from './define.js';
+import { RadioServiceKind, ReserveType, RecordingType, RecordingTypeMap, ReserveTypeMap } from './define.js';
+import type { ReserveEntryRequestContract } from './openapi-contract.js';
 import { setTextContent, setEventListener, setInnerHtml, sanitizeHtml } from './utils.js';
 import { createInlineToast, wireInlineToastClose } from './inline-toast.js';
 
@@ -10,6 +11,12 @@ type SortDirection = 'asc' | 'desc';
 let currentSortKey: SortKey = 'time';
 let currentSortDirection: SortDirection = 'asc';
 const showToast = createInlineToast('program-reserve-result-toast', 'program-reserve-result-toast-message');
+// API由来の録音種別値を表示文字列へ変換する。
+const getRecordingTypeDisplayName = (value: string | number | null | undefined): string =>
+    RecordingTypeMap[Number(value) as keyof typeof RecordingTypeMap]?.displayName ?? '未定義';
+// API由来の予約種別値を表示文字列へ変換する。
+const getReserveTypeDisplayName = (value: string | number | null | undefined): string =>
+    ReserveTypeMap[Number(value) as keyof typeof ReserveTypeMap]?.displayName ?? '未定義';
 
 const getSortSelectValue = (sortKey: SortKey, direction: SortDirection): string => `${sortKey}_${direction}`;
 
@@ -144,8 +151,8 @@ const loadRecordings = async (): Promise<void> => {
         localStorage.removeItem('program-reserve-list');
 
         const response: Response = await fetch(API_ENDPOINTS.RESERVE_PROGRAM_LIST);
-        const result = await response.json();
-        const data: ProgramReserve[] = result.data;
+        const result = await response.json() as ApiResponseContract<ProgramReserve[]>;
+        const data: ProgramReserve[] = result.data ?? [];
         recordingsCache = data;
 
         localStorage.setItem('program-reserve-list', JSON.stringify(data));
@@ -186,8 +193,8 @@ const renderRecordings = (recordings: ProgramReserve[]): void => {
         const onAirEndTime: string = new Date(reserve.endDateTime).toLocaleTimeString('ja-JP', timeFormatOptions);
         setTextContent(row, '.onair-date', `${onAirStartTime}～${onAirEndTime}`);
 
-        setTextContent(row, '.recording-type', RecordingTypeMap[reserve.recordingType].displayName);
-        setTextContent(row, '.reserve-type', ReserveTypeMap[reserve.reserveType].displayName);
+        setTextContent(row, '.recording-type', getRecordingTypeDisplayName(reserve.recordingType));
+        setTextContent(row, '.reserve-type', getReserveTypeDisplayName(reserve.reserveType));
         setTextContent(row, '.reserve-status', reserve.isEnabled ? '有効' : '無効');
 
         setEventListener(row, '.detail-button', 'click', async () => await showDetailModal(reserve));
@@ -196,8 +203,8 @@ const renderRecordings = (recordings: ProgramReserve[]): void => {
             row.querySelector('.status-button')?.remove();
 
             const deleteAction = async (): Promise<void> => {
-                const data = {
-                    Id: reserve.id,
+                const requestBody: ReserveEntryRequestContract = {
+                    id: reserve.id,
                 };
 
                 const confirmed = await showConfirmDialog('削除してもよいですか？');
@@ -211,20 +218,20 @@ const renderRecordings = (recordings: ProgramReserve[]): void => {
                         headers: {
                             'Content-Type': 'application/json'
                         },
-                        body: JSON.stringify(data)
+                        body: JSON.stringify(requestBody)
                     });
 
                     const rawText = await response.text();
-                    let result: any = null;
+                    let result: ApiResponseContract<null> | null = null;
                     if (rawText) {
                         try {
-                            result = JSON.parse(rawText);
+                            result = JSON.parse(rawText) as ApiResponseContract<null>;
                         } catch {
                             result = null;
                         }
                     }
 
-                    const message: string | undefined = result?.message ?? result?.Message;
+                    const message: string | null | undefined = result?.message;
                     const isSuccess = result?.success === true || (response.ok && result == null);
 
                     if (isSuccess) {
@@ -258,8 +265,8 @@ const renderRecordings = (recordings: ProgramReserve[]): void => {
             }
 
             const updateStatusAction = async (): Promise<void> => {
-                const data = {
-                    Id: reserve.id,
+                const requestBody: ReserveEntryRequestContract = {
+                    id: reserve.id,
                 };
 
                 try {
@@ -268,10 +275,10 @@ const renderRecordings = (recordings: ProgramReserve[]): void => {
                         headers: {
                             'Content-Type': 'application/json'
                         },
-                        body: JSON.stringify(data)
+                        body: JSON.stringify(requestBody)
                     });
 
-                    const result = await response.json();
+                    const result = await response.json() as ApiResponseContract<null>;
 
                     if (result.success) {
                         showToast(result.message ?? '更新しました。');
@@ -315,8 +322,8 @@ const getSortedRecordings = (recordings: ProgramReserve[]): ProgramReserve[] => 
         }
 
         if (currentSortKey === 'recordingType') {
-            const aText = RecordingTypeMap[a.recordingType].displayName;
-            const bText = RecordingTypeMap[b.recordingType].displayName;
+            const aText = getRecordingTypeDisplayName(a.recordingType);
+            const bText = getRecordingTypeDisplayName(b.recordingType);
             const compare = aText.localeCompare(bText, 'ja');
             if (compare !== 0) {
                 return compare * multiplier;
@@ -325,8 +332,8 @@ const getSortedRecordings = (recordings: ProgramReserve[]): ProgramReserve[] => 
         }
 
         if (currentSortKey === 'reserveType') {
-            const aText = ReserveTypeMap[a.reserveType].displayName;
-            const bText = ReserveTypeMap[b.reserveType].displayName;
+            const aText = getReserveTypeDisplayName(a.reserveType);
+            const bText = getReserveTypeDisplayName(b.reserveType);
             const compare = aText.localeCompare(bText, 'ja');
             if (compare !== 0) {
                 return compare * multiplier;
@@ -396,7 +403,7 @@ const showDetailModal = async (reserve: ProgramReserve): Promise<void> => {
             throw new Error('HTTP Error: ' + response.status);
         }
 
-        const result = await response.json();
+        const result = await response.json() as ApiResponseContract<Program>;
         detail = result.data;
     } catch (error) {
         const message = error instanceof Error ? error.message : `${error}`;
@@ -427,3 +434,4 @@ const showDetailModal = async (reserve: ProgramReserve): Promise<void> => {
 
     document.body.appendChild(modal);
 };
+

@@ -44,7 +44,7 @@ public static class ReserveEndpoints
     /// <summary>
     /// キーワード予約一覧を取得する。
     /// </summary>
-    private static async Task<Results<Ok<ApiResponse<List<KeywordReserveEntry>>>, BadRequest<ApiResponse<object?>>>> HandleGetKeywordReserveListAsync(
+    private static async Task<Results<Ok<ApiResponse<List<KeywordReserveEntry>>>, BadRequest<ApiResponse<EmptyData?>>>> HandleGetKeywordReserveListAsync(
         ReserveLobLogic reserveLobLogic)
     {
         var (isSuccess, entry, error) = await reserveLobLogic.GetKeywordReserveListAsync();
@@ -59,7 +59,7 @@ public static class ReserveEndpoints
     /// <summary>
     /// キーワード予約を更新する。
     /// </summary>
-    private static async Task<Results<Ok<ApiResponse<object?>>, BadRequest<ApiResponse<object?>>>> HandleUpdateKeywordReserveEntryAsync(
+    private static async Task<Results<Ok<ApiResponse<EmptyData?>>, BadRequest<ApiResponse<EmptyData?>>>> HandleUpdateKeywordReserveEntryAsync(
         KeywordReserveEntry entry,
         ReserveLobLogic reserveLobLogic)
     {
@@ -80,7 +80,7 @@ public static class ReserveEndpoints
     /// <summary>
     /// キーワード予約を削除する。
     /// </summary>
-    private static async Task<Results<Ok<ApiResponse<object?>>, BadRequest<ApiResponse<object?>>>> HandleDeleteKeywordReserveEntryAsync(
+    private static async Task<Results<Ok<ApiResponse<EmptyData?>>, BadRequest<ApiResponse<EmptyData?>>>> HandleDeleteKeywordReserveEntryAsync(
         ReserveEntryRequest request,
         ReserveLobLogic reserveLobLogic)
     {
@@ -101,7 +101,7 @@ public static class ReserveEndpoints
     /// <summary>
     /// キーワード予約の有効状態を切り替える。
     /// </summary>
-    private static async Task<Results<Ok<ApiResponse<object?>>, BadRequest<ApiResponse<object?>>>> HandleSwitchKeywordReserveEntryStatusAsync(
+    private static async Task<Results<Ok<ApiResponse<EmptyData?>>, BadRequest<ApiResponse<EmptyData?>>>> HandleSwitchKeywordReserveEntryStatusAsync(
         ReserveEntryRequest request,
         ReserveLobLogic reserveLobLogic)
     {
@@ -122,7 +122,7 @@ public static class ReserveEndpoints
     /// <summary>
     /// キーワード予約の並び順を更新する。
     /// </summary>
-    private static async Task<Results<Ok<ApiResponse<object?>>, BadRequest<ApiResponse<object?>>>> HandleReorderKeywordReservesAsync(
+    private static async Task<Results<Ok<ApiResponse<EmptyData?>>, BadRequest<ApiResponse<EmptyData?>>>> HandleReorderKeywordReservesAsync(
         KeywordReserveReorderRequest request,
         ReserveLobLogic reserveLobLogic)
     {
@@ -154,7 +154,7 @@ public static class ReserveEndpoints
     /// <summary>
     /// 番組予約一覧を取得する。
     /// </summary>
-    private static async Task<Results<Ok<ApiResponse<List<ScheduleEntry>>>, BadRequest<ApiResponse<object?>>>> HandleGetReserveListAsync(
+    private static async Task<Results<Ok<ApiResponse<List<ScheduleEntry>>>, BadRequest<ApiResponse<EmptyData?>>>> HandleGetReserveListAsync(
         ReserveLobLogic reserveLobLogic)
     {
         var (isSuccess, entry, error) = await reserveLobLogic.GetReserveListAsync();
@@ -169,7 +169,7 @@ public static class ReserveEndpoints
     /// <summary>
     /// 番組予約を削除する。
     /// </summary>
-    private static async Task<Results<Ok<ApiResponse<object?>>, BadRequest<ApiResponse<object?>>>> HandleDeleteProgramReserveEntryAsync(
+    private static async Task<Results<Ok<ApiResponse<EmptyData?>>, BadRequest<ApiResponse<EmptyData?>>>> HandleDeleteProgramReserveEntryAsync(
         ReserveEntryRequest request,
         ReserveLobLogic reserveLobLogic)
     {
@@ -201,5 +201,6 @@ public static class ReserveEndpoints
         return Ulid.TryParse(id, out reserveId);
     }
 }
+
 
 

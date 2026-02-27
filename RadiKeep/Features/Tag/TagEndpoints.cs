@@ -49,7 +49,7 @@ public static class TagEndpoints
     /// <summary>
     /// タグを作成する。
     /// </summary>
-    private static async Task<Results<Ok<ApiResponse<TagEntry>>, BadRequest<ApiResponse<object?>>>> HandleCreateTagAsync(
+    private static async Task<Results<Ok<ApiResponse<TagEntry>>, BadRequest<ApiResponse<EmptyData?>>>> HandleCreateTagAsync(
         TagUpsertRequest request,
         TagLobLogic tagLobLogic)
     {
@@ -67,7 +67,7 @@ public static class TagEndpoints
     /// <summary>
     /// タグを更新する。
     /// </summary>
-    private static async Task<Results<Ok<ApiResponse<TagEntry>>, BadRequest<ApiResponse<object?>>>> HandleUpdateTagAsync(
+    private static async Task<Results<Ok<ApiResponse<TagEntry>>, BadRequest<ApiResponse<EmptyData?>>>> HandleUpdateTagAsync(
         Guid id,
         TagUpsertRequest request,
         TagLobLogic tagLobLogic)
@@ -86,7 +86,7 @@ public static class TagEndpoints
     /// <summary>
     /// タグを削除する。
     /// </summary>
-    private static async Task<Ok<ApiResponse<object?>>> HandleDeleteTagAsync(
+    private static async Task<Ok<ApiResponse<EmptyData?>>> HandleDeleteTagAsync(
         Guid id,
         TagLobLogic tagLobLogic)
     {
@@ -97,7 +97,7 @@ public static class TagEndpoints
     /// <summary>
     /// タグを統合する。
     /// </summary>
-    private static async Task<Results<Ok<ApiResponse<object?>>, BadRequest<ApiResponse<object?>>>> HandleMergeTagAsync(
+    private static async Task<Results<Ok<ApiResponse<EmptyData?>>, BadRequest<ApiResponse<EmptyData?>>>> HandleMergeTagAsync(
         TagMergeRequest request,
         TagLobLogic tagLobLogic)
     {
@@ -112,5 +112,6 @@ public static class TagEndpoints
         }
     }
 }
+
 
 

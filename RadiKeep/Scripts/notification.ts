@@ -1,4 +1,8 @@
-﻿import { Notification } from './ApiInterface';
+import {
+    ApiResponseContract,
+    NotificationEntryResponseContract as Notification,
+    NotificationListResponseContract
+} from './openapi-response-contract.js';
 import { API_ENDPOINTS } from './const.js';
 import { showGlobalToast } from './feedback.js';
 
@@ -35,8 +39,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const loadRecordings = async (page: number): Promise<void> => {
 
         const response: Response = await fetch(`${API_ENDPOINTS.NOTIFICATION_LIST}?page=${page}&pageSize=${pageSize}`);
-        const result = await response.json();
-        const data: { recordings: Notification[], totalRecords: number } = result.data;
+        const result = await response.json() as ApiResponseContract<NotificationListResponseContract>;
+        const data = result.data;
         renderRecordings(data.recordings);
         renderPagination(data.totalRecords, page, pageSize);
     };
@@ -198,3 +202,4 @@ const deleteNotification = async (): Promise<void> => {
         showGlobalToast('お知らせの削除に失敗しました。', false);
     }
 }
+

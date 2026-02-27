@@ -1,6 +1,12 @@
-import { Program, DateElement } from './ApiInterface';
+import {
+    ApiResponseContract,
+    DateElementResponseContract as DateElement,
+    RadioProgramResponseContract as Program,
+    StationDataResponseContract
+} from './openapi-response-contract.js';
 import { API_ENDPOINTS } from './const.js';
 import { RecordingType, RadioServiceKind } from './define.js';
+import type { ProgramInformationRequestContract } from './openapi-contract.js';
 import { sanitizeHtml } from './utils.js';
 import { createInlineToast, wireInlineToastClose } from './inline-toast.js';
 
@@ -20,19 +26,21 @@ async function reserveProgramWithToast(
     button.classList.add('opacity-70');
 
     try {
+        const requestBody: ProgramInformationRequestContract = {
+            programId: programId,
+            radioServiceKind: RadioServiceKind.Radiru,
+            recordingType: recordingType
+        };
+
         const response = await fetch(API_ENDPOINTS.PROGRAM_RESERVE, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({
-                programId: programId,
-                radioServiceKind: RadioServiceKind.Radiru,
-                recordingType: recordingType
-            })
+            body: JSON.stringify(requestBody)
         });
 
-        const result = await response.json();
+        const result = await response.json() as ApiResponseContract<null>;
         if (response.ok && result.success) {
             reservedRecordingKeys.add(reservationKey);
             button.textContent = '予約済み';
@@ -85,7 +93,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 async function loadStationList(): Promise<void> {
     const response = await fetch(API_ENDPOINTS.STATION_LIST_RADIRU);
-    const result = await response.json();
+    const result = await response.json() as ApiResponseContract<StationDataResponseContract>;
     const stationsByRegion = result.data;
     const stationSelect = document.getElementById('stationSelect') as HTMLSelectElement;
 
@@ -106,8 +114,8 @@ async function loadStationList(): Promise<void> {
 
 async function populateDateSelect(): Promise<void> {
     const response = await fetch(API_ENDPOINTS.RADIO_DATE);
-    const result = await response.json();
-    const dates: DateElement[] = result.data;
+    const result = await response.json() as ApiResponseContract<DateElement[]>;
+    const dates = result.data ?? [];
     const dateSelect = document.getElementById('dateSelect') as HTMLSelectElement;
 
     dateSelect.replaceChildren();
@@ -132,8 +140,8 @@ async function loadPrograms(): Promise<void> {
 
     if (stationId && date) {
         const response = await fetch(`${API_ENDPOINTS.PROGRAM_LIST_RADIRU}?d=${date}&s=${stationId}&a=${areaId}`);
-        const result = await response.json();
-        const programs: Program[] = result.data;
+        const result = await response.json() as ApiResponseContract<Program[]>;
+        const programs = result.data ?? [];
         renderPrograms(programs);
     } else {
         const programList = document.getElementById('programList') as HTMLElement;

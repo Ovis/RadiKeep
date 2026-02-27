@@ -48,7 +48,7 @@ public static class ExternalImportEndpoints
     /// <summary>
     /// 録音保存先をスキャンして未登録候補を取得する。
     /// </summary>
-    private static async Task<Results<Ok<ApiResponse<List<ExternalImportCandidateEntry>>>, BadRequest<ApiResponse<object?>>>> HandleScanAsync(
+    private static async Task<Results<Ok<ApiResponse<List<ExternalImportCandidateEntry>>>, BadRequest<ApiResponse<EmptyData?>>>> HandleScanAsync(
         ILogger<ExternalImportEndpointsMarker> logger,
         ExternalRecordingImportLobLogic importLobLogic,
         ExternalImportScanRequest? request,
@@ -82,7 +82,7 @@ public static class ExternalImportEndpoints
     /// <summary>
     /// CSVをアップロードして候補一覧を再構築する。
     /// </summary>
-    private static async Task<Results<Ok<ApiResponse<List<ExternalImportCandidateEntry>>>, BadRequest<ApiResponse<object?>>>> HandleImportCsvAsync(
+    private static async Task<Results<Ok<ApiResponse<List<ExternalImportCandidateEntry>>>, BadRequest<ApiResponse<EmptyData?>>>> HandleImportCsvAsync(
         ExternalRecordingImportLobLogic importLobLogic,
         IFormFile? file,
         CancellationToken cancellationToken)
@@ -148,7 +148,7 @@ public static class ExternalImportEndpoints
     /// <summary>
     /// 録音ファイル欠損レコードをスキャンする。
     /// </summary>
-    private static async Task<Results<Ok<ApiResponse<object>>, BadRequest<ApiResponse<object?>>>> HandleScanMissingRecordsAsync(
+    private static async Task<Results<Ok<ApiResponse<RecordingFileMaintenanceScanResult>>, BadRequest<ApiResponse<EmptyData?>>>> HandleScanMissingRecordsAsync(
         ILogger<ExternalImportEndpointsMarker> logger,
         RecordingFileMaintenanceLobLogic recordingFileMaintenanceLobLogic,
         CancellationToken cancellationToken)
@@ -156,7 +156,7 @@ public static class ExternalImportEndpoints
         try
         {
             var result = await recordingFileMaintenanceLobLogic.ScanMissingRecordsAsync(cancellationToken);
-            return TypedResults.Ok(ApiResponse.Ok((object)result, "欠損レコードのスキャンが完了しました。"));
+            return TypedResults.Ok(ApiResponse.Ok(result, "欠損レコードのスキャンが完了しました。"));
         }
         catch (Exception ex)
         {
@@ -168,7 +168,7 @@ public static class ExternalImportEndpoints
     /// <summary>
     /// 欠損レコードのファイル再紐付けを実行する。
     /// </summary>
-    private static async Task<Results<Ok<ApiResponse<object>>, BadRequest<ApiResponse<object?>>>> HandleRelinkMissingRecordsAsync(
+    private static async Task<Results<Ok<ApiResponse<RecordingFileMaintenanceActionResult>>, BadRequest<ApiResponse<EmptyData?>>>> HandleRelinkMissingRecordsAsync(
         ILogger<ExternalImportEndpointsMarker> logger,
         RecordingFileMaintenanceLobLogic recordingFileMaintenanceLobLogic,
         RecordingMaintenanceRequest request,
@@ -183,7 +183,7 @@ public static class ExternalImportEndpoints
                 .ToList();
 
             var result = await recordingFileMaintenanceLobLogic.RelinkMissingRecordsAsync(ids, cancellationToken);
-            return TypedResults.Ok(ApiResponse.Ok((object)result, "再紐付け処理が完了しました。"));
+            return TypedResults.Ok(ApiResponse.Ok(result, "再紐付け処理が完了しました。"));
         }
         catch (Exception ex)
         {
@@ -195,7 +195,7 @@ public static class ExternalImportEndpoints
     /// <summary>
     /// 欠損レコードをDBから削除する。
     /// </summary>
-    private static async Task<Results<Ok<ApiResponse<object>>, BadRequest<ApiResponse<object?>>>> HandleDeleteMissingRecordsAsync(
+    private static async Task<Results<Ok<ApiResponse<RecordingFileMaintenanceActionResult>>, BadRequest<ApiResponse<EmptyData?>>>> HandleDeleteMissingRecordsAsync(
         ILogger<ExternalImportEndpointsMarker> logger,
         RecordingFileMaintenanceLobLogic recordingFileMaintenanceLobLogic,
         RecordingMaintenanceRequest request,
@@ -210,7 +210,7 @@ public static class ExternalImportEndpoints
                 .ToList();
 
             var result = await recordingFileMaintenanceLobLogic.DeleteMissingRecordsAsync(ids, cancellationToken);
-            return TypedResults.Ok(ApiResponse.Ok((object)result, "欠損レコード削除が完了しました。"));
+            return TypedResults.Ok(ApiResponse.Ok(result, "欠損レコード削除が完了しました。"));
         }
         catch (Exception ex)
         {
@@ -249,5 +249,6 @@ public static class ExternalImportEndpoints
     /// </summary>
     private sealed class ExternalImportEndpointsMarker;
 }
+
 
 

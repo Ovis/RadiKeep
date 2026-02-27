@@ -1,12 +1,21 @@
 import {
-    ApiResponse,
-    ExternalImportCandidate,
-    ExternalImportSaveResult
-} from './ApiInterface';
+    ApiResponseContract as ApiResponse,
+    ExternalImportCandidateResponseContract,
+    ExternalImportSaveResultResponseContract as ExternalImportSaveResult
+} from './openapi-response-contract.js';
 import { API_ENDPOINTS } from './const.js';
+import type {
+    ExternalImportCandidatesRequestContract,
+    ExternalImportScanRequestContract
+} from './openapi-contract.js';
 import { withButtonLoading } from './loading.js';
 
 type ShowToastFn = (message: string, isSuccess?: boolean) => void;
+type StrictRequired<T> = { [K in keyof T]-?: NonNullable<T[K]> };
+type ExternalImportCandidateState = StrictRequired<Pick<
+    ExternalImportCandidateResponseContract,
+    'isSelected' | 'filePath' | 'title' | 'description' | 'stationName' | 'broadcastAt' | 'tags'
+>>;
 
 const DEFAULT_PAGE_SIZE = 20;
 
@@ -33,10 +42,20 @@ export const initExternalImport = (verificationToken: string, showToast: ShowToa
         return;
     }
 
-    let candidates: ExternalImportCandidate[] = [];
+    const normalizeCandidate = (candidate: ExternalImportCandidateResponseContract): ExternalImportCandidateState => ({
+        isSelected: candidate.isSelected ?? false,
+        filePath: candidate.filePath ?? '',
+        title: candidate.title ?? '',
+        description: candidate.description ?? '',
+        stationName: candidate.stationName ?? '',
+        broadcastAt: candidate.broadcastAt ?? '',
+        tags: candidate.tags ?? []
+    });
+
+    let candidates: ExternalImportCandidateState[] = [];
     let currentPage = 1;
 
-    const getPageItems = (): ExternalImportCandidate[] => {
+    const getPageItems = (): ExternalImportCandidateState[] => {
         const start = (currentPage - 1) * DEFAULT_PAGE_SIZE;
         return candidates.slice(start, start + DEFAULT_PAGE_SIZE);
     };
@@ -48,7 +67,7 @@ export const initExternalImport = (verificationToken: string, showToast: ShowToa
     const parseErrorResponse = async (response: Response): Promise<string> => {
         const defaultMessage = `処理に失敗しました。（HTTP ${response.status}）`;
         try {
-            const result = await response.json() as ApiResponse<unknown>;
+            const result = await response.json() as ApiResponse<null>;
             if (result.message) {
                 return result.message;
             }
@@ -187,22 +206,23 @@ export const initExternalImport = (verificationToken: string, showToast: ShowToa
         await withButtonLoading(scanButton, async () => {
             updateButtons(true);
             try {
+                const requestBody: ExternalImportScanRequestContract = {
+                    applyDefaultTag: applyDefaultTagCheckbox.checked
+                };
                 const response = await fetch(API_ENDPOINTS.EXTERNAL_IMPORT_SCAN, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                         'RequestVerificationToken': verificationToken
                     },
-                    body: JSON.stringify({
-                        applyDefaultTag: applyDefaultTagCheckbox.checked
-                    })
+                    body: JSON.stringify(requestBody)
                 });
                 if (!response.ok) {
                     throw new Error(await parseErrorResponse(response));
                 }
 
-                const result = await response.json() as ApiResponse<ExternalImportCandidate[]>;
-                candidates = result.data ?? [];
+                const result = await response.json() as ApiResponse<ExternalImportCandidateResponseContract[]>;
+                candidates = (result.data ?? []).map(normalizeCandidate);
                 currentPage = 1;
                 renderTable();
                 showToast(result.message ?? 'スキャンが完了しました。');
@@ -222,13 +242,14 @@ export const initExternalImport = (verificationToken: string, showToast: ShowToa
         }
 
         try {
+            const requestBody: ExternalImportCandidatesRequestContract = { candidates };
             const response = await fetch(API_ENDPOINTS.EXTERNAL_IMPORT_EXPORT_CSV, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'RequestVerificationToken': verificationToken
                 },
-                body: JSON.stringify({ candidates })
+                body: JSON.stringify(requestBody)
             });
             if (!response.ok) {
                 throw new Error(await parseErrorResponse(response));
@@ -270,8 +291,8 @@ export const initExternalImport = (verificationToken: string, showToast: ShowToa
                     throw new Error(await parseErrorResponse(response));
                 }
 
-                const result = await response.json() as ApiResponse<ExternalImportCandidate[]>;
-                candidates = result.data ?? [];
+                const result = await response.json() as ApiResponse<ExternalImportCandidateResponseContract[]>;
+                candidates = (result.data ?? []).map(normalizeCandidate);
                 currentPage = 1;
                 renderTable();
                 importFileInput.value = '';
@@ -294,16 +315,17 @@ export const initExternalImport = (verificationToken: string, showToast: ShowToa
         await withButtonLoading(saveButton, async () => {
             updateButtons(true);
             try {
+                const requestBody: ExternalImportCandidatesRequestContract = {
+                    candidates,
+                    markAsListened: markAsListenedCheckbox.checked
+                };
                 const response = await fetch(API_ENDPOINTS.EXTERNAL_IMPORT_SAVE, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                         'RequestVerificationToken': verificationToken
                     },
-                    body: JSON.stringify({
-                        candidates,
-                        markAsListened: markAsListenedCheckbox.checked
-                    })
+                    body: JSON.stringify(requestBody)
                 });
 
                 const result = await response.json() as ApiResponse<ExternalImportSaveResult>;
@@ -337,3 +359,4 @@ export const initExternalImport = (verificationToken: string, showToast: ShowToa
     // 取込タブ選択前にもテーブル初期状態を描画しておく
     renderTable();
 };
+
