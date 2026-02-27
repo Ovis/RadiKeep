@@ -7,7 +7,7 @@ using RadiKeep.Logics.RdbContext;
 
 #nullable disable
 
-namespace RadiKeep.Logics.Migrations
+namespace RadiKeep.Logics.RdbContext.Migrations
 {
     [DbContext(typeof(RadioDbContext))]
     partial class RadioDbContextModelSnapshot : ModelSnapshot
@@ -919,7 +919,7 @@ namespace RadiKeep.Logics.Migrations
                     b.HasIndex("IsEnabled", "State", "PrepareStartUtc")
                         .HasDatabaseName("IX_ScheduleJob_SchedulerScan");
 
-                    b.HasIndex("ProgramId", "ServiceKind", "StartDateTime")
+                    b.HasIndex("ProgramId", "ServiceKind", "StartDateTime", "ReserveType", "KeywordReserveId")
                         .IsUnique()
                         .HasDatabaseName("IX_ScheduleJob_Active_Unique")
                         .HasFilter("State IN (0, 1, 2, 3)");

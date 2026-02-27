@@ -3,10 +3,10 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
-namespace RadiKeep.Logics.Migrations
+namespace RadiKeep.Logics.RdbContext.Migrations
 {
     /// <inheritdoc />
-    public partial class InitialUnified : Migration
+    public partial class Initialize : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -258,6 +258,14 @@ namespace RadiKeep.Logics.Migrations
                     RecordingType = table.Column<int>(type: "INTEGER", nullable: false),
                     ReserveType = table.Column<int>(type: "INTEGER", nullable: false),
                     IsEnabled = table.Column<bool>(type: "INTEGER", nullable: false),
+                    State = table.Column<int>(type: "INTEGER", nullable: false),
+                    PrepareStartUtc = table.Column<long>(type: "INTEGER", nullable: false),
+                    QueuedAtUtc = table.Column<long>(type: "INTEGER", nullable: true),
+                    ActualStartUtc = table.Column<long>(type: "INTEGER", nullable: true),
+                    CompletedUtc = table.Column<long>(type: "INTEGER", nullable: true),
+                    RetryCount = table.Column<int>(type: "INTEGER", nullable: false),
+                    LastErrorCode = table.Column<int>(type: "INTEGER", nullable: false),
+                    LastErrorDetail = table.Column<string>(type: "TEXT", maxLength: 500, nullable: true),
                     TagId = table.Column<Guid>(type: "TEXT", nullable: true)
                 },
                 constraints: table =>
@@ -430,6 +438,18 @@ namespace RadiKeep.Logics.Migrations
                 table: "RecordingTags",
                 column: "NormalizedName",
                 unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_ScheduleJob_Active_Unique",
+                table: "ScheduleJob",
+                columns: new[] { "ProgramId", "ServiceKind", "StartDateTime", "ReserveType", "KeywordReserveId" },
+                unique: true,
+                filter: "State IN (0, 1, 2, 3)");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_ScheduleJob_SchedulerScan",
+                table: "ScheduleJob",
+                columns: new[] { "IsEnabled", "State", "PrepareStartUtc" });
 
             migrationBuilder.CreateIndex(
                 name: "IX_ScheduleJobKeywordReserveRelations_KeywordReserveId",

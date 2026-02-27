@@ -8,11 +8,11 @@ using RadiKeep.Logics.RdbContext;
 
 #nullable disable
 
-namespace RadiKeep.Logics.Migrations
+namespace RadiKeep.Logics.RdbContext.Migrations
 {
     [DbContext(typeof(RadioDbContext))]
-    [Migration("20260227150214_AddScheduleJobExecutionState")]
-    partial class AddScheduleJobExecutionState
+    [Migration("20260227154835_Initialize")]
+    partial class Initialize
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -922,7 +922,7 @@ namespace RadiKeep.Logics.Migrations
                     b.HasIndex("IsEnabled", "State", "PrepareStartUtc")
                         .HasDatabaseName("IX_ScheduleJob_SchedulerScan");
 
-                    b.HasIndex("ProgramId", "ServiceKind", "StartDateTime")
+                    b.HasIndex("ProgramId", "ServiceKind", "StartDateTime", "ReserveType", "KeywordReserveId")
                         .IsUnique()
                         .HasDatabaseName("IX_ScheduleJob_Active_Unique")
                         .HasFilter("State IN (0, 1, 2, 3)");

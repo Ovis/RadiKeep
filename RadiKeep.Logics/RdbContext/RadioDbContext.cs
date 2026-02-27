@@ -412,7 +412,9 @@ public class RadioDbContext : DbContext
 
         modelBuilder.Entity<ScheduleJob>(entity =>
         {
-            entity.HasIndex(e => new { e.ProgramId, e.ServiceKind, e.StartDateTime })
+            // 実行中ジョブの重複実行を抑止するため、同一番組・同一予約種別・同一キーワード予約の
+            // アクティブ状態重複をDB制約で防ぐ。
+            entity.HasIndex(e => new { e.ProgramId, e.ServiceKind, e.StartDateTime, e.ReserveType, e.KeywordReserveId })
                 .HasDatabaseName("IX_ScheduleJob_Active_Unique")
                 .IsUnique()
                 .HasFilter($"State IN ({(int)Models.Enums.ScheduleJobState.Pending}, {(int)Models.Enums.ScheduleJobState.Queued}, {(int)Models.Enums.ScheduleJobState.Preparing}, {(int)Models.Enums.ScheduleJobState.Recording})");
