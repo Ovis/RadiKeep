@@ -36,6 +36,7 @@ namespace RadiKeep.Logics.Logics.RecordingLogic
         /// <param name="isOnDemand">聞き逃し配信録音かどうか</param>
         /// <param name="startDelay">開始ディレイ（秒）</param>
         /// <param name="endDelay">終了ディレイ（秒）</param>
+        /// <param name="deleteScheduleOnFinish">録音終了後にScheduleJobを削除するか</param>
         /// <param name="cancellationToken"></param>
         /// <returns>成功可否と例外</returns>
         public async ValueTask<(bool IsSuccess, Exception? Error)> RecordRadioAsync(
@@ -47,6 +48,7 @@ namespace RadiKeep.Logics.Logics.RecordingLogic
             double startDelay,
             double endDelay,
             bool isOnDemand = false,
+            bool deleteScheduleOnFinish = true,
             CancellationToken cancellationToken = default
             )
         {
@@ -78,12 +80,18 @@ namespace RadiKeep.Logics.Logics.RecordingLogic
             {
                 logger.ZLogError(e, $"録音処理で例外発生");
 
-                await DeleteScheduleJobAsync(scheduleJobId, programName);
+                if (deleteScheduleOnFinish)
+                {
+                    await DeleteScheduleJobAsync(scheduleJobId, programName);
+                }
 
                 return (false, e);
             }
 
-            await DeleteScheduleJobAsync(scheduleJobId, programName);
+            if (deleteScheduleOnFinish)
+            {
+                await DeleteScheduleJobAsync(scheduleJobId, programName);
+            }
 
             return (true, null);
         }

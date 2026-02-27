@@ -1,74 +1,412 @@
+using System.Collections.Concurrent;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using RadiKeep.Logics.Logics.NotificationLogic;
 using RadiKeep.Logics.Logics.ProgramScheduleLogic;
+using RadiKeep.Logics.Logics.RecordingLogic;
+using RadiKeep.Logics.Models.Enums;
+using RadiKeep.Logics.RdbContext;
+using RadiKeep.Logics.Services;
 using ZLogger;
 
 namespace RadiKeep.Logics.BackgroundServices;
 
 /// <summary>
-/// 録音予約ジョブの起動時復元を担当するバックグラウンドサービス。
+/// 録音予約ジョブの実行を担当するバックグラウンドサービス。
 /// </summary>
 public class RecordingScheduleBackgroundService(
     ILogger<RecordingScheduleBackgroundService> logger,
-    IServiceScopeFactory serviceScopeFactory) : BackgroundService
+    IServiceScopeFactory serviceScopeFactory,
+    IAppConfigurationService appConfigurationService) : BackgroundService
 {
-    private static readonly TimeSpan RetryInterval = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan PeriodicScanInterval = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan StartupRecoveryTimeout = TimeSpan.FromHours(2);
+    private static readonly ConcurrentDictionary<Ulid, byte> RunningJobMap = new();
 
     /// <summary>
-    /// 録音予約の復元処理を実行する。
-    /// 初回に失敗した場合は一定間隔で再試行する。
+    /// サービス本体。
     /// </summary>
     /// <param name="stoppingToken">停止トークン</param>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         logger.ZLogInformation($"録音スケジューラサービスを開始しました。");
 
-        var restored = false;
+        await RecoverJobsOnStartupAsync(stoppingToken);
 
+        using var periodicTimer = new PeriodicTimer(PeriodicScanInterval);
         while (!stoppingToken.IsCancellationRequested)
         {
-            if (!restored)
+            try
             {
-                restored = await TryRestoreScheduleJobsAsync(stoppingToken);
+                await QueueDueJobsAsync(stoppingToken);
+                var nextDelay = await CalculateNextOneShotDelayAsync(stoppingToken);
 
-                if (!restored)
+                if (!nextDelay.HasValue)
                 {
-                    await Task.Delay(RetryInterval, stoppingToken);
+                    if (!await periodicTimer.WaitForNextTickAsync(stoppingToken))
+                    {
+                        break;
+                    }
+
                     continue;
                 }
-            }
 
-            // 復元完了後は HostedService として待機し、停止要求のみ監視する。
-            await Task.Delay(Timeout.InfiniteTimeSpan, stoppingToken);
+                var periodicTask = periodicTimer.WaitForNextTickAsync(stoppingToken).AsTask();
+                var oneShotTask = Task.Delay(nextDelay.Value, stoppingToken);
+                await Task.WhenAny(periodicTask, oneShotTask);
+            }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
+            catch (Exception ex)
+            {
+                logger.ZLogError(ex, $"録音スケジューラループでエラーが発生しました。");
+                await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
+            }
         }
 
         logger.ZLogInformation($"録音スケジューラサービスを終了しました。");
     }
 
     /// <summary>
-    /// DB から録音予約を読み込み、録音ジョブへ復元登録する。
+    /// 起動時に中断状態のジョブを復旧する。
     /// </summary>
-    /// <param name="cancellationToken">キャンセルトークン</param>
-    /// <returns>復元が成功したか</returns>
-    private async ValueTask<bool> TryRestoreScheduleJobsAsync(CancellationToken cancellationToken)
+    private async ValueTask RecoverJobsOnStartupAsync(CancellationToken cancellationToken)
     {
+        using var scope = serviceScopeFactory.CreateScope();
+        var programScheduleLobLogic = scope.ServiceProvider.GetRequiredService<ProgramScheduleLobLogic>();
+        var dbContext = scope.ServiceProvider.GetRequiredService<RadioDbContext>();
+
+        // DB上の有効ジョブをスケジューラ実行可能な初期状態へ揃える。
+        await programScheduleLobLogic.SetScheduleJobFromDbAsync();
+
+        var interruptedStates = new[]
+        {
+            ScheduleJobState.Queued,
+            ScheduleJobState.Preparing,
+            ScheduleJobState.Recording,
+            ScheduleJobState.Finalizing
+        };
+
+        var nowUtc = DateTimeOffset.UtcNow;
+        var targets = await dbContext.ScheduleJob
+            .Where(x => x.IsEnabled)
+            .Where(x => interruptedStates.Contains(x.State))
+            .ToListAsync(cancellationToken);
+
+        foreach (var job in targets)
+        {
+            var isTooOld = nowUtc - job.StartDateTime.ToUniversalTime() > StartupRecoveryTimeout;
+            if (isTooOld)
+            {
+                job.State = ScheduleJobState.Failed;
+                job.LastErrorCode = ScheduleJobErrorCode.StartupRecoveryTimeout;
+                job.LastErrorDetail = "起動時復旧でタイムアウトしたため失敗扱いにしました。";
+                job.CompletedUtc = nowUtc;
+                job.IsEnabled = false;
+                continue;
+            }
+
+            // 起動直後に取りこぼしなく再評価できるよう Pending へ戻す。
+            job.State = ScheduleJobState.Pending;
+            job.QueuedAtUtc = null;
+            job.ActualStartUtc = null;
+            job.CompletedUtc = null;
+            job.PrepareStartUtc = ResolvePrepareStartUtc(job);
+            if (job.PrepareStartUtc < nowUtc)
+            {
+                job.PrepareStartUtc = nowUtc;
+            }
+        }
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// 準備開始時刻を過ぎたジョブをキュー投入して実行開始する。
+    /// </summary>
+    private async ValueTask QueueDueJobsAsync(CancellationToken cancellationToken)
+    {
+        using var scope = serviceScopeFactory.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<RadioDbContext>();
+        var nowUtc = DateTimeOffset.UtcNow;
+
+        var dueJobIds = await dbContext.ScheduleJob
+            .Where(x => x.IsEnabled)
+            .Where(x => x.State == ScheduleJobState.Pending)
+            .Where(x => x.PrepareStartUtc <= nowUtc)
+            .OrderBy(x => x.PrepareStartUtc)
+            .Select(x => x.Id)
+            .Take(20)
+            .ToListAsync(cancellationToken);
+
+        foreach (var jobId in dueJobIds)
+        {
+            var updated = await dbContext.ScheduleJob
+                .Where(x => x.Id == jobId && x.State == ScheduleJobState.Pending && x.IsEnabled)
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(x => x.State, ScheduleJobState.Queued)
+                    .SetProperty(x => x.QueuedAtUtc, nowUtc), cancellationToken);
+
+            if (updated != 1)
+            {
+                continue;
+            }
+
+            if (!RunningJobMap.TryAdd(jobId, 0))
+            {
+                continue;
+            }
+
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await ExecuteQueuedJobAsync(jobId, cancellationToken);
+                }
+                finally
+                {
+                    RunningJobMap.TryRemove(jobId, out _);
+                }
+            }, cancellationToken);
+        }
+    }
+
+    /// <summary>
+    /// 次回監視までの待機時間を計算する。
+    /// </summary>
+    private async ValueTask<TimeSpan?> CalculateNextOneShotDelayAsync(CancellationToken cancellationToken)
+    {
+        using var scope = serviceScopeFactory.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<RadioDbContext>();
+        var nowUtc = DateTimeOffset.UtcNow;
+
+        var nextPrepareStartUtc = await dbContext.ScheduleJob
+            .Where(x => x.IsEnabled && x.State == ScheduleJobState.Pending)
+            .MinAsync(x => (DateTimeOffset?)x.PrepareStartUtc, cancellationToken);
+
+        if (!nextPrepareStartUtc.HasValue)
+        {
+            return null;
+        }
+
+        var nextDelay = nextPrepareStartUtc.Value - nowUtc;
+        if (nextDelay <= TimeSpan.Zero)
+        {
+            return TimeSpan.FromMilliseconds(200);
+        }
+
+        return nextDelay;
+    }
+
+    /// <summary>
+    /// キュー投入済みジョブを実行する。
+    /// </summary>
+    private async ValueTask ExecuteQueuedJobAsync(Ulid jobId, CancellationToken cancellationToken)
+    {
+        using var scope = serviceScopeFactory.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<RadioDbContext>();
+        var recordingLobLogic = scope.ServiceProvider.GetRequiredService<RecordingLobLogic>();
+        var notificationLobLogic = scope.ServiceProvider.GetRequiredService<NotificationLobLogic>();
+
+        var job = await dbContext.ScheduleJob
+            .Where(x => x.Id == jobId && x.IsEnabled)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (job == null)
+        {
+            return;
+        }
+
+        var preparingUpdated = await dbContext.ScheduleJob
+            .Where(x => x.Id == jobId && x.State == ScheduleJobState.Queued)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(x => x.State, ScheduleJobState.Preparing), cancellationToken);
+        if (preparingUpdated != 1)
+        {
+            return;
+        }
+
+        var fireAtUtc = ResolveFireAtUtc(job);
+        var wait = fireAtUtc - DateTimeOffset.UtcNow;
+        if (wait > TimeSpan.Zero)
+        {
+            await Task.Delay(wait, cancellationToken);
+        }
+
+        var recordingUpdated = await dbContext.ScheduleJob
+            .Where(x => x.Id == jobId && x.State == ScheduleJobState.Preparing)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(x => x.State, ScheduleJobState.Recording)
+                .SetProperty(x => x.ActualStartUtc, DateTimeOffset.UtcNow), cancellationToken);
+        if (recordingUpdated != 1)
+        {
+            return;
+        }
+
+        using var recordCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        RecordingCancellationRegistry.Register(jobId.ToString(), recordCts);
+
         try
         {
-            using var scope = serviceScopeFactory.CreateScope();
-            var programScheduleLobLogic = scope.ServiceProvider.GetRequiredService<ProgramScheduleLobLogic>();
-            await programScheduleLobLogic.SetScheduleJobFromDbAsync();
-            logger.ZLogInformation($"録音予約ジョブの復元が完了しました。");
-            return true;
+            var startDelaySeconds = job.StartDelay?.TotalSeconds ?? appConfigurationService.RecordStartDuration.TotalSeconds;
+            var endDelaySeconds = job.EndDelay?.TotalSeconds ?? appConfigurationService.RecordEndDuration.TotalSeconds;
+
+            var (isSuccess, error) = await recordingLobLogic.RecordRadioAsync(
+                serviceKind: job.ServiceKind,
+                programId: job.ProgramId,
+                programName: job.Title,
+                scheduleJobId: job.Id.ToString(),
+                isTimeFree: job.RecordingType == RecordingType.TimeFree,
+                isOnDemand: job.RecordingType == RecordingType.OnDemand,
+                startDelay: startDelaySeconds,
+                endDelay: endDelaySeconds,
+                deleteScheduleOnFinish: false,
+                cancellationToken: recordCts.Token);
+
+            if (!isSuccess)
+            {
+                await MarkJobFailedAsync(dbContext, job, ClassifyError(error), error?.Message, cancellationToken);
+                return;
+            }
+
+            await dbContext.ScheduleJob
+                .Where(x => x.Id == jobId && x.State == ScheduleJobState.Recording)
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(x => x.State, ScheduleJobState.Finalizing), cancellationToken);
+
+            try
+            {
+                dbContext.ScheduleJob.Remove(job);
+                await dbContext.SaveChangesAsync(cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                logger.ZLogError(ex, $"録音後処理でScheduleJob削除に失敗しました。 jobId={jobId}");
+                await MarkJobFailedAsync(dbContext, job, ScheduleJobErrorCode.FinalizeFailed, ex.Message, cancellationToken);
+            }
         }
         catch (OperationCanceledException)
         {
-            throw;
+            await MarkJobFailedAsync(dbContext, job, ScheduleJobErrorCode.Cancelled, "録音ジョブがキャンセルされました。", cancellationToken, isCancelled: true);
+            await notificationLobLogic.SetNotificationAsync(
+                logLevel: LogLevel.Warning,
+                category: NoticeCategory.RecordingCancel,
+                message: $"{job.Title} の録音をキャンセルしました。");
         }
         catch (Exception ex)
         {
-            logger.ZLogError(ex, $"録音予約ジョブ復元に失敗したため再試行します。");
-            return false;
+            logger.ZLogError(ex, $"録音ジョブ実行で例外が発生しました。 jobId={jobId}");
+            await MarkJobFailedAsync(dbContext, job, ClassifyError(ex), ex.Message, cancellationToken);
         }
+        finally
+        {
+            RecordingCancellationRegistry.Unregister(jobId.ToString());
+        }
+    }
+
+    /// <summary>
+    /// ジョブ失敗情報を記録する。
+    /// </summary>
+    private static async ValueTask MarkJobFailedAsync(
+        RadioDbContext dbContext,
+        ScheduleJob job,
+        ScheduleJobErrorCode errorCode,
+        string? detail,
+        CancellationToken cancellationToken,
+        bool isCancelled = false)
+    {
+        var nextState = isCancelled ? ScheduleJobState.Cancelled : ScheduleJobState.Failed;
+        await dbContext.ScheduleJob
+            .Where(x => x.Id == job.Id)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(x => x.State, nextState)
+                .SetProperty(x => x.LastErrorCode, errorCode)
+                .SetProperty(x => x.LastErrorDetail, detail)
+                .SetProperty(x => x.CompletedUtc, DateTimeOffset.UtcNow)
+                .SetProperty(x => x.IsEnabled, false)
+                .SetProperty(x => x.RetryCount, x => x.RetryCount + 1), cancellationToken);
+    }
+
+    /// <summary>
+    /// 準備開始時刻を UTC で算出する。
+    /// </summary>
+    private DateTimeOffset ResolvePrepareStartUtc(ScheduleJob job)
+    {
+        var fireAtUtc = ResolveFireAtUtc(job);
+        return fireAtUtc.AddSeconds(-10);
+    }
+
+    /// <summary>
+    /// 録音開始時刻を UTC で算出する。
+    /// </summary>
+    private DateTimeOffset ResolveFireAtUtc(ScheduleJob job)
+    {
+        var startDelaySeconds = job.StartDelay?.TotalSeconds ?? appConfigurationService.RecordStartDuration.TotalSeconds;
+        return job.RecordingType switch
+        {
+            RecordingType.TimeFree => job.EndDateTime.AddMinutes(3).ToUniversalTime(),
+            RecordingType.OnDemand => DateTimeOffset.UtcNow,
+            RecordingType.Immediate => DateTimeOffset.UtcNow,
+            RecordingType.RealTime => job.StartDateTime.AddSeconds(-startDelaySeconds).AddSeconds(-1).ToUniversalTime(),
+            _ => DateTimeOffset.UtcNow
+        };
+    }
+
+    /// <summary>
+    /// 例外を失敗分類へ変換する。
+    /// </summary>
+    private static ScheduleJobErrorCode ClassifyError(Exception? exception)
+    {
+        if (exception == null)
+        {
+            return ScheduleJobErrorCode.Unknown;
+        }
+
+        if (exception is OperationCanceledException)
+        {
+            return ScheduleJobErrorCode.Cancelled;
+        }
+
+        var message = exception.Message;
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            return ScheduleJobErrorCode.Unknown;
+        }
+
+        if (message.Contains("認証", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("login", StringComparison.OrdinalIgnoreCase))
+        {
+            return ScheduleJobErrorCode.AuthFailed;
+        }
+
+        if (message.Contains("ffmpeg", StringComparison.OrdinalIgnoreCase))
+        {
+            return ScheduleJobErrorCode.FfmpegFailed;
+        }
+
+        if (message.Contains("disk", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("容量", StringComparison.OrdinalIgnoreCase))
+        {
+            return ScheduleJobErrorCode.DiskFull;
+        }
+
+        if (message.Contains("io", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("I/O", StringComparison.OrdinalIgnoreCase))
+        {
+            return ScheduleJobErrorCode.IoError;
+        }
+
+        if (message.Contains("source", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("playlist", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("配信", StringComparison.OrdinalIgnoreCase))
+        {
+            return ScheduleJobErrorCode.SourceUnavailable;
+        }
+
+        return ScheduleJobErrorCode.Unknown;
     }
 }

@@ -1,8 +1,7 @@
-using System.Collections.Concurrent;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using RadiKeep.Logics.Errors;
-using RadiKeep.Logics.Logics.NotificationLogic;
 using RadiKeep.Logics.Logics.RecordingLogic;
 using RadiKeep.Logics.Models.Enums;
 using RadiKeep.Logics.RdbContext;
@@ -12,41 +11,58 @@ using ZLogger;
 namespace RadiKeep.Logics.Logics.RecordJobLogic;
 
 /// <summary>
-/// 録音予約ジョブの登録・解除を管理する。
+/// 録音予約ジョブの状態初期化・キャンセルを管理する。
+/// 実行自体は BackgroundService 側で行う。
 /// </summary>
 public class RecordJobLobLogic(
     ILogger<RecordJobLobLogic> logger,
     IAppConfigurationService appConfig,
     IServiceScopeFactory? serviceScopeFactory = null)
 {
-    private static readonly ConcurrentDictionary<Ulid, CancellationTokenSource> PendingJobMap = new();
+    private static readonly TimeSpan PreparingLeadTime = TimeSpan.FromSeconds(10);
 
     /// <summary>
-    /// 録音予約のジョブをスケジュールする。
+    /// 録音予約のジョブをスケジュール可能状態へ初期化する。
     /// </summary>
     /// <param name="job">登録対象ジョブ</param>
     public async ValueTask<(bool IsSuccess, Exception? Error)> SetScheduleJobAsync(ScheduleJob job)
     {
         try
         {
-            var fireAtUtc = ResolveFireAtUtc(job);
-            var startDelaySeconds = job.StartDelay?.TotalSeconds ?? appConfig.RecordStartDuration.TotalSeconds;
-            var endDelaySeconds = job.EndDelay?.TotalSeconds ?? appConfig.RecordEndDuration.TotalSeconds;
+            if (serviceScopeFactory == null)
+            {
+                return (true, null);
+            }
 
-            // 実ジョブは in-process で実行する。
-            await DeleteScheduleJobAsync(job.Id);
-            ScheduleInProcess(job, fireAtUtc, startDelaySeconds, endDelaySeconds);
+            var fireAtUtc = ResolveFireAtUtc(job);
+            var prepareStartUtc = fireAtUtc - PreparingLeadTime;
+
+            using var scope = serviceScopeFactory.CreateScope();
+            var dbContext = scope.ServiceProvider.GetRequiredService<RadioDbContext>();
+
+            // 既存行を Pending に戻し、UTC 基準の実行時刻を再計算する。
+            await dbContext.ScheduleJob
+                .Where(x => x.Id == job.Id)
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(x => x.PrepareStartUtc, prepareStartUtc)
+                    .SetProperty(x => x.State, ScheduleJobState.Pending)
+                    .SetProperty(x => x.QueuedAtUtc, (DateTimeOffset?)null)
+                    .SetProperty(x => x.ActualStartUtc, (DateTimeOffset?)null)
+                    .SetProperty(x => x.CompletedUtc, (DateTimeOffset?)null)
+                    .SetProperty(x => x.LastErrorCode, ScheduleJobErrorCode.None)
+                    .SetProperty(x => x.LastErrorDetail, (string?)null));
+
             return (true, null);
         }
         catch (Exception ex)
         {
-            logger.ZLogError(ex, $"録音予約ジョブスケジュール処理で失敗");
+            logger.ZLogError(ex, $"録音予約ジョブ初期化処理で失敗");
             return (false, ex);
         }
     }
 
     /// <summary>
-    /// 録音予約のジョブを複数スケジュールする。
+    /// 録音予約のジョブを複数初期化する。
     /// </summary>
     /// <param name="jobs">登録対象ジョブ一覧</param>
     public async ValueTask<(bool IsSuccess, Exception? Error)> SetScheduleJobsAsync(List<ScheduleJob> jobs)
@@ -64,32 +80,25 @@ public class RecordJobLobLogic(
     }
 
     /// <summary>
-    /// スケジュール済み録音予約のジョブを削除する。
+    /// スケジュール済み録音予約のジョブ実行をキャンセルする。
     /// </summary>
     /// <param name="jobId">ジョブID</param>
-    public async ValueTask<(bool IsSuccess, Exception? Error)> DeleteScheduleJobAsync(Ulid jobId)
+    public ValueTask<(bool IsSuccess, Exception? Error)> DeleteScheduleJobAsync(Ulid jobId)
     {
         try
         {
-            if (PendingJobMap.TryRemove(jobId, out var cts))
-            {
-                await cts.CancelAsync();
-                cts.Dispose();
-            }
-
             RecordingCancellationRegistry.Cancel(jobId.ToString());
-
-            return (true, null);
+            return ValueTask.FromResult<(bool IsSuccess, Exception? Error)>((true, null));
         }
         catch (Exception ex)
         {
-            logger.ZLogError(ex, $"録音予約ジョブスケジュール削除処理で失敗");
-            return (false, ex);
+            logger.ZLogError(ex, $"録音予約ジョブキャンセル処理で失敗");
+            return ValueTask.FromResult<(bool IsSuccess, Exception? Error)>((false, ex));
         }
     }
 
     /// <summary>
-    /// 録音予約ジョブを複数削除する。
+    /// 録音予約ジョブを複数キャンセルする。
     /// </summary>
     /// <param name="jobs">削除対象ジョブ一覧</param>
     public async ValueTask<(bool IsSuccess, Exception? Error)> DeleteScheduleJobsAsync(List<ScheduleJob> jobs)
@@ -107,7 +116,7 @@ public class RecordJobLobLogic(
     }
 
     /// <summary>
-    /// 録音種別に応じて実行開始時刻を算出する。
+    /// 録音種別に応じて実行開始時刻を UTC で算出する。
     /// </summary>
     private DateTimeOffset ResolveFireAtUtc(ScheduleJob job)
     {
@@ -121,125 +130,4 @@ public class RecordJobLobLogic(
             _ => throw new DomainException("録音タイプが不正です。")
         };
     }
-
-    /// <summary>
-    /// in-process で録音ジョブを遅延実行する。
-    /// </summary>
-    private void ScheduleInProcess(ScheduleJob job, DateTimeOffset fireAtUtc, double startDelaySeconds, double endDelaySeconds)
-    {
-        if (serviceScopeFactory == null)
-        {
-            return;
-        }
-
-        var cts = new CancellationTokenSource();
-        PendingJobMap[job.Id] = cts;
-
-        _ = Task.Run(
-            async () =>
-            {
-                try
-                {
-                    var wait = fireAtUtc - DateTimeOffset.UtcNow;
-                    if (wait > TimeSpan.Zero)
-                    {
-                        await Task.Delay(wait, cts.Token);
-                    }
-
-                    await ExecuteRecordingAsync(job, startDelaySeconds, endDelaySeconds, cts.Token);
-                }
-                catch (OperationCanceledException)
-                {
-                    // 予約削除時はキャンセルされる。
-                }
-                finally
-                {
-                    PendingJobMap.TryRemove(job.Id, out _);
-                }
-            },
-            cts.Token);
-    }
-
-    /// <summary>
-    /// 録音実処理を実行し、通知を送信する。
-    /// </summary>
-    private async Task ExecuteRecordingAsync(
-        ScheduleJob job,
-        double startDelaySeconds,
-        double endDelaySeconds,
-        CancellationToken cancellationToken)
-    {
-        using var scope = serviceScopeFactory!.CreateScope();
-        var recordingLogic = scope.ServiceProvider.GetRequiredService<RecordingLobLogic>();
-        var notificationLobLogic = scope.ServiceProvider.GetRequiredService<NotificationLobLogic>();
-
-        using var interruptCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        RecordingCancellationRegistry.Register(job.Id.ToString(), interruptCts);
-
-        try
-        {
-            await notificationLobLogic.SetNotificationAsync(
-                logLevel: LogLevel.Information,
-                category: NoticeCategory.RecordingStart,
-                message: $"{job.Title} の録音を開始します。");
-
-            var (isSuccess, error) = await recordingLogic.RecordRadioAsync(
-                serviceKind: job.ServiceKind,
-                programId: job.ProgramId,
-                programName: job.Title,
-                scheduleJobId: job.Id.ToString(),
-                isTimeFree: job.RecordingType == RecordingType.TimeFree,
-                isOnDemand: job.RecordingType == RecordingType.OnDemand,
-                startDelay: startDelaySeconds,
-                endDelay: endDelaySeconds,
-                cancellationToken: interruptCts.Token);
-
-            if (!isSuccess)
-            {
-                var detailMessage = error?.Message ?? string.Empty;
-                if (detailMessage.Contains("キャンセル"))
-                {
-                    await notificationLobLogic.SetNotificationAsync(
-                        logLevel: LogLevel.Warning,
-                        category: NoticeCategory.RecordingCancel,
-                        message: $"{job.Title} の録音をキャンセルしました。");
-                    return;
-                }
-
-                var message = string.IsNullOrWhiteSpace(detailMessage)
-                    ? $"{job.Title} の録音に失敗しました。"
-                    : $"{job.Title} の録音に失敗しました。理由: {detailMessage}";
-                await notificationLobLogic.SetNotificationAsync(
-                    logLevel: LogLevel.Information,
-                    category: NoticeCategory.RecordingError,
-                    message: message);
-                return;
-            }
-
-            await notificationLobLogic.SetNotificationAsync(
-                logLevel: LogLevel.Information,
-                category: NoticeCategory.RecordingSuccess,
-                message: $"{job.Title} の録音が完了しました。");
-        }
-        catch (OperationCanceledException)
-        {
-            await notificationLobLogic.SetNotificationAsync(
-                logLevel: LogLevel.Warning,
-                category: NoticeCategory.RecordingCancel,
-                message: $"{job.Title} の録音をキャンセルしました。");
-        }
-        catch (Exception ex)
-        {
-            logger.ZLogError(ex, $"{job.Title} の録音に失敗しました。");
-            await notificationLobLogic.SetNotificationAsync(
-                logLevel: LogLevel.Error,
-                category: NoticeCategory.RecordingError,
-                message: $"{job.Title} の録音に失敗しました。理由: {ex.Message}");
-        }
-        finally
-        {
-            RecordingCancellationRegistry.Unregister(job.Id.ToString());
-        }
-    }
-
 }
