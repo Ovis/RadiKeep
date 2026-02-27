@@ -12,5 +12,8 @@
   },
   "include": [
     "Scripts/**/*.ts"
+  ],
+  "exclude": [
+    "Scripts/generated/**/*.ts"
   ]
 }

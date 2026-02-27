@@ -5,7 +5,9 @@
     "build": "npm run sync:vendors && tsc && npm run build:css && npm run build:scss",
     "build:css": "tailwindcss -i ./Styles/tailwind.css -o ./wwwroot/css/site.css --minify",
     "build:scss": "node ./Scripts/build-scss.mjs",
-    "sync:vendors": "node ./Scripts/sync-vendor-assets.mjs"
+    "sync:vendors": "node ./Scripts/sync-vendor-assets.mjs",
+    "generate:openapi": "pwsh -NoProfile -ExecutionPolicy Bypass -File ./Scripts/generate-openapi.ps1",
+    "generate:api-types": "pwsh -NoProfile -ExecutionPolicy Bypass -File ./Scripts/generate-api-types.ps1"
   },
   "devDependencies": {
     "sass": "^1.97.3",
