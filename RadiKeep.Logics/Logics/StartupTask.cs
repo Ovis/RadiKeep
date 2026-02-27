@@ -21,8 +21,7 @@ namespace RadiKeep.Logics.Logics
         StorageCapacityMonitorLobLogic storageCapacityMonitorLobLogic,
         StationLobLogic stationLobLogic,
         NotificationLobLogic notificationLobLogic,
-        IServiceScopeFactory? serviceScopeFactory = null,
-        ProgramUpdateRunner? programUpdateRunner = null)
+        IServiceScopeFactory? serviceScopeFactory = null)
     {
         public async Task InitializeAsync()
         {
@@ -95,11 +94,6 @@ namespace RadiKeep.Logics.Logics
                                         logger.ZLogError(ex, $"起動時の番組表更新バックグラウンド実行でエラーが発生しました。");
                                     }
                                 });
-                        }
-                        else if (programUpdateRunner != null)
-                        {
-                            // サービススコープ生成手段がない場合のみ、既存インスタンスで実行する。
-                            _ = Task.Run(async () => await programUpdateRunner.ExecuteAsync("startup"));
                         }
                     }
                 }
