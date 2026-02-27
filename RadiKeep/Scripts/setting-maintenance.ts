@@ -1,14 +1,21 @@
 import {
-    ApiResponse,
-    RecordingFileMaintenanceActionResult,
-    RecordingFileMaintenanceEntry,
-    RecordingFileMaintenanceScanResult
-} from './ApiInterface';
+    ApiResponseContract as ApiResponse,
+    RecordingFileMaintenanceActionResultResponseContract as RecordingFileMaintenanceActionResult,
+    RecordingFileMaintenanceEntryResponseContract as RecordingFileMaintenanceEntry,
+    RecordingFileMaintenanceScanResultResponseContract as RecordingFileMaintenanceScanResult
+} from './openapi-response-contract.js';
 import { API_ENDPOINTS } from './const.js';
+import type { RecordingMaintenanceRequestContract } from './openapi-contract.js';
 import { showConfirmDialog } from './feedback.js';
 import { withButtonLoading } from './loading.js';
 
 type ShowToastFn = (message: string, isSuccess?: boolean) => void;
+type AppOperationEventDetail = {
+    category: string;
+    action: string;
+    succeeded: boolean;
+    message: string;
+};
 
 export const initSettingMaintenance = (verificationToken: string, showToast: ShowToastFn): void => {
     const panel = document.getElementById('setting-panel-maintenance') as HTMLDivElement | null;
@@ -34,7 +41,7 @@ export const initSettingMaintenance = (verificationToken: string, showToast: Sho
     const parseErrorResponse = async (response: Response): Promise<string> => {
         const defaultMessage = `処理に失敗しました。（HTTP ${response.status}）`;
         try {
-            const result = await response.json() as ApiResponse<unknown>;
+            const result = await response.json() as ApiResponse<null>;
             if (result.message) {
                 return result.message;
             }
@@ -132,6 +139,21 @@ export const initSettingMaintenance = (verificationToken: string, showToast: Sho
         showToast(result.message ?? '欠損レコードを抽出しました。');
     };
 
+    /**
+     * 他画面/他タブのメンテナンス実行完了を受けて一覧を再同期する
+     */
+    window.addEventListener('radikeep:operation-event', (event: Event) => {
+        const customEvent = event as CustomEvent<AppOperationEventDetail>;
+        const detail = customEvent.detail;
+        if (!detail || detail.category !== 'maintenance' || !detail.succeeded) {
+            return;
+        }
+
+        void scanMaintenance().catch(() => {
+            // 再同期失敗時は明示トーストを追加しない
+        });
+    });
+
     maintenanceSelectAll.addEventListener('change', () => {
         const checked = maintenanceSelectAll.checked;
         maintenanceEntries.forEach((item) => {
@@ -164,13 +186,14 @@ export const initSettingMaintenance = (verificationToken: string, showToast: Sho
         await withButtonLoading(maintenanceRelinkButton, async () => {
             updateMaintenanceButtons(true);
             try {
+                const requestBody: RecordingMaintenanceRequestContract = { recordingIds };
                 const response = await fetch(API_ENDPOINTS.EXTERNAL_IMPORT_MAINTENANCE_RELINK_MISSING, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                         'RequestVerificationToken': verificationToken
                     },
-                    body: JSON.stringify({ recordingIds })
+                    body: JSON.stringify(requestBody)
                 });
                 if (!response.ok) {
                     throw new Error(await parseErrorResponse(response));
@@ -206,13 +229,14 @@ export const initSettingMaintenance = (verificationToken: string, showToast: Sho
         await withButtonLoading(maintenanceDeleteButton, async () => {
             updateMaintenanceButtons(true);
             try {
+                const requestBody: RecordingMaintenanceRequestContract = { recordingIds };
                 const response = await fetch(API_ENDPOINTS.EXTERNAL_IMPORT_MAINTENANCE_DELETE_MISSING, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                         'RequestVerificationToken': verificationToken
                     },
-                    body: JSON.stringify({ recordingIds })
+                    body: JSON.stringify(requestBody)
                 });
                 if (!response.ok) {
                     throw new Error(await parseErrorResponse(response));
@@ -232,3 +256,4 @@ export const initSettingMaintenance = (verificationToken: string, showToast: Sho
 
     renderMaintenance();
 };
+

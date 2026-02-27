@@ -5,7 +5,16 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.FileProviders;
 using RadiKeep.Application;
 using RadiKeep.DependencyInjection;
+using RadiKeep.Endpoints;
 using RadiKeep.Filters;
+using RadiKeep.Features.Recording;
+using RadiKeep.Features.Notification;
+using RadiKeep.Features.General;
+using RadiKeep.Hubs;
+using RadiKeep.Features.Tag;
+using RadiKeep.Features.Reserve;
+using RadiKeep.Features.Program;
+using RadiKeep.Features.Setting;
 using RadiKeep.Logics.Infrastructure.Recording;
 using RadiKeep.Logics.Logics;
 using RadiKeep.Logics.RdbContext;
@@ -59,19 +68,13 @@ builder.Logging.AddLoggingDi(config);
         .PersistKeysToFileSystem(new DirectoryInfo(keysPath));
 }
 
-// Quartz
-builder.Services.AddQuartzDi(config);
-
-
 // ServiceCollection
 builder.Services.AddLogicDiCollection(config);
 
 // for API
 builder.Services.AddEndpointsApiExplorer();
-
-#if DEBUG
-builder.Services.AddSwaggerGen();
-#endif
+builder.Services.AddOpenApi();
+builder.Services.AddSignalR();
 
 
 var app = builder.Build();
@@ -111,7 +114,6 @@ app.UseStaticFiles();
     });
 }
 
-
 app.UseRouting();
 
 app.UseAuthorization();
@@ -126,6 +128,22 @@ if (app.Environment.IsDevelopment())
 #pragma warning disable ASP0014
 app.UseEndpoints(endpoints =>
 {
+    endpoints.MapApiEndpoints();
+    endpoints.MapGeneralEndpoints();
+    endpoints.MapProgramEndpoints();
+    endpoints.MapSettingEndpoints();
+    endpoints.MapExternalImportEndpoints();
+    endpoints.MapRecordingEndpoints();
+    endpoints.MapNotificationEndpoints();
+    endpoints.MapTagEndpoints();
+    endpoints.MapReserveEndpoints();
+    endpoints.MapHub<RecordingHub>("/hubs/recordings");
+    endpoints.MapHub<NotificationHub>("/hubs/notifications");
+    endpoints.MapHub<ReserveHub>("/hubs/reserves");
+    endpoints.MapHub<ProgramUpdateHub>("/hubs/program-updates");
+    endpoints.MapHub<AppEventHub>("/hubs/app-events");
+    endpoints.MapHub<RecordedDuplicateDetectionHub>("/hubs/duplicate-detection");
+
     endpoints.MapControllerRoute(
         name: "areas",
         pattern: "{area:exists}/{controller=Home}/{action=Index}/{id?}"
@@ -139,13 +157,7 @@ app.UseEndpoints(endpoints =>
 
 if (app.Environment.IsDevelopment())
 {
-#if DEBUG
-    app.UseSwagger();
-    app.UseSwaggerUI(c =>
-    {
-        c.SwaggerEndpoint("/swagger/v1/swagger.json", "RadiKeep API");
-    });
-#endif
+    app.MapOpenApi();
 
     // TypeScriptマップ用
     app.UseFileServer(new FileServerOptions()
@@ -200,3 +212,4 @@ static string? EnsureLinuxSettingsFile(string localSettingsPath, string systemSe
         return null;
     }
 }
+

@@ -1,4 +1,4 @@
-﻿import { StationData } from './ApiInterface';
+import { StationDataResponseContract as StationData } from './openapi-response-contract.js';
 import { createCard } from './cardUtil.js';
 import { API_ENDPOINTS } from './const.js';
 import { RadioServiceKind, RadioServiceKindMap } from './define.js';
@@ -19,12 +19,46 @@ async function getStationList(kind: RadioServiceKind): Promise<StationData> {
         case RadioServiceKind.Radiko:
             return fetch(API_ENDPOINTS.STATION_LIST_RADIKO)
                 .then(response => response.json())
-                .then(result => result.data as StationData);
+                .then(result => {
+                    const source = result.data as Record<string, Array<{
+                        stationId?: string;
+                        stationName?: string;
+                        regionId?: string;
+                        regionName?: string;
+                    }>>;
+                    const normalized: StationData = {};
+                    Object.keys(source ?? {}).forEach((regionName) => {
+                        normalized[regionName] = (source[regionName] ?? []).map((x) => ({
+                            areaId: x.regionId ?? '',
+                            areaName: x.regionName ?? regionName,
+                            stationId: x.stationId ?? '',
+                            stationName: x.stationName ?? ''
+                        }));
+                    });
+                    return normalized;
+                });
 
         case RadioServiceKind.Radiru:
             return fetch(API_ENDPOINTS.STATION_LIST_RADIRU)
                 .then(response => response.json())
-                .then(result => result.data as StationData);
+                .then(result => {
+                    const source = result.data as Record<string, Array<{
+                        stationId?: string;
+                        stationName?: string;
+                        areaId?: string;
+                        areaName?: string;
+                    }>>;
+                    const normalized: StationData = {};
+                    Object.keys(source ?? {}).forEach((areaName) => {
+                        normalized[areaName] = (source[areaName] ?? []).map((x) => ({
+                            areaId: x.areaId ?? '',
+                            areaName: x.areaName ?? areaName,
+                            stationId: x.stationId ?? '',
+                            stationName: x.stationName ?? ''
+                        }));
+                    });
+                    return normalized;
+                });
 
         default:
             throw new Error(`Unsupported RadioServiceKind: ${kind}`);
@@ -124,3 +158,5 @@ function renderStationList(data: StationData, kind: RadioServiceKind, checkStati
 
     return cardElm;
 }
+
+

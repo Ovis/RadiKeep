@@ -21,12 +21,67 @@ const createMobileItem = (notice) => {
 document.addEventListener('DOMContentLoaded', () => {
     let currentPage = 1;
     const pageSize = 10;
+    let notificationHubConnection = null;
+    let isRealtimeReloadRunning = false;
+    let hasRealtimeReloadPending = false;
     const loadRecordings = async (page) => {
         const response = await fetch(`${API_ENDPOINTS.NOTIFICATION_LIST}?page=${page}&pageSize=${pageSize}`);
         const result = await response.json();
         const data = result.data;
         renderRecordings(data.recordings);
         renderPagination(data.totalRecords, page, pageSize);
+    };
+    /**
+     * SignalR経由の変更通知を受けた際に通知一覧を再同期する
+     */
+    const reloadNotificationsFromRealtimeAsync = async () => {
+        if (isRealtimeReloadRunning) {
+            hasRealtimeReloadPending = true;
+            return;
+        }
+        isRealtimeReloadRunning = true;
+        try {
+            do {
+                hasRealtimeReloadPending = false;
+                await loadRecordings(currentPage);
+            } while (hasRealtimeReloadPending);
+        }
+        finally {
+            isRealtimeReloadRunning = false;
+        }
+    };
+    /**
+     * お知らせ更新のSignalR接続を初期化する
+     */
+    const initializeNotificationHubConnectionAsync = async () => {
+        const signalRNamespace = window.signalR;
+        if (!signalRNamespace) {
+            console.warn('SignalRクライアントが読み込まれていないため、お知らせPush同期を無効化します。');
+            return;
+        }
+        const connection = new signalRNamespace.HubConnectionBuilder()
+            .withUrl('/hubs/notifications')
+            .withAutomaticReconnect()
+            .configureLogging(signalRNamespace.LogLevel.Warning)
+            .build();
+        connection.on('notificationChanged', () => {
+            void reloadNotificationsFromRealtimeAsync();
+        });
+        connection.onreconnected(() => {
+            void reloadNotificationsFromRealtimeAsync();
+        });
+        connection.onclose((error) => {
+            if (error) {
+                console.warn('お知らせSignalR接続が切断されました。', error);
+            }
+        });
+        try {
+            await connection.start();
+            notificationHubConnection = connection;
+        }
+        catch (error) {
+            console.warn('お知らせSignalR接続の開始に失敗しました。', error);
+        }
     };
     const renderRecordings = (recordings) => {
         const tableBody = document.getElementById('recordings-table-body');
@@ -147,7 +202,14 @@ document.addEventListener('DOMContentLoaded', () => {
         currentPage = 1;
         await loadRecordings(currentPage);
     });
-    loadRecordings(currentPage);
+    window.addEventListener('beforeunload', () => {
+        if (notificationHubConnection) {
+            void notificationHubConnection.stop();
+            notificationHubConnection = null;
+        }
+    });
+    void loadRecordings(currentPage);
+    void initializeNotificationHubConnectionAsync();
 });
 const deleteNotification = async () => {
     try {

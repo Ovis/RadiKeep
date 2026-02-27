@@ -1,12 +1,54 @@
-import { KeywordReserve, KeywordReserveData, Result, Tag } from './ApiInterface';
+import {
+    ApiResponseContract,
+    KeywordReserveResponseContract,
+    TagEntryResponseContract as Tag
+} from './openapi-response-contract.js';
 import { API_ENDPOINTS, getDayOfWeekShortString } from './const.js';
+import type {
+    KeywordReserveEntryContract,
+    KeywordReserveReorderRequestContract,
+    ReserveEntryRequestContract,
+    TagUpsertRequestContract
+} from './openapi-contract.js';
 import { showConfirmDialog, showGlobalToast } from './feedback.js';
 import { setTextContent, setAttribute, setEventListener } from './utils.js';
 
 let availableTags: Tag[] = [];
-let keywordReserves: KeywordReserve[] = [];
+type StrictRequired<T> = { [K in keyof T]-?: NonNullable<T[K]> };
+type KeywordReserveState = Omit<StrictRequired<KeywordReserveResponseContract>,
+    'id' | 'sortOrder' | 'selectedDaysOfWeek' | 'startDelay' | 'endDelay' | 'mergeTagBehavior' | 'startTimeString' | 'endTimeString'> & {
+    id: string;
+    sortOrder: number;
+    selectedDaysOfWeek: number[];
+    startDelay?: number;
+    endDelay?: number;
+    mergeTagBehavior?: number;
+};
+let keywordReserves: KeywordReserveState[] = [];
 let draggingReserveId: string | null = null;
 let isReordering = false;
+
+const normalizeKeywordReserve = (entry: KeywordReserveResponseContract): KeywordReserveState => ({
+    id: String(entry.id ?? ''),
+    sortOrder: Number(entry.sortOrder ?? 0),
+    selectedRadikoStationIds: entry.selectedRadikoStationIds ?? [],
+    selectedRadiruStationIds: entry.selectedRadiruStationIds ?? [],
+    keyword: entry.keyword ?? '',
+    searchTitleOnly: entry.searchTitleOnly ?? false,
+    excludedKeyword: entry.excludedKeyword ?? '',
+    excludeTitleOnly: entry.excludeTitleOnly ?? false,
+    recordPath: entry.recordPath ?? '',
+    recordFileName: entry.recordFileName ?? '',
+    selectedDaysOfWeek: (entry.selectedDaysOfWeek ?? []).map((x) => Number(x)),
+    startTime: (entry.startTime ?? entry.startTimeString ?? '00:00:00'),
+    endTime: (entry.endTime ?? entry.endTimeString ?? '00:00:00'),
+    isEnabled: entry.isEnabled ?? false,
+    startDelay: entry.startDelay === null || entry.startDelay === undefined ? undefined : Number(entry.startDelay),
+    endDelay: entry.endDelay === null || entry.endDelay === undefined ? undefined : Number(entry.endDelay),
+    tagIds: entry.tagIds ?? [],
+    tags: entry.tags ?? [],
+    mergeTagBehavior: entry.mergeTagBehavior === undefined ? undefined : Number(entry.mergeTagBehavior)
+});
 
 const normalizeTagName = (value: string): string => value.trim().toLocaleLowerCase();
 
@@ -17,8 +59,8 @@ document.addEventListener('DOMContentLoaded', () => {
 const loadTags = async (): Promise<void> => {
     try {
         const response = await fetch(API_ENDPOINTS.TAGS);
-        const result = await response.json();
-        availableTags = (result.data ?? []) as Tag[];
+        const result = await response.json() as ApiResponseContract<Tag[]>;
+        availableTags = result.data ?? [];
     } catch (error) {
         console.error('Error loading tags:', error);
         availableTags = [];
@@ -28,10 +70,11 @@ const loadTags = async (): Promise<void> => {
 const loadRecordings = async (): Promise<void> => {
     try {
         const response: Response = await fetch(API_ENDPOINTS.RESERVE_KEYWORD_LIST);
-        const result = await response.json();
-        const data: KeywordReserve[] = (result.data ?? [])
+        const result = await response.json() as ApiResponseContract<KeywordReserveResponseContract[]>;
+        const data: KeywordReserveState[] = (result.data ?? [])
+            .map(normalizeKeywordReserve)
             .slice()
-            .sort((a: KeywordReserve, b: KeywordReserve) =>
+            .sort((a: KeywordReserveState, b: KeywordReserveState) =>
                 (a.sortOrder ?? Number.MAX_SAFE_INTEGER) - (b.sortOrder ?? Number.MAX_SAFE_INTEGER));
         keywordReserves = data;
         renderRecordings(keywordReserves);
@@ -48,15 +91,16 @@ const persistKeywordReserveOrder = async (): Promise<boolean> => {
     isReordering = true;
     try {
         const ids = keywordReserves.map((reserve) => reserve.id);
+        const requestBody: KeywordReserveReorderRequestContract = { ids };
         const response = await fetch(API_ENDPOINTS.RESERVE_KEYWORD_REORDER, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ ids })
+            body: JSON.stringify(requestBody)
         });
 
-        const result = await response.json();
+        const result = await response.json() as ApiResponseContract<null>;
         if (!result.success) {
             showGlobalToast(result.message ?? '並び順の更新に失敗しました。', false);
             await loadRecordings();
@@ -139,13 +183,13 @@ const renderSelectedTagChips = (selectElm: HTMLSelectElement | null, container: 
     });
 };
 
-const renderRecordings = async (recordings: KeywordReserve[]): Promise<void> => {
+const renderRecordings = async (recordings: KeywordReserveState[]): Promise<void> => {
     const tableBody: HTMLElement = document.getElementById('keyword-reserve-table-body') as HTMLElement;
     tableBody.innerHTML = '';
 
     const template = document.getElementById('keyword-reserve-table-body-template') as HTMLTemplateElement;
 
-    recordings.forEach((reserve: KeywordReserve) => {
+    recordings.forEach((reserve: KeywordReserveState) => {
         const row = template.content.cloneNode(true) as HTMLElement;
 
         setAttribute(row, "tr", 'id', reserve.id);
@@ -161,8 +205,8 @@ const renderRecordings = async (recordings: KeywordReserve[]): Promise<void> => 
         setEventListener(row, ".move-down-button", "click", async () => await moveReserve(reserve.id, 'down'));
 
         const deleteAction = async (): Promise<void> => {
-            const data = {
-                "Id": reserve.id,
+            const data: ReserveEntryRequestContract = {
+                id: reserve.id,
             };
 
             const confirmed = await showConfirmDialog('削除してもよいですか？', { okText: '削除する' });
@@ -179,7 +223,7 @@ const renderRecordings = async (recordings: KeywordReserve[]): Promise<void> => 
                     body: JSON.stringify(data)
                 });
 
-                const result = await response.json();
+                const result = await response.json() as ApiResponseContract<null>;
 
                 if (result.success) {
                     keywordReserves = keywordReserves.filter((x) => x.id !== reserve.id);
@@ -261,7 +305,7 @@ async function showKeywordReserveModal(rowId: string): Promise<void> {
         return;
     }
 
-    const reserveEntry: KeywordReserve = JSON.parse(json);
+    const reserveEntry = normalizeKeywordReserve(JSON.parse(json) as KeywordReserveResponseContract);
 
     const template = document.getElementById('keyword-reserve-modal-template') as HTMLTemplateElement;
 
@@ -439,18 +483,19 @@ async function showKeywordReserveModal(rowId: string): Promise<void> {
 
                 try {
                     const selectedIds = new Set(Array.from(tagSelect.selectedOptions).map(option => option.value));
+                    const requestBody: TagUpsertRequestContract = { name };
                     const response = await fetch(API_ENDPOINTS.TAGS, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ name })
+                        body: JSON.stringify(requestBody)
                     });
-                    const result = await response.json() as Result;
-                    if (!response.ok || !(result as any).success) {
-                        showGlobalToast((result as any).message ?? 'タグ作成に失敗しました。', false);
+                    const result = await response.json() as ApiResponseContract<Tag>;
+                    if (!response.ok || !result.success) {
+                        showGlobalToast(result.message ?? 'タグ作成に失敗しました。', false);
                         return;
                     }
 
-                    const createdTagId = ((result as any).data as Tag | undefined)?.id ?? '';
+                    const createdTagId = result.data?.id ?? '';
                     if (createdTagId) {
                         selectedIds.add(createdTagId);
                     }
@@ -459,7 +504,7 @@ async function showKeywordReserveModal(rowId: string): Promise<void> {
                     renderSelectedTagChips(tagSelect, tagChipsContainer);
                     tagCreateInput.value = '';
                     renderTagCreateSuggestions();
-                    showGlobalToast((result as any).message ?? 'タグを作成しました。');
+                    showGlobalToast(result.message ?? 'タグを作成しました。');
                 } catch (error) {
                     console.error('Error:', error);
                     showGlobalToast('タグ作成に失敗しました。', false);
@@ -526,25 +571,25 @@ async function showKeywordReserveModal(rowId: string): Promise<void> {
         const mergeTagBehavior = Number.parseInt((document.getElementById('mergeTagBehavior') as HTMLSelectElement).value, 10);
         const isEnabled = (document.getElementById('enabled') as HTMLInputElement).checked;
 
-        const data: KeywordReserveData = {
-            Id: reserveEntry.id,
-            SortOrder: reserveEntry.sortOrder,
-            SelectedRadikoStationIds: selectedRadikoStationIds,
-            SelectedRadiruStationIds: selectedRadiruStationIds,
-            Keyword: keyword,
-            SearchTitleOnly: searchTitleOnly,
-            ExcludedKeyword: excludedKeyword,
-            ExcludeTitleOnly: excludeTitleOnly,
-            SelectedDaysOfWeek: selectedDaysOfWeek,
-            RecordPath: recordPath,
-            RecordFileName: recordFileName,
-            StartTimeString: startTime,
-            EndTimeString: endTime,
-            IsEnabled: isEnabled,
-            StartDelay: parseInt(startDelay),
-            EndDelay: parseInt(endDelay),
-            TagIds: selectedTagIds,
-            MergeTagBehavior: Number.isNaN(mergeTagBehavior) ? 0 : mergeTagBehavior
+        const requestBody: KeywordReserveEntryContract = {
+            id: reserveEntry.id,
+            sortOrder: reserveEntry.sortOrder,
+            selectedRadikoStationIds: selectedRadikoStationIds,
+            selectedRadiruStationIds: selectedRadiruStationIds,
+            keyword: keyword,
+            searchTitleOnly: searchTitleOnly,
+            excludedKeyword: excludedKeyword,
+            excludeTitleOnly: excludeTitleOnly,
+            selectedDaysOfWeek: selectedDaysOfWeek,
+            recordPath: recordPath,
+            recordFileName: recordFileName,
+            startTimeString: startTime,
+            endTimeString: endTime,
+            isEnabled: isEnabled,
+            startDelay: parseInt(startDelay),
+            endDelay: parseInt(endDelay),
+            tagIds: selectedTagIds,
+            mergeTagBehavior: Number.isNaN(mergeTagBehavior) ? 0 : mergeTagBehavior
         };
 
         try {
@@ -553,17 +598,16 @@ async function showKeywordReserveModal(rowId: string): Promise<void> {
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify(data)
+                body: JSON.stringify(requestBody)
             });
 
-            const result: Result = await response.json();
-
-            if ((result as any).success) {
-                showGlobalToast((result as any).message ?? "更新しました。");
+            const result = await response.json() as ApiResponseContract<null>;
+            if (result.success) {
+                showGlobalToast(result.message ?? "更新しました。");
                 loadRecordings();
                 document.getElementById("keyword-reserve-modal")?.remove();
             } else {
-                showGlobalToast((result as any).message ?? "更新に失敗しました。", false);
+                showGlobalToast(result.message ?? "更新に失敗しました。", false);
             }
         } catch (error) {
             console.error('Error:', error);
@@ -573,3 +617,4 @@ async function showKeywordReserveModal(rowId: string): Promise<void> {
 
     document.body.appendChild(modal);
 }
+

@@ -36,11 +36,6 @@ public static class AppConfigurationNames
     public const string ExternalServiceUserAgent = "ExternalServiceUserAgent";
 
     /// <summary>
-    /// 旧: らじる★らじる取得時に利用するUser-Agent
-    /// </summary>
-    public const string RadiruUserAgent = "RadiruUserAgent";
-
-    /// <summary>
     /// Discord Webhook URL
     /// </summary>
     public const string DiscordWebhookUrl = "DiscordWebhookUrl";

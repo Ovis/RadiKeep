@@ -105,6 +105,19 @@ export const initSettingMaintenance = (verificationToken, showToast) => {
         renderMaintenance();
         showToast(result.message ?? '欠損レコードを抽出しました。');
     };
+    /**
+     * 他画面/他タブのメンテナンス実行完了を受けて一覧を再同期する
+     */
+    window.addEventListener('radikeep:operation-event', (event) => {
+        const customEvent = event;
+        const detail = customEvent.detail;
+        if (!detail || detail.category !== 'maintenance' || !detail.succeeded) {
+            return;
+        }
+        void scanMaintenance().catch(() => {
+            // 再同期失敗時は明示トーストを追加しない
+        });
+    });
     maintenanceSelectAll.addEventListener('change', () => {
         const checked = maintenanceSelectAll.checked;
         maintenanceEntries.forEach((item) => {
@@ -136,13 +149,14 @@ export const initSettingMaintenance = (verificationToken, showToast) => {
         await withButtonLoading(maintenanceRelinkButton, async () => {
             updateMaintenanceButtons(true);
             try {
+                const requestBody = { recordingIds };
                 const response = await fetch(API_ENDPOINTS.EXTERNAL_IMPORT_MAINTENANCE_RELINK_MISSING, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                         'RequestVerificationToken': verificationToken
                     },
-                    body: JSON.stringify({ recordingIds })
+                    body: JSON.stringify(requestBody)
                 });
                 if (!response.ok) {
                     throw new Error(await parseErrorResponse(response));
@@ -176,13 +190,14 @@ export const initSettingMaintenance = (verificationToken, showToast) => {
         await withButtonLoading(maintenanceDeleteButton, async () => {
             updateMaintenanceButtons(true);
             try {
+                const requestBody = { recordingIds };
                 const response = await fetch(API_ENDPOINTS.EXTERNAL_IMPORT_MAINTENANCE_DELETE_MISSING, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                         'RequestVerificationToken': verificationToken
                     },
-                    body: JSON.stringify({ recordingIds })
+                    body: JSON.stringify(requestBody)
                 });
                 if (!response.ok) {
                     throw new Error(await parseErrorResponse(response));

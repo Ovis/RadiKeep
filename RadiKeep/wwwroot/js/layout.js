@@ -4,6 +4,8 @@ import { sanitizeHtml } from './utils.js';
 document.addEventListener('DOMContentLoaded', async () => {
     const notificationButton = document.getElementById('notification-button');
     const notificationPopup = document.getElementById('notification-popup');
+    let notificationHubConnection = null;
+    let appEventHubConnection = null;
     const notificationCount = async () => {
         try {
             const response = await fetch(API_ENDPOINTS.NOTIFICATION_COUNT, {
@@ -47,6 +49,85 @@ document.addEventListener('DOMContentLoaded', async () => {
     await notificationCount().then(count => {
         createNotificationCountBadge(count);
     });
+    /**
+     * お知らせHubへ接続して未読バッジをリアルタイム同期する
+     */
+    const initializeNotificationHubConnectionAsync = async () => {
+        const signalRNamespace = window.signalR;
+        if (!signalRNamespace) {
+            console.warn('SignalRクライアントが読み込まれていないため、お知らせPush同期を無効化します。');
+            return;
+        }
+        const connection = new signalRNamespace.HubConnectionBuilder()
+            .withUrl('/hubs/notifications')
+            .withAutomaticReconnect()
+            .configureLogging(signalRNamespace.LogLevel.Warning)
+            .build();
+        const refreshBadgeAsync = async () => {
+            const count = await notificationCount();
+            await createNotificationCountBadge(count);
+        };
+        connection.on('notificationChanged', () => {
+            void refreshBadgeAsync();
+        });
+        connection.onreconnected(() => {
+            void refreshBadgeAsync();
+        });
+        connection.onclose((error) => {
+            if (error) {
+                console.warn('お知らせSignalR接続が切断されました。', error);
+            }
+        });
+        try {
+            await connection.start();
+            notificationHubConnection = connection;
+        }
+        catch (error) {
+            console.warn('お知らせSignalR接続の開始に失敗しました。', error);
+        }
+    };
+    /**
+     * 全画面トーストイベントHubへ接続する。
+     */
+    const initializeAppEventHubConnectionAsync = async () => {
+        const signalRNamespace = window.signalR;
+        if (!signalRNamespace) {
+            return;
+        }
+        const connection = new signalRNamespace.HubConnectionBuilder()
+            .withUrl('/hubs/app-events')
+            .withAutomaticReconnect()
+            .configureLogging(signalRNamespace.LogLevel.Warning)
+            .build();
+        connection.on('toast', (...args) => {
+            const payload = (args[0] ?? null);
+            if (!payload || !payload.message) {
+                return;
+            }
+            showGlobalToast(payload.message, payload.isSuccess);
+        });
+        connection.on('operation', (...args) => {
+            const payload = (args[0] ?? null);
+            if (!payload) {
+                return;
+            }
+            window.dispatchEvent(new CustomEvent('radikeep:operation-event', {
+                detail: payload
+            }));
+        });
+        connection.onclose((error) => {
+            if (error) {
+                console.warn('全画面トーストSignalR接続が切断されました。', error);
+            }
+        });
+        try {
+            await connection.start();
+            appEventHubConnection = connection;
+        }
+        catch (error) {
+            console.warn('全画面トーストSignalR接続の開始に失敗しました。', error);
+        }
+    };
     notificationButton.addEventListener('click', async (event) => {
         event.stopPropagation();
         try {
@@ -201,6 +282,18 @@ document.addEventListener('DOMContentLoaded', async () => {
             elm.classList.remove('is-active');
         });
     });
+    window.addEventListener('beforeunload', () => {
+        if (notificationHubConnection) {
+            void notificationHubConnection.stop();
+            notificationHubConnection = null;
+        }
+        if (appEventHubConnection) {
+            void appEventHubConnection.stop();
+            appEventHubConnection = null;
+        }
+    });
+    await initializeNotificationHubConnectionAsync();
+    await initializeAppEventHubConnectionAsync();
 });
 function formatDate(isoDateString) {
     const date = new Date(isoDateString);

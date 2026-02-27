@@ -1,12 +1,21 @@
 import { RadioServiceKind, RadioServiceKindMap } from './define.js';
 import { RecordingType } from './define.js';
 import { AvailabilityTimeFree } from './define.js';
+import type {
+    ApiResponseContract,
+    ProgramPlaybackInfoResponseContract,
+    ProgramAreaResponseContract,
+    ProgramNowOnAirResponseContract,
+    RadioProgramResponseContract as Program
+} from './openapi-response-contract.js';
 import { API_ENDPOINTS } from './const.js';
+import type { ProgramInformationRequestContract } from './openapi-contract.js';
 import { showGlobalToast } from './feedback.js';
 import { setTextContent, setInnerHtml, setEventListener, sanitizeHtml } from './utils.js';
 import { playerPlaybackRateOptions, applyPlaybackRate } from './player-rate-control.js';
 import { createStandardPlayerJumpControls } from './player-jump-controls.js';
 import { readPersistedPlayerState, writePersistedPlayerState, clearPersistedPlayerState } from './player-state-store.js';
+import type { HlsLiveInstance, HlsWindow } from './hls-types.js';
 
 let activeGoLiveAction: (() => void) | null = null;
 const defaultDocumentTitle = document.title;
@@ -43,7 +52,7 @@ function persistCurrentPlaybackState(): void {
 document.addEventListener('DOMContentLoaded', async () => {
     try {
         const response = await fetch(API_ENDPOINTS.PROGRAM_NOW);
-        const result = await response.json();
+        const result = await response.json() as ApiResponseContract<ProgramNowOnAirResponseContract>;
         const data = result.data;
 
         const template = document.getElementById('program-card-template') as HTMLTemplateElement;
@@ -99,19 +108,21 @@ document.addEventListener('DOMContentLoaded', async () => {
             button.classList.add('opacity-70');
 
             try {
+                const requestBody: ProgramInformationRequestContract = {
+                    programId: programId,
+                    radioServiceKind: serviceKind,
+                    recordingType: recordingType
+                };
+
                 const response = await fetch(API_ENDPOINTS.PROGRAM_RESERVE, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({
-                        programId: programId,
-                        radioServiceKind: serviceKind,
-                        recordingType: recordingType
-                    })
+                    body: JSON.stringify(requestBody)
                 });
 
-                const result = await response.json();
+                const result = await response.json() as ApiResponseContract<null>;
 
                 if (response.ok && result.success) {
                     reservedRecordingKeys.add(reservationKey);
@@ -168,20 +179,21 @@ document.addEventListener('DOMContentLoaded', async () => {
             return new Date(endTime).getTime() <= Date.now();
         };
 
-        let programs: any[] = [];
-        let areas: Array<{ areaId: string; areaName: string; areaOrder: number }> = [];
+        let programs: Program[] = [];
+        let areas: ProgramAreaResponseContract[] = [];
         let currentAreaStations: string[] = [];
         let activeServiceKind: RadioServiceKind = RadioServiceKind.Undefined;
         let activeAreaId = '';
         const activeAreaByService = new Map<RadioServiceKind, string>();
 
-        if (Array.isArray(data)) {
-            programs = data;
-        } else {
-            programs = data?.programs ?? [];
-            areas = data?.areas ?? [];
-            currentAreaStations = data?.currentAreaStations ?? [];
-        }
+        programs = data.programs ?? [];
+        // OpenAPI生成型では数値が string になる場合があるため、画面ロジック用に数値化する。
+        areas = (data.areas ?? []).map((x) => ({
+            ...x,
+            areaOrder: Number(x.areaOrder),
+            serviceOrder: Number(x.serviceOrder)
+        }));
+        currentAreaStations = data.currentAreaStations ?? [];
 
         const normalizeAreas = () => {
             if (areas.length > 0) {
@@ -200,7 +212,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             return Array.from(dedup.entries()).map(([areaId, areaName], index) => ({
                 areaId,
                 areaName,
-                areaOrder: index
+                areaOrder: index,
+                serviceOrder: 0
             }));
         };
 
@@ -362,7 +375,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             emptyState?.classList.add('hidden');
 
-            list.forEach((program: any) => {
+            list.forEach((program) => {
                 const card = template.content.cloneNode(true) as HTMLElement;
 
                 setTextContent(card, ".title", program.title);
@@ -448,9 +461,9 @@ document.addEventListener('DOMContentLoaded', async () => {
  * @param serviceKind
  */
 async function playProgram(programId: string, serviceKind: RadioServiceKind, programTitle?: string): Promise<void> {
-    const data = {
-        "ProgramId": programId,
-        "RadioServiceKind": serviceKind
+    const requestBody: ProgramInformationRequestContract = {
+        programId: programId,
+        radioServiceKind: serviceKind
     };
 
     try {
@@ -459,13 +472,13 @@ async function playProgram(programId: string, serviceKind: RadioServiceKind, pro
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify(data)
+            body: JSON.stringify(requestBody)
         });
 
 
 
         if (response.ok) {
-            const result = await response.json();
+            const result = await response.json() as ApiResponseContract<ProgramPlaybackInfoResponseContract>;
             const sourceToken = serviceKind === RadioServiceKind.Radiko ? result.data.token : null;
             await playHomeFromSource(result.data.url, sourceToken, programTitle ?? null, 0, playerPlaybackRateOptions[0]);
         } else {
@@ -545,13 +558,13 @@ async function playHomeFromSource(
         ? playbackRate
         : (isSameSource ? playbackRate : playerPlaybackRateOptions[0]);
 
-    const hlsConstructor = (window as any).Hls;
+    const hlsConstructor = (window as HlsWindow<HlsLiveInstance>).Hls;
     if (hlsConstructor?.isSupported?.()) {
-        const hls: any = new hlsConstructor();
+        const hls = new hlsConstructor();
         applyPlaybackRate(audio!, effectivePlaybackRate);
 
         if (sourceToken) {
-            hls.config.xhrSetup = function (xhr: any) {
+            hls.config.xhrSetup = function (xhr: XMLHttpRequest) {
                 xhr.setRequestHeader('X-Radiko-AuthToken', sourceToken);
             };
         }
@@ -650,3 +663,5 @@ function createPlayerJumpControls(audioElm: HTMLAudioElement): HTMLDivElement {
         createSideButtons: () => [goLiveButton]
     });
 }
+
+

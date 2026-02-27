@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using RadiKeep.Logics.Domain.AppEvent;
 using RadiKeep.Logics.Errors;
 using RadiKeep.Logics.Domain.Recording;
 using ZLogger;
@@ -13,7 +14,9 @@ public class RecordingOrchestrator(
     IEnumerable<IRecordingSource> sources,
     IMediaStorageService storage,
     IMediaTranscodeService transcoder,
-    IRecordingRepository repository)
+    IRecordingRepository repository,
+    IRecordingStateEventPublisher recordingStateEventPublisher,
+    IAppToastEventPublisher? appToastEventPublisher = null)
 {
     /// <summary>
     /// 録音処理を実行する
@@ -48,6 +51,44 @@ public class RecordingOrchestrator(
             catch (Exception ex)
             {
                 logger.ZLogError(ex, $"録音状態の更新に失敗しました。");
+                return;
+            }
+
+            try
+            {
+                await recordingStateEventPublisher.PublishAsync(
+                    new RecordingStateChangedEvent(
+                        recordingId.Value,
+                        state,
+                        message,
+                        DateTimeOffset.UtcNow),
+                    cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                logger.ZLogWarning(ex, $"録音状態変更イベントの通知に失敗しました。");
+            }
+        }
+
+        /// <summary>
+        /// 全画面トースト通知を安全に実行する
+        /// </summary>
+        async ValueTask PublishGlobalToastSafeAsync(string message, bool isSuccess)
+        {
+            if (appToastEventPublisher is null)
+            {
+                return;
+            }
+
+            try
+            {
+                await appToastEventPublisher.PublishAsync(
+                    new AppToastEvent(message, isSuccess, DateTimeOffset.UtcNow),
+                    cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                logger.ZLogWarning(ex, $"全画面トーストイベント通知に失敗しました。");
             }
         }
 
@@ -88,6 +129,7 @@ public class RecordingOrchestrator(
             isCommitted = true;
             await repository.UpdateFilePathAsync(recordingId.Value, mediaPath, cancellationToken);
             await UpdateStateSafeAsync(RecordingState.Completed, null);
+            await PublishGlobalToastSafeAsync($"{command.ProgramName} の録音が完了しました。", true);
 
             return new RecordingResult(true, recordingId, null);
         }

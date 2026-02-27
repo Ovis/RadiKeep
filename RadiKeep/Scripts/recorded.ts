@@ -1,5 +1,15 @@
-import { Recording, RecordedStationFilter, RecordingBulkDeleteResult, RecordingBulkListenedResult, Tag, TagBulkOperationResult } from './ApiInterface';
+import {
+    ApiResponseContract,
+    ListRecordingsResponseContract,
+    RecordingBulkDeleteResultResponseContract as RecordingBulkDeleteResult,
+    RecordingBulkListenedResultResponseContract as RecordingBulkListenedResult,
+    RecordedProgramResponseContract as Recording,
+    RecordedStationFilterResponseContract as RecordedStationFilter,
+    TagBulkOperationResultResponseContract as TagBulkOperationResult,
+    TagEntryResponseContract as Tag
+} from './openapi-response-contract.js';
 import { API_ENDPOINTS } from './const.js';
+import type { RecordingBulkDeleteRequestContract, RecordingBulkListenedRequestContract, RecordingBulkTagRequestContract, TagUpsertRequestContract } from './openapi-contract.js';
 import { showConfirmDialog, showGlobalToast } from './feedback.js';
 import { withButtonLoading } from './loading.js';
 import { setTextContent, setEventListener, formatDisplayDateTime } from './utils.js';
@@ -7,6 +17,8 @@ import { playerPlaybackRateOptions, applyPlaybackRate } from './player-rate-cont
 import { createStandardPlayerJumpControls } from './player-jump-controls.js';
 import { readPersistedPlayerState, writePersistedPlayerState, clearPersistedPlayerState } from './player-state-store.js';
 import { clearMultiSelect, renderSelectedTagChips, enableTouchLikeMultiSelect } from './tag-select-ui.js';
+import type { HlsInstance, HlsWindow } from './hls-types.js';
+import type { SignalRHubConnection, SignalRWindow } from './signalr-types.js';
 
 const sortingElements: { [key: string]: string } = {
     'sort-title': 'Title',
@@ -30,11 +42,14 @@ const selectedRecordingIds = new Set<string>();
 let lastLoadedRecordings: Recording[] = [];
 const continuousPlaybackStorageKey = 'radikeep-recorded-continuous-playback';
 let currentPlayingRecordingId: string | null = null;
-let currentRecordingHls: any | null = null;
+let currentRecordingHls: HlsInstance | null = null;
 let currentPlayingSourceUrl: string | null = null;
 let currentPlayingSourceToken: string | null = null;
 let currentPlayingTitle: string | null = null;
 const defaultDocumentTitle = document.title;
+let recordingHubConnection: SignalRHubConnection | null = null;
+let isRealtimeReloadRunning = false;
+let hasRealtimeReloadPending = false;
 
 function updateDocumentTitleByRecordingId(recordId: string | null): void {
     if (currentPlayingTitle && currentPlayingTitle.trim().length > 0) {
@@ -160,6 +175,64 @@ function applySortSelectValue(value: string): void {
 
 function normalizeTagName(value: string): string {
     return value.trim().toLocaleLowerCase();
+}
+
+/**
+ * SignalR経由の変更通知を受けた際に録音一覧を再同期する
+ */
+async function reloadRecordingsFromRealtimeAsync(): Promise<void> {
+    if (isRealtimeReloadRunning) {
+        hasRealtimeReloadPending = true;
+        return;
+    }
+
+    isRealtimeReloadRunning = true;
+    try {
+        do {
+            hasRealtimeReloadPending = false;
+            await loadRecordings(currentPage, sortBy, isDescending, searchQuery);
+        } while (hasRealtimeReloadPending);
+    } finally {
+        isRealtimeReloadRunning = false;
+    }
+}
+
+/**
+ * 録音状態変更のSignalR接続を初期化する
+ */
+async function initializeRecordingHubConnectionAsync(): Promise<void> {
+    const signalRNamespace = (window as SignalRWindow).signalR;
+    if (!signalRNamespace) {
+        console.warn('SignalRクライアントが読み込まれていないため、録音Push同期を無効化します。');
+        return;
+    }
+
+    const connection = new signalRNamespace.HubConnectionBuilder()
+        .withUrl('/hubs/recordings')
+        .withAutomaticReconnect()
+        .configureLogging(signalRNamespace.LogLevel.Warning)
+        .build();
+
+    connection.on('recordingStateChanged', () => {
+        void reloadRecordingsFromRealtimeAsync();
+    });
+
+    connection.onreconnected(() => {
+        void reloadRecordingsFromRealtimeAsync();
+    });
+
+    connection.onclose((error) => {
+        if (error) {
+            console.warn('SignalR接続が切断されました。', error);
+        }
+    });
+
+    try {
+        await connection.start();
+        recordingHubConnection = connection;
+    } catch (error) {
+        console.warn('SignalR接続の開始に失敗しました。', error);
+    }
 }
 
 let tagsModalElement: HTMLDivElement | null = null;
@@ -507,19 +580,20 @@ document.addEventListener('DOMContentLoaded', async () => {
                 try {
                     const selectedFilterTagIds = Array.from(tagFilterSelect.selectedOptions).map(option => option.value);
                     const selectedBulkTagIds = Array.from(tagBulkSelect.selectedOptions).map(option => option.value);
+                    const requestBody: TagUpsertRequestContract = { name };
 
                     const response = await fetch(API_ENDPOINTS.TAGS, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ name })
+                        body: JSON.stringify(requestBody)
                     });
-                    const result = await response.json() as any;
+                    const result = await response.json() as ApiResponseContract<Tag>;
                     if (!response.ok || !result.success) {
                         showGlobalToast(result.message ?? 'タグ作成に失敗しました。', false);
                         return;
                     }
 
-                    const createdTagId = (result.data as Tag | undefined)?.id ?? '';
+                    const createdTagId = result.data?.id ?? '';
                     const filterSelectedSet = new Set(selectedFilterTagIds);
                     const bulkSelectedSet = new Set(selectedBulkTagIds);
                     if (createdTagId) {
@@ -580,10 +654,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     renderSelectedTagChips(tagBulkSelect, tagBulkChipsContainer, recordedTagChipOptions);
     window.addEventListener('beforeunload', () => {
         persistCurrentPlaybackState();
+        if (recordingHubConnection) {
+            void recordingHubConnection.stop();
+            recordingHubConnection = null;
+        }
     });
 
     await loadRecordings(currentPage, sortBy, isDescending, searchQuery);
     await tryResumePersistedPlayback();
+    await initializeRecordingHubConnectionAsync();
 
     window.addEventListener('resize', () => {
         const currentMobileView = isMobileView();
@@ -646,8 +725,8 @@ async function loadRecordings(page: number, sortBy: string, isDescending: boolea
     }
 
     const response: Response = await fetch(`${API_ENDPOINTS.PROGRAM_RECORDED}?${queryString.toString()}`);
-    const result = await response.json();
-    const data: { recordings: Recording[], totalRecords: number } = result.data;
+    const result = await response.json() as ApiResponseContract<ListRecordingsResponseContract>;
+    const data = result.data;
     lastLoadedRecordings = data.recordings;
     renderRecordings(data.recordings);
     renderPagination(data.totalRecords, page, currentPageSize);
@@ -668,8 +747,8 @@ async function loadStationFilters(): Promise<void> {
 
     try {
         const response: Response = await fetch(API_ENDPOINTS.PROGRAM_RECORDED_STATIONS);
-        const result = await response.json();
-        const stations = (result.data ?? []) as RecordedStationFilter[];
+        const result = await response.json() as ApiResponseContract<RecordedStationFilter[]>;
+        const stations = result.data ?? [];
 
         stations.forEach((station) => {
             const option = document.createElement('option');
@@ -694,8 +773,8 @@ async function loadTags(): Promise<void> {
 
     try {
         const response = await fetch(API_ENDPOINTS.TAGS);
-        const result = await response.json();
-        const tags = (result.data ?? []) as Tag[];
+        const result = await response.json() as ApiResponseContract<Tag[]>;
+        const tags = result.data ?? [];
 
         tagFilterSelect.innerHTML = '';
         tagBulkSelect.innerHTML = '';
@@ -730,7 +809,7 @@ async function executeBulkTagOperation(endpoint: string, tagIds: string[], succe
         return;
     }
 
-    const payload = {
+    const payload: RecordingBulkTagRequestContract = {
         recordingIds: Array.from(selectedRecordingIds),
         tagIds: tagIds
     };
@@ -741,13 +820,13 @@ async function executeBulkTagOperation(endpoint: string, tagIds: string[], succe
             headers: createMutationHeaders(verificationToken),
             body: JSON.stringify(payload)
         });
-        const result = await response.json();
+        const result = await response.json() as ApiResponseContract<TagBulkOperationResult>;
         if (!result.success) {
             showGlobalToast(result.message ?? "更新に失敗しました。", false);
             return;
         }
 
-        const data = result.data as TagBulkOperationResult;
+        const data = result.data;
         const message = `${successMessage} 成功:${data.successCount} 件 / スキップ:${data.skipCount} 件 / 失敗:${data.failCount} 件`;
         showGlobalToast(message, data.failCount === 0);
 
@@ -780,7 +859,7 @@ async function executeBulkDeleteOperation(verificationToken: string): Promise<vo
         return;
     }
 
-    const payload = {
+    const payload: RecordingBulkDeleteRequestContract = {
         recordingIds: Array.from(selectedRecordingIds),
         deleteFiles: deleteMode === 'files-and-db'
     };
@@ -792,13 +871,13 @@ async function executeBulkDeleteOperation(verificationToken: string): Promise<vo
             body: JSON.stringify(payload)
         });
 
-        const result = await response.json();
+        const result = await response.json() as ApiResponseContract<RecordingBulkDeleteResult | undefined>;
         if (!response.ok || !result.success) {
             showGlobalToast(result.message ?? "一括削除に失敗しました。", false);
             return;
         }
 
-        const data = result.data as RecordingBulkDeleteResult | undefined;
+        const data = result.data;
         if (!data || data.failCount === 0) {
             selectedRecordingIds.clear();
             const selectAllCheckbox = document.getElementById('recordings-select-all') as HTMLInputElement | null;
@@ -839,7 +918,7 @@ async function executeBulkListenedOperation(isListened: boolean, verificationTok
         return;
     }
 
-    const payload = {
+    const payload: RecordingBulkListenedRequestContract = {
         recordingIds: Array.from(selectedRecordingIds),
         isListened
     };
@@ -850,13 +929,13 @@ async function executeBulkListenedOperation(isListened: boolean, verificationTok
             headers: createMutationHeaders(verificationToken),
             body: JSON.stringify(payload)
         });
-        const result = await response.json();
+        const result = await response.json() as ApiResponseContract<RecordingBulkListenedResult | undefined>;
         if (!response.ok || !result.success) {
             showGlobalToast(result.message ?? "一括更新に失敗しました。", false);
             return;
         }
 
-        const data = result.data as RecordingBulkListenedResult | undefined;
+        const data = result.data;
         if (data && data.failCount === 0) {
             selectedRecordingIds.clear();
             const selectAllCheckbox = document.getElementById('recordings-select-all') as HTMLInputElement | null;
@@ -1323,7 +1402,7 @@ async function playProgram(recordId: string): Promise<void> {
         audio = document.getElementById('audio-player-elm') as HTMLAudioElement;
     }
 
-    const m3u8Url: string = `/api/v1/recordings/play/${recordId}`;
+    const m3u8Url: string = `/api/recordings/play/${recordId}`;
     const title = lastLoadedRecordings.find((x) => x.id === recordId)?.title ?? null;
     await playProgramFromSource(m3u8Url, null, recordId, title, 0, playerPlaybackRateOptions[0]);
 }
@@ -1393,9 +1472,9 @@ async function playProgramFromSource(
         currentRecordingHls = null;
     }
 
-    const hlsConstructor = (window as any).Hls;
+    const hlsConstructor = (window as HlsWindow<HlsInstance>).Hls;
     if (hlsConstructor?.isSupported?.()) {
-        const hls: any = new hlsConstructor();
+        const hls = new hlsConstructor();
         if (sourceToken) {
             hls.config.xhrSetup = (xhr: XMLHttpRequest) => {
                 xhr.setRequestHeader('X-Radiko-AuthToken', sourceToken);
@@ -1571,23 +1650,18 @@ async function deleteProgram(recordId: string): Promise<void> {
     if (!deleteMode) {
         return;
     }
-
-    const payload = {
-        recordingIds: [recordId],
-        deleteFiles: deleteMode === 'files-and-db'
-    };
+    const deleteFiles = deleteMode === 'files-and-db';
 
     try {
-        const response = await fetch(API_ENDPOINTS.DELETE_PROGRAM_BULK, {
-            method: 'POST',
-            headers: createMutationHeaders(verificationToken),
-            body: JSON.stringify(payload)
+        const endpoint = `/api/recordings/${encodeURIComponent(recordId)}?deleteFiles=${deleteFiles.toString()}`;
+        const response = await fetch(endpoint, {
+            method: 'DELETE',
+            headers: createMutationHeaders(verificationToken)
         });
 
-        const result = await response.json();
+        const result = await response.json() as ApiResponseContract<boolean>;
         if (result.success) {
-            const data = result.data as RecordingBulkDeleteResult | undefined;
-            if (data && data.successCount <= 0) {
+            if (!result.data) {
                 showGlobalToast(result.message ?? "削除に失敗しました。", false);
                 return;
             }
@@ -1616,5 +1690,7 @@ function createMutationHeaders(verificationToken: string): HeadersInit {
 
     return headers;
 }
+
+
 
 

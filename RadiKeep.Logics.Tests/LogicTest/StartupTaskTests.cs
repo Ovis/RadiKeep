@@ -2,7 +2,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Moq;
-using Quartz;
 using RadiKeep.Logics.Domain.Station;
 using RadiKeep.Logics.Errors;
 using RadiKeep.Logics.Logics;
@@ -80,13 +79,10 @@ public class StartupTaskTests
             configMock.Object,
             radikoHttpClientFactory);
 
-        var schedulerFactory = CreateSchedulerFactory();
         var appContext = new FakeRadioAppContext();
         var recordJobLogic = new RecordJobLobLogic(
             new Mock<ILogger<RecordJobLobLogic>>().Object,
-            schedulerFactory.Object,
-            configMock.Object,
-            appContext);
+            configMock.Object);
 
         var programScheduleRepo = new FakeProgramScheduleRepository();
         var programScheduleLogic = new ProgramScheduleLobLogic(
@@ -194,22 +190,5 @@ public class StartupTaskTests
         return mock;
     }
 
-    /// <summary>
-    /// スケジューラのモック
-    /// </summary>
-    private static Mock<ISchedulerFactory> CreateSchedulerFactory()
-    {
-        var schedulerMock = new Mock<IScheduler>();
-        schedulerMock.Setup(x => x.CheckExists(It.IsAny<JobKey>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(false);
-        schedulerMock.Setup(x => x.DeleteJob(It.IsAny<JobKey>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(true);
-        schedulerMock.Setup(x => x.ScheduleJob(It.IsAny<IJobDetail>(), It.IsAny<ITrigger>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(DateTimeOffset.UtcNow);
-
-        var factory = new Mock<ISchedulerFactory>();
-        factory.Setup(x => x.GetScheduler(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(schedulerMock.Object);
-        return factory;
-    }
 }
+

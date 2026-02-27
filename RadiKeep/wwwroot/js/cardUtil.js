@@ -70,12 +70,17 @@ export function createColumns(label, value) {
 }
 export async function reserveProgram(programId, serviceKind, type) {
     try {
+        const requestBody = {
+            programId: programId,
+            radioServiceKind: serviceKind,
+            recordingType: type
+        };
         const response = await fetch(API_ENDPOINTS.PROGRAM_RESERVE, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ programId: programId, radioServiceKind: serviceKind, recordingType: type })
+            body: JSON.stringify(requestBody)
         });
         const result = await response.json();
         if (result.success) {

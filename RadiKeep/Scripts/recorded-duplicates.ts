@@ -1,9 +1,18 @@
-import { ApiResponse, RecordedDuplicateCandidate, RecordedDuplicateDetectionStatus, RecordedDuplicateSide } from './ApiInterface.js';
+import {
+    ApiResponseContract as ApiResponse,
+    RecordingBulkDeleteResultResponseContract as RecordingBulkDeleteResult,
+    RecordedDuplicateCandidateResponseContract as RecordedDuplicateCandidate,
+    RecordedDuplicateDetectionStatusResponseContract as RecordedDuplicateDetectionStatus,
+    RecordedDuplicateSideResponseContract as RecordedDuplicateSide
+} from './openapi-response-contract.js';
 import { API_ENDPOINTS } from './const.js';
+import type { DuplicateDetectionRunRequestContract, RecordingBulkDeleteRequestContract } from './openapi-contract.js';
 import { showConfirmDialog } from './feedback.js';
 import { escapeHtml } from './utils.js';
 import { playerPlaybackRateOptions, resetPlaybackRate } from './player-rate-control.js';
 import { createStandardPlayerJumpControls } from './player-jump-controls.js';
+import type { HlsInstance, HlsWindow } from './hls-types.js';
+import type { SignalRHubConnection, SignalRWindow } from './signalr-types.js';
 
 type DuplicateGroupMember = RecordedDuplicateSide & {
     bestScore: number;
@@ -50,9 +59,10 @@ document.addEventListener('DOMContentLoaded', () => {
     let candidates: RecordedDuplicateCandidate[] = [];
     let groups: DuplicateGroup[] = [];
     const selectedRecordingIds = new Set<string>();
-    let currentHls: any | null = null;
+    let currentHls: HlsInstance | null = null;
     let currentPlayingRecordingId: string | null = null;
     let pollTimer: number | null = null;
+    let duplicateHubConnection: SignalRHubConnection | null = null;
 
     const isCurrentDuplicateRecordingPlaying = (recordId: string): boolean => {
         return currentPlayingRecordingId === recordId;
@@ -203,7 +213,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const audio = getOrCreatePlayer();
-        const m3u8Url = `/api/v1/recordings/play/${recordId}`;
+        const m3u8Url = `/api/recordings/play/${recordId}`;
         const startOffsetSeconds = getPlayerStartOffsetSeconds();
         currentPlayingRecordingId = recordId;
         syncDuplicatePlayButtons();
@@ -213,13 +223,14 @@ document.addEventListener('DOMContentLoaded', () => {
             currentHls = null;
         }
 
-        if ((window as any).Hls?.isSupported()) {
-            const hls = new (window as any).Hls();
+        const hlsConstructor = (window as HlsWindow<HlsInstance>).Hls;
+        if (hlsConstructor?.isSupported()) {
+            const hls = new hlsConstructor();
             resetPlaybackRate(audio);
             currentHls = hls;
             hls.loadSource(m3u8Url);
             hls.attachMedia(audio);
-            hls.on((window as any).Hls.Events.MANIFEST_PARSED, () => {
+            hls.on(hlsConstructor.Events.MANIFEST_PARSED, () => {
                 void playAudioWithStartOffset(audio, startOffsetSeconds);
             });
         } else if (audio.canPlayType('application/vnd.apple.mpegurl')) {
@@ -513,6 +524,47 @@ document.addEventListener('DOMContentLoaded', () => {
         }, 5000);
     };
 
+    /**
+     * 同一番組候補チェック状態のSignalR接続を初期化する
+     */
+    const initializeDuplicateDetectionHubConnectionAsync = async (): Promise<void> => {
+        const signalRNamespace = (window as SignalRWindow).signalR;
+        if (!signalRNamespace) {
+            return;
+        }
+
+        const connection = new signalRNamespace.HubConnectionBuilder()
+            .withUrl('/hubs/duplicate-detection')
+            .withAutomaticReconnect()
+            .configureLogging(signalRNamespace.LogLevel.Warning)
+            .build();
+
+        connection.on('duplicateDetectionStatusChanged', (...args: unknown[]) => {
+            const status = (args[0] ?? null) as RecordedDuplicateDetectionStatus | null;
+            if (!status) {
+                return;
+            }
+
+            renderStatus(status);
+            setLoading(status.isRunning);
+            if (lastRunningState && !status.isRunning) {
+                void fetchCandidates();
+            }
+            lastRunningState = status.isRunning;
+        });
+
+        connection.onreconnected(() => {
+            void fetchStatus();
+        });
+
+        try {
+            await connection.start();
+            duplicateHubConnection = connection;
+        } catch {
+            // 接続失敗時はポーリングのみで継続する
+        }
+    };
+
     runButton.addEventListener('click', async () => {
         setError('');
         setLoading(true);
@@ -521,6 +573,12 @@ document.addEventListener('DOMContentLoaded', () => {
             const lookbackDaysValue = Number.parseInt(lookbackDaysSelect.value, 10);
             const maxPhase1GroupsValue = Number.parseInt(maxGroupsSelect.value, 10);
             const broadcastClusterWindowHoursValue = Number.parseInt(clusterWindowHoursSelect.value, 10);
+            const requestBody: DuplicateDetectionRunRequestContract = {
+                lookbackDays: Number.isNaN(lookbackDaysValue) ? 30 : lookbackDaysValue,
+                maxPhase1Groups: Number.isNaN(maxPhase1GroupsValue) ? 100 : maxPhase1GroupsValue,
+                phase2Mode: phase2ModeSelect.value || 'light',
+                broadcastClusterWindowHours: Number.isNaN(broadcastClusterWindowHoursValue) ? 48 : broadcastClusterWindowHoursValue
+            };
 
             const response = await fetch(API_ENDPOINTS.PROGRAM_RECORDED_DUPLICATES_RUN, {
                 method: 'POST',
@@ -528,12 +586,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     'Content-Type': 'application/json',
                     'RequestVerificationToken': verificationToken
                 },
-                body: JSON.stringify({
-                    lookbackDays: Number.isNaN(lookbackDaysValue) ? 30 : lookbackDaysValue,
-                    maxPhase1Groups: Number.isNaN(maxPhase1GroupsValue) ? 100 : maxPhase1GroupsValue,
-                    phase2Mode: phase2ModeSelect.value || 'light',
-                    broadcastClusterWindowHours: Number.isNaN(broadcastClusterWindowHoursValue) ? 48 : broadcastClusterWindowHoursValue
-                })
+                body: JSON.stringify(requestBody)
             });
 
             const result = await response.json() as ApiResponse<string>;
@@ -584,6 +637,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const recordingIds = Array.from(selectedRecordingIds);
+        const requestBody: RecordingBulkDeleteRequestContract = {
+            recordingIds,
+            deleteFiles: true
+        };
 
         try {
             const response = await fetch(API_ENDPOINTS.DELETE_PROGRAM_BULK, {
@@ -592,12 +649,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     'Content-Type': 'application/json',
                     'RequestVerificationToken': verificationToken
                 },
-                body: JSON.stringify({
-                    recordingIds,
-                    deleteFiles: true
-                })
+                body: JSON.stringify(requestBody)
             });
-            const result = await response.json() as ApiResponse<unknown>;
+            const result = await response.json() as ApiResponse<RecordingBulkDeleteResult>;
             if (!response.ok || !result.success) {
                 throw new Error(result.error?.message ?? result.message ?? '削除に失敗しました。');
             }
@@ -622,6 +676,18 @@ document.addEventListener('DOMContentLoaded', () => {
         setError(message);
     });
     startPolling();
+    void initializeDuplicateDetectionHubConnectionAsync();
+
+    window.addEventListener('beforeunload', () => {
+        if (pollTimer !== null) {
+            window.clearInterval(pollTimer);
+            pollTimer = null;
+        }
+        if (duplicateHubConnection) {
+            void duplicateHubConnection.stop();
+            duplicateHubConnection = null;
+        }
+    });
 });
 
 function createPlayerJumpControls(audioElm: HTMLAudioElement): HTMLDivElement {
@@ -658,4 +724,6 @@ async function playAudioWithStartOffset(audioElm: HTMLAudioElement, startOffsetS
 
     await audioElm.play();
 }
+
+
 

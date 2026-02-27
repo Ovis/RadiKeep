@@ -2,7 +2,6 @@ using System.Net;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Moq;
-using Quartz;
 using RadiKeep.Logics.Context;
 using RadiKeep.Logics.Domain.ProgramSchedule;
 using RadiKeep.Logics.Domain.Recording;
@@ -108,12 +107,9 @@ public class RadikoRecordingSourceTests
         configMock.SetupGet(c => c.RecordStartDuration).Returns(TimeSpan.Zero);
         configMock.SetupGet(c => c.RecordEndDuration).Returns(TimeSpan.Zero);
 
-        var schedulerFactory = new Mock<ISchedulerFactory>().Object;
         var recordJobLobLogic = new RecordJobLobLogic(
             new Mock<ILogger<RecordJobLobLogic>>().Object,
-            schedulerFactory,
-            configMock.Object,
-            appContext);
+            configMock.Object);
 
         return new ProgramScheduleLobLogic(
             logger,
@@ -274,3 +270,4 @@ public class RadikoRecordingSourceTests
         Assert.That(result.ProgramInfo.StationId, Is.EqualTo(stationId));
     }
 }
+

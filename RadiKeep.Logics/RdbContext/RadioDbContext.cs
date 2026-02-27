@@ -412,6 +412,16 @@ public class RadioDbContext : DbContext
 
         modelBuilder.Entity<ScheduleJob>(entity =>
         {
+            // 実行中ジョブの重複実行を抑止するため、同一番組・同一予約種別・同一キーワード予約の
+            // アクティブ状態重複をDB制約で防ぐ。
+            entity.HasIndex(e => new { e.ProgramId, e.ServiceKind, e.StartDateTime, e.ReserveType, e.KeywordReserveId })
+                .HasDatabaseName("IX_ScheduleJob_Active_Unique")
+                .IsUnique()
+                .HasFilter($"State IN ({(int)Models.Enums.ScheduleJobState.Pending}, {(int)Models.Enums.ScheduleJobState.Queued}, {(int)Models.Enums.ScheduleJobState.Preparing}, {(int)Models.Enums.ScheduleJobState.Recording})");
+
+            entity.HasIndex(e => new { e.IsEnabled, e.State, e.PrepareStartUtc })
+                .HasDatabaseName("IX_ScheduleJob_SchedulerScan");
+
             entity.Property(e => e.Id)
                 .HasConversion(ulidToStringConverter)
                 .HasColumnOrder(1);
@@ -467,6 +477,30 @@ public class RadioDbContext : DbContext
 
             entity.Property(e => e.IsEnabled)
                 .HasColumnOrder(18);
+
+            entity.Property(e => e.State)
+                .HasColumnOrder(19);
+
+            entity.Property(e => e.PrepareStartUtc)
+                .HasColumnOrder(20);
+
+            entity.Property(e => e.QueuedAtUtc)
+                .HasColumnOrder(21);
+
+            entity.Property(e => e.ActualStartUtc)
+                .HasColumnOrder(22);
+
+            entity.Property(e => e.CompletedUtc)
+                .HasColumnOrder(23);
+
+            entity.Property(e => e.RetryCount)
+                .HasColumnOrder(24);
+
+            entity.Property(e => e.LastErrorCode)
+                .HasColumnOrder(25);
+
+            entity.Property(e => e.LastErrorDetail)
+                .HasColumnOrder(26);
         });
 
         modelBuilder.Entity<ScheduleJobKeywordReserveRelation>(entity =>

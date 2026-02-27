@@ -17,7 +17,8 @@ namespace RadiKeep.Logics.Logics.NotificationLogic
         IAppConfigurationService config,
         IEntryMapper entryMapper,
         IHttpClientFactory httpClientFactory,
-        INotificationRepository notificationRepository)
+        INotificationRepository notificationRepository,
+        INotificationEventPublisher? notificationEventPublisher = null)
     {
         private HttpClient HttpClient => httpClientFactory.CreateClient(HttpClientNames.Webhook);
 
@@ -82,6 +83,7 @@ namespace RadiKeep.Logics.Logics.NotificationLogic
             try
             {
                 await notificationRepository.MarkReadBeforeAsync(dt, categories);
+                await PublishNotificationChangedSafeAsync();
 
             }
             catch (Exception e)
@@ -141,6 +143,7 @@ namespace RadiKeep.Logics.Logics.NotificationLogic
             try
             {
                 await SetNotificationDbAsync(entry);
+                await PublishNotificationChangedSafeAsync();
                 await PostDiscordWebhookAsync(entry);
             }
             catch (Exception e)
@@ -160,6 +163,7 @@ namespace RadiKeep.Logics.Logics.NotificationLogic
             try
             {
                 await notificationRepository.DeleteAllAsync();
+                await PublishNotificationChangedSafeAsync();
             }
             catch (Exception e)
             {
@@ -246,6 +250,26 @@ namespace RadiKeep.Logics.Logics.NotificationLogic
 
             return configured
                 .ToList();
+        }
+
+        /// <summary>
+        /// お知らせ更新イベント通知を安全に実行する。
+        /// </summary>
+        private async ValueTask PublishNotificationChangedSafeAsync()
+        {
+            if (notificationEventPublisher is null)
+            {
+                return;
+            }
+
+            try
+            {
+                await notificationEventPublisher.PublishAsync(new NotificationChangedEvent(DateTimeOffset.UtcNow));
+            }
+            catch (Exception e)
+            {
+                logger.ZLogWarning(e, $"お知らせ更新イベント通知に失敗しました。");
+            }
         }
     }
 }

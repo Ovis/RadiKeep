@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.EntityFrameworkCore;
 using RadiKeep.Logics.Domain.Recording;
+using RadiKeep.Logics.Domain.Reserve;
 using RadiKeep.Logics.Errors;
 using RadiKeep.Logics.Logics.NotificationLogic;
 using RadiKeep.Logics.Logics.TagLogic;
@@ -21,7 +22,8 @@ namespace RadiKeep.Logics.Logics.RecordingLogic
         RadioDbContext dbContext,
         NotificationLobLogic notificationLobLogic,
         IAppConfigurationService appConfigurationService,
-        TagLobLogic tagLobLogic)
+        TagLobLogic tagLobLogic,
+        IReserveScheduleEventPublisher? reserveScheduleEventPublisher = null)
     {
         /// <summary>
         /// 録音処理
@@ -34,6 +36,7 @@ namespace RadiKeep.Logics.Logics.RecordingLogic
         /// <param name="isOnDemand">聞き逃し配信録音かどうか</param>
         /// <param name="startDelay">開始ディレイ（秒）</param>
         /// <param name="endDelay">終了ディレイ（秒）</param>
+        /// <param name="deleteScheduleOnFinish">録音終了後にScheduleJobを削除するか</param>
         /// <param name="cancellationToken"></param>
         /// <returns>成功可否と例外</returns>
         public async ValueTask<(bool IsSuccess, Exception? Error)> RecordRadioAsync(
@@ -45,6 +48,7 @@ namespace RadiKeep.Logics.Logics.RecordingLogic
             double startDelay,
             double endDelay,
             bool isOnDemand = false,
+            bool deleteScheduleOnFinish = true,
             CancellationToken cancellationToken = default
             )
         {
@@ -76,12 +80,18 @@ namespace RadiKeep.Logics.Logics.RecordingLogic
             {
                 logger.ZLogError(e, $"録音処理で例外発生");
 
-                await DeleteScheduleJobAsync(scheduleJobId, programName);
+                if (deleteScheduleOnFinish)
+                {
+                    await DeleteScheduleJobAsync(scheduleJobId, programName);
+                }
 
                 return (false, e);
             }
 
-            await DeleteScheduleJobAsync(scheduleJobId, programName);
+            if (deleteScheduleOnFinish)
+            {
+                await DeleteScheduleJobAsync(scheduleJobId, programName);
+            }
 
             return (true, null);
         }
@@ -107,6 +117,7 @@ namespace RadiKeep.Logics.Logics.RecordingLogic
                     dbContext.ScheduleJob.Remove(scheduleJob);
                     await dbContext.SaveChangesAsync();
                     await transaction.CommitAsync();
+                    await PublishReserveScheduleChangedSafeAsync();
                 }
             }
             catch (Exception e)
@@ -120,6 +131,26 @@ namespace RadiKeep.Logics.Logics.RecordingLogic
                     category: NoticeCategory.RecordingError,
                     message: $"{programName}の録音に成功しましたが、スケジュールからの削除に失敗しました。"
                 );
+            }
+        }
+
+        /// <summary>
+        /// 録音予定更新イベント通知を安全に実行する。
+        /// </summary>
+        private async ValueTask PublishReserveScheduleChangedSafeAsync()
+        {
+            if (reserveScheduleEventPublisher is null)
+            {
+                return;
+            }
+
+            try
+            {
+                await reserveScheduleEventPublisher.PublishAsync(new ReserveScheduleChangedEvent(DateTimeOffset.UtcNow));
+            }
+            catch (Exception ex)
+            {
+                logger.ZLogWarning(ex, $"録音予定更新イベント通知に失敗しました。");
             }
         }
 
@@ -151,8 +182,8 @@ namespace RadiKeep.Logics.Logics.RecordingLogic
                     reserveIds.Add(schedule.KeywordReserveId.Value);
                 }
 
-                // 既存データ移行や再登録揺れで関連が偏っていても、
-                // 同一番組に紐づくキーワード予約ルールを補完してタグ統合の取りこぼしを防ぐ。
+                // 同一番組に複数予約経路がある場合も、関連キーワード予約を補完して
+                // タグ統合の取りこぼしを防ぐ。
                 var sameProgramRows = await dbContext.ScheduleJob
                     .AsNoTracking()
                     .Where(x => x.ProgramId == schedule.ProgramId && x.ReserveType == ReserveType.Keyword)

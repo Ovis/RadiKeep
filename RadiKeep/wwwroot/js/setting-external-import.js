@@ -21,6 +21,15 @@ export const initExternalImport = (verificationToken, showToast) => {
     if (!scanButton || !applyDefaultTagCheckbox || !markAsListenedCheckbox || !exportButton || !importButton || !importFileInput || !saveButton || !tableBody || !rowTemplate || !paginationList || !totalCountLabel || !selectAllCheckbox) {
         return;
     }
+    const normalizeCandidate = (candidate) => ({
+        isSelected: candidate.isSelected ?? false,
+        filePath: candidate.filePath ?? '',
+        title: candidate.title ?? '',
+        description: candidate.description ?? '',
+        stationName: candidate.stationName ?? '',
+        broadcastAt: candidate.broadcastAt ?? '',
+        tags: candidate.tags ?? []
+    });
     let candidates = [];
     let currentPage = 1;
     const getPageItems = () => {
@@ -156,21 +165,22 @@ export const initExternalImport = (verificationToken, showToast) => {
         await withButtonLoading(scanButton, async () => {
             updateButtons(true);
             try {
+                const requestBody = {
+                    applyDefaultTag: applyDefaultTagCheckbox.checked
+                };
                 const response = await fetch(API_ENDPOINTS.EXTERNAL_IMPORT_SCAN, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                         'RequestVerificationToken': verificationToken
                     },
-                    body: JSON.stringify({
-                        applyDefaultTag: applyDefaultTagCheckbox.checked
-                    })
+                    body: JSON.stringify(requestBody)
                 });
                 if (!response.ok) {
                     throw new Error(await parseErrorResponse(response));
                 }
                 const result = await response.json();
-                candidates = result.data ?? [];
+                candidates = (result.data ?? []).map(normalizeCandidate);
                 currentPage = 1;
                 renderTable();
                 showToast(result.message ?? 'スキャンが完了しました。');
@@ -190,13 +200,14 @@ export const initExternalImport = (verificationToken, showToast) => {
             return;
         }
         try {
+            const requestBody = { candidates };
             const response = await fetch(API_ENDPOINTS.EXTERNAL_IMPORT_EXPORT_CSV, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'RequestVerificationToken': verificationToken
                 },
-                body: JSON.stringify({ candidates })
+                body: JSON.stringify(requestBody)
             });
             if (!response.ok) {
                 throw new Error(await parseErrorResponse(response));
@@ -235,7 +246,7 @@ export const initExternalImport = (verificationToken, showToast) => {
                     throw new Error(await parseErrorResponse(response));
                 }
                 const result = await response.json();
-                candidates = result.data ?? [];
+                candidates = (result.data ?? []).map(normalizeCandidate);
                 currentPage = 1;
                 renderTable();
                 importFileInput.value = '';
@@ -258,16 +269,17 @@ export const initExternalImport = (verificationToken, showToast) => {
         await withButtonLoading(saveButton, async () => {
             updateButtons(true);
             try {
+                const requestBody = {
+                    candidates,
+                    markAsListened: markAsListenedCheckbox.checked
+                };
                 const response = await fetch(API_ENDPOINTS.EXTERNAL_IMPORT_SAVE, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                         'RequestVerificationToken': verificationToken
                     },
-                    body: JSON.stringify({
-                        candidates,
-                        markAsListened: markAsListenedCheckbox.checked
-                    })
+                    body: JSON.stringify(requestBody)
                 });
                 const result = await response.json();
                 if (!response.ok || !result.success) {

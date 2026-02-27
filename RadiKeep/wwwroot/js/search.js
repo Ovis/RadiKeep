@@ -82,16 +82,17 @@ async function reserveProgramWithToast(programId, serviceKind, recordingType, bu
     button.disabled = true;
     button.classList.add('opacity-70');
     try {
+        const requestBody = {
+            programId: programId,
+            radioServiceKind: serviceKind,
+            recordingType: recordingType
+        };
         const response = await fetch(API_ENDPOINTS.PROGRAM_RESERVE, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({
-                programId: programId,
-                radioServiceKind: serviceKind,
-                recordingType: recordingType
-            })
+            body: JSON.stringify(requestBody)
         });
         const result = await response.json();
         if (response.ok && result.success) {
@@ -126,7 +127,7 @@ async function loadTags() {
     try {
         const response = await fetch(API_ENDPOINTS.TAGS);
         const result = await response.json();
-        return (result.data ?? []);
+        return result.data ?? [];
     }
     catch (error) {
         console.error('Error loading tags:', error);
@@ -325,10 +326,11 @@ function renderOptionCard() {
             }
             try {
                 const selectedIds = new Set(Array.from(select.selectedOptions).map((option) => option.value));
+                const requestBody = { name };
                 const response = await fetch(API_ENDPOINTS.TAGS, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name })
+                    body: JSON.stringify(requestBody)
                 });
                 const result = await response.json();
                 if (!response.ok || !result.success) {
@@ -455,17 +457,17 @@ document.getElementById('searchButton').addEventListener('click', async function
         showModal('曜日を選択してください。');
         return;
     }
-    const data = {
-        SelectedRadikoStationIds: selectedRadikoStationIds,
-        SelectedRadiruStationIds: selectedRadiruStationIds,
-        Keyword: keyword,
-        SearchTitleOnly: searchTitleOnly,
-        ExcludedKeyword: excludedKeyword,
-        ExcludeTitleOnly: excludeTitleOnly,
-        SelectedDaysOfWeek: selectedDaysOfWeek,
-        StartTime: startTime,
-        EndTime: endTime,
-        IncludeHistoricalPrograms: includeHistoricalPrograms,
+    const requestBody = {
+        selectedRadikoStationIds: selectedRadikoStationIds,
+        selectedRadiruStationIds: selectedRadiruStationIds,
+        keyword: keyword,
+        searchTitleOnly: searchTitleOnly,
+        excludedKeyword: excludedKeyword,
+        searchTitleOnlyExcludedKeyword: excludeTitleOnly,
+        selectedDaysOfWeek: selectedDaysOfWeek,
+        startTime: startTime,
+        endTime: endTime,
+        includeHistoricalPrograms: includeHistoricalPrograms,
         orderKind: order
     };
     try {
@@ -474,10 +476,10 @@ document.getElementById('searchButton').addEventListener('click', async function
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify(data)
+            body: JSON.stringify(requestBody)
         });
         const result = await response.json();
-        const programs = result.data;
+        const programs = result.data ?? [];
         const searchResultElm = document.getElementById('searchResult');
         const searchResultEmptyElm = document.getElementById('searchResultEmpty');
         const template = document.getElementById('search-program-card-template');
@@ -644,23 +646,23 @@ document.getElementById('recordingButton').addEventListener('click', async funct
         showModal('キーワードを入力してください。');
         return;
     }
-    const data = {
-        SelectedRadikoStationIds: selectedRadikoStationIds,
-        SelectedRadiruStationIds: selectedRadiruStationIds,
-        Keyword: keyword,
-        SearchTitleOnly: searchTitleOnly,
-        ExcludedKeyword: excludedKeyword,
-        ExcludeTitleOnly: excludeTitleOnly,
-        SelectedDaysOfWeek: selectedDaysOfWeek,
-        RecordPath: recordPath,
-        RecordFileName: recordFileName,
-        StartTimeString: startTimeInput,
-        EndTimeString: endTimeInput,
-        IsEnabled: true,
-        StartDelay: parseInt(startDelayInput),
-        EndDelay: parseInt(endDelayInput),
-        TagIds: selectedTagIds,
-        MergeTagBehavior: Number.parseInt(mergeTagBehaviorInput, 10)
+    const requestBody = {
+        selectedRadikoStationIds: selectedRadikoStationIds,
+        selectedRadiruStationIds: selectedRadiruStationIds,
+        keyword: keyword,
+        searchTitleOnly: searchTitleOnly,
+        excludedKeyword: excludedKeyword,
+        excludeTitleOnly: excludeTitleOnly,
+        selectedDaysOfWeek: selectedDaysOfWeek,
+        recordPath: recordPath,
+        recordFileName: recordFileName,
+        startTimeString: startTimeInput,
+        endTimeString: endTimeInput,
+        isEnabled: true,
+        startDelay: parseInt(startDelayInput),
+        endDelay: parseInt(endDelayInput),
+        tagIds: selectedTagIds,
+        mergeTagBehavior: Number.parseInt(mergeTagBehaviorInput, 10)
     };
     try {
         const response = await fetch(API_ENDPOINTS.KEYWORD_RESERVE, {
@@ -668,7 +670,7 @@ document.getElementById('recordingButton').addEventListener('click', async funct
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify(data)
+            body: JSON.stringify(requestBody)
         });
         const result = await response.json();
         if (result.success) {

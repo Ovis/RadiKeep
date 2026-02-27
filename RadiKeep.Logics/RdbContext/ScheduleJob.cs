@@ -103,6 +103,47 @@ namespace RadiKeep.Logics.RdbContext
         public bool IsEnabled { get; set; }
 
         /// <summary>
+        /// 実行状態
+        /// </summary>
+        public ScheduleJobState State { get; set; } = ScheduleJobState.Pending;
+
+        /// <summary>
+        /// 準備開始UTC
+        /// </summary>
+        public DateTimeOffset PrepareStartUtc { get; set; }
+
+        /// <summary>
+        /// 実行キュー投入UTC
+        /// </summary>
+        public DateTimeOffset? QueuedAtUtc { get; set; }
+
+        /// <summary>
+        /// 録音開始UTC
+        /// </summary>
+        public DateTimeOffset? ActualStartUtc { get; set; }
+
+        /// <summary>
+        /// 完了UTC
+        /// </summary>
+        public DateTimeOffset? CompletedUtc { get; set; }
+
+        /// <summary>
+        /// リトライ回数
+        /// </summary>
+        public int RetryCount { get; set; }
+
+        /// <summary>
+        /// 失敗分類
+        /// </summary>
+        public ScheduleJobErrorCode LastErrorCode { get; set; } = ScheduleJobErrorCode.None;
+
+        /// <summary>
+        /// 失敗詳細
+        /// </summary>
+        [MaxLength(500)]
+        public string? LastErrorDetail { get; set; }
+
+        /// <summary>
         /// タグID
         /// </summary>
         public Guid? TagId { get; set; }

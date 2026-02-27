@@ -10,20 +10,21 @@ function updateDocumentTitle(title) {
     document.title = normalized ? `${normalized} - RadiKeep` : defaultDocumentTitle;
 }
 async function ensureHlsScriptLoaded() {
-    if (window.Hls) {
+    const hlsWindow = window;
+    if (hlsWindow.Hls) {
         return true;
     }
     const existing = document.getElementById('global-hls-script');
     if (existing) {
         await new Promise((resolve, reject) => {
-            if (window.Hls) {
+            if (hlsWindow.Hls) {
                 resolve();
                 return;
             }
             existing.addEventListener('load', () => resolve(), { once: true });
             existing.addEventListener('error', () => reject(new Error('hls.js load error')), { once: true });
         }).catch(() => undefined);
-        return !!window.Hls;
+        return !!hlsWindow.Hls;
     }
     const script = document.createElement('script');
     script.id = 'global-hls-script';
@@ -33,7 +34,7 @@ async function ensureHlsScriptLoaded() {
         script.addEventListener('load', () => resolve(), { once: true });
         script.addEventListener('error', () => reject(new Error('hls.js load error')), { once: true });
     }).catch(() => undefined);
-    return !!window.Hls;
+    return !!hlsWindow.Hls;
 }
 function createPlayerShell() {
     const footer = document.getElementById('audio-player');
@@ -130,7 +131,13 @@ async function tryRestorePlayer() {
     const canNativeHls = !!audioElm.canPlayType('application/vnd.apple.mpegurl');
     const canUseHlsJs = await ensureHlsScriptLoaded();
     if (canUseHlsJs) {
-        const hls = new window.Hls();
+        const hlsConstructor = window.Hls;
+        if (!hlsConstructor) {
+            clearPersistedPlayerState();
+            updateDocumentTitle(null);
+            return;
+        }
+        const hls = new hlsConstructor();
         if (state.sourceToken) {
             hls.config.xhrSetup = (xhr) => {
                 xhr.setRequestHeader('X-Radiko-AuthToken', state.sourceToken ?? '');
@@ -139,7 +146,7 @@ async function tryRestorePlayer() {
         currentHls = hls;
         hls.loadSource(state.sourceUrl);
         hls.attachMedia(audioElm);
-        hls.on(window.Hls.Events.MANIFEST_PARSED, () => {
+        hls.on(hlsConstructor.Events.MANIFEST_PARSED, () => {
             if (Number.isFinite(state.currentTime ?? NaN) && (state.currentTime ?? 0) > 0) {
                 audioElm.currentTime = state.currentTime;
             }

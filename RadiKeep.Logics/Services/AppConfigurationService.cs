@@ -687,7 +687,7 @@ namespace RadiKeep.Logics.Services
 
             using var scope = CreateDbContextScope(out var dbContext);
 
-            // 互換性維持のため intervalDays も更新する（0=無効, 7=有効）
+            // 定期実行の有効/無効は intervalDays(0/7) で管理する。
             await UpsertIntAsync(
                 dbContext,
                 AppConfigurationNames.DuplicateDetectionIntervalDays,
@@ -904,11 +904,6 @@ namespace RadiKeep.Logics.Services
 
             // 外部サービス接続用 User-Agent
             var externalServiceUserAgent = GetStringValue(dbContext, AppConfigurationNames.ExternalServiceUserAgent) ?? string.Empty;
-            if (string.IsNullOrWhiteSpace(externalServiceUserAgent))
-            {
-                // 旧キー互換
-                externalServiceUserAgent = GetStringValue(dbContext, AppConfigurationNames.RadiruUserAgent) ?? string.Empty;
-            }
             ExternalServiceUserAgent = string.IsNullOrWhiteSpace(externalServiceUserAgent)
                 ? ExternalServiceOptions.ExternalServiceUserAgent
                 : externalServiceUserAgent;

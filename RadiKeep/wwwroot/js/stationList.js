@@ -10,11 +10,35 @@ async function getStationList(kind) {
         case RadioServiceKind.Radiko:
             return fetch(API_ENDPOINTS.STATION_LIST_RADIKO)
                 .then(response => response.json())
-                .then(result => result.data);
+                .then(result => {
+                const source = result.data;
+                const normalized = {};
+                Object.keys(source ?? {}).forEach((regionName) => {
+                    normalized[regionName] = (source[regionName] ?? []).map((x) => ({
+                        areaId: x.regionId ?? '',
+                        areaName: x.regionName ?? regionName,
+                        stationId: x.stationId ?? '',
+                        stationName: x.stationName ?? ''
+                    }));
+                });
+                return normalized;
+            });
         case RadioServiceKind.Radiru:
             return fetch(API_ENDPOINTS.STATION_LIST_RADIRU)
                 .then(response => response.json())
-                .then(result => result.data);
+                .then(result => {
+                const source = result.data;
+                const normalized = {};
+                Object.keys(source ?? {}).forEach((areaName) => {
+                    normalized[areaName] = (source[areaName] ?? []).map((x) => ({
+                        areaId: x.areaId ?? '',
+                        areaName: x.areaName ?? areaName,
+                        stationId: x.stationId ?? '',
+                        stationName: x.stationName ?? ''
+                    }));
+                });
+                return normalized;
+            });
         default:
             throw new Error(`Unsupported RadioServiceKind: ${kind}`);
     }

@@ -391,7 +391,7 @@ public class ReserveRepository(RadioDbContext dbContext) : IReserveRepository
             return [];
         }
 
-        var legacyRows = await dbContext.ScheduleJob
+        var scheduleKeywordRows = await dbContext.ScheduleJob
             .AsNoTracking()
             .Where(x => jobIdList.Contains(x.Id) && x.KeywordReserveId != null)
             .Select(x => new { x.Id, KeywordReserveId = x.KeywordReserveId!.Value })
@@ -403,7 +403,7 @@ public class ReserveRepository(RadioDbContext dbContext) : IReserveRepository
             .Select(x => new { Id = x.ScheduleJobId, x.KeywordReserveId })
             .ToListAsync(cancellationToken);
 
-        return legacyRows
+        return scheduleKeywordRows
             .Concat(relationRows)
             .GroupBy(x => x.Id)
             .ToDictionary(
@@ -429,11 +429,11 @@ public class ReserveRepository(RadioDbContext dbContext) : IReserveRepository
 
         try
         {
-            var legacyJobs = await dbContext.ScheduleJob
+            var scheduleKeywordJobs = await dbContext.ScheduleJob
                 .Where(x => jobIdList.Contains(x.Id) && x.KeywordReserveId == keywordReserveId)
                 .ToListAsync(cancellationToken);
 
-            foreach (var job in legacyJobs)
+            foreach (var job in scheduleKeywordJobs)
             {
                 job.KeywordReserveId = null;
             }
@@ -461,7 +461,7 @@ public class ReserveRepository(RadioDbContext dbContext) : IReserveRepository
                     g => g.Key,
                     g => g.OrderBy(x => x.SortOrder).ThenBy(x => x.KeywordReserveId).First().KeywordReserveId);
 
-            foreach (var job in legacyJobs.Where(x => x.KeywordReserveId == null))
+            foreach (var job in scheduleKeywordJobs.Where(x => x.KeywordReserveId == null))
             {
                 if (firstRelationDict.TryGetValue(job.Id, out var fallbackKeywordReserveId))
                 {

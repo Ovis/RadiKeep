@@ -1,7 +1,17 @@
-import { Program, SearchData, KeywordReserveData, Tag } from './ApiInterface';
+import {
+    ApiResponseContract,
+    ProgramForApiResponseContract as Program,
+    TagEntryResponseContract as Tag
+} from './openapi-response-contract.js';
 import { createCard, showModal, closeModal } from './cardUtil.js';
 import { API_ENDPOINTS } from './const.js';
 import { AvailabilityTimeFree, RecordingType, RadioServiceKind } from './define.js';
+import type {
+    KeywordReserveEntryContract,
+    ProgramInformationRequestContract,
+    ProgramSearchEntityContract,
+    TagUpsertRequestContract
+} from './openapi-contract.js';
 import { showConfirmDialog } from './feedback.js';
 import { generateStationList } from './stationList.js';
 import { sanitizeHtml } from './utils.js';
@@ -96,19 +106,21 @@ async function reserveProgramWithToast(
     button.classList.add('opacity-70');
 
     try {
+        const requestBody: ProgramInformationRequestContract = {
+            programId: programId,
+            radioServiceKind: serviceKind,
+            recordingType: recordingType
+        };
+
         const response = await fetch(API_ENDPOINTS.PROGRAM_RESERVE, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({
-                programId: programId,
-                radioServiceKind: serviceKind,
-                recordingType: recordingType
-            })
+            body: JSON.stringify(requestBody)
         });
 
-        const result = await response.json();
+        const result = await response.json() as ApiResponseContract<null>;
         if (response.ok && result.success) {
             reservedRecordingKeys.add(reservationKey);
             button.textContent = '予約済み';
@@ -145,8 +157,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 async function loadTags(): Promise<Tag[]> {
     try {
         const response = await fetch(API_ENDPOINTS.TAGS);
-        const result = await response.json();
-        return (result.data ?? []) as Tag[];
+        const result = await response.json() as ApiResponseContract<Tag[]>;
+        return result.data ?? [];
     } catch (error) {
         console.error('Error loading tags:', error);
         return [];
@@ -386,18 +398,19 @@ function renderOptionCard(): void {
 
             try {
                 const selectedIds = new Set(Array.from(select.selectedOptions).map((option) => option.value));
+                const requestBody: TagUpsertRequestContract = { name };
                 const response = await fetch(API_ENDPOINTS.TAGS, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name })
+                    body: JSON.stringify(requestBody)
                 });
-                const result = await response.json();
+                const result = await response.json() as ApiResponseContract<Tag>;
                 if (!response.ok || !result.success) {
                     showSearchToast(result.message ?? 'タグ作成に失敗しました。', false);
                     return;
                 }
 
-                const createdTagId = (result.data as Tag | undefined)?.id ?? '';
+                const createdTagId = result.data?.id ?? '';
                 if (createdTagId) {
                     selectedIds.add(createdTagId);
                 }
@@ -546,17 +559,17 @@ document.getElementById('searchButton')!.addEventListener('click', async functio
         showModal('曜日を選択してください。');
         return;
     }
-    const data: SearchData = {
-        SelectedRadikoStationIds: selectedRadikoStationIds,
-        SelectedRadiruStationIds: selectedRadiruStationIds,
-        Keyword: keyword,
-        SearchTitleOnly: searchTitleOnly,
-        ExcludedKeyword: excludedKeyword,
-        ExcludeTitleOnly: excludeTitleOnly,
-        SelectedDaysOfWeek: selectedDaysOfWeek,
-        StartTime: startTime,
-        EndTime: endTime,
-        IncludeHistoricalPrograms: includeHistoricalPrograms,
+    const requestBody: ProgramSearchEntityContract = {
+        selectedRadikoStationIds: selectedRadikoStationIds,
+        selectedRadiruStationIds: selectedRadiruStationIds,
+        keyword: keyword,
+        searchTitleOnly: searchTitleOnly,
+        excludedKeyword: excludedKeyword,
+        searchTitleOnlyExcludedKeyword: excludeTitleOnly,
+        selectedDaysOfWeek: selectedDaysOfWeek,
+        startTime: startTime,
+        endTime: endTime,
+        includeHistoricalPrograms: includeHistoricalPrograms,
         orderKind: order
     };
 
@@ -566,11 +579,11 @@ document.getElementById('searchButton')!.addEventListener('click', async functio
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify(data)
+            body: JSON.stringify(requestBody)
         });
 
-        const result = await response.json();
-        const programs = result.data as Program[];
+        const result = await response.json() as ApiResponseContract<Program[]>;
+        const programs = result.data ?? [];
 
         const searchResultElm = document.getElementById('searchResult') as HTMLElement;
         const searchResultEmptyElm = document.getElementById('searchResultEmpty') as HTMLElement | null;
@@ -768,23 +781,23 @@ document.getElementById('recordingButton')!.addEventListener('click', async func
         return;
     }
 
-    const data: KeywordReserveData = {
-        SelectedRadikoStationIds: selectedRadikoStationIds,
-        SelectedRadiruStationIds: selectedRadiruStationIds,
-        Keyword: keyword,
-        SearchTitleOnly: searchTitleOnly,
-        ExcludedKeyword: excludedKeyword,
-        ExcludeTitleOnly: excludeTitleOnly,
-        SelectedDaysOfWeek: selectedDaysOfWeek,
-        RecordPath: recordPath,
-        RecordFileName: recordFileName,
-        StartTimeString: startTimeInput,
-        EndTimeString: endTimeInput,
-        IsEnabled: true,
-        StartDelay: parseInt(startDelayInput),
-        EndDelay: parseInt(endDelayInput),
-        TagIds: selectedTagIds,
-        MergeTagBehavior: Number.parseInt(mergeTagBehaviorInput, 10)
+    const requestBody: KeywordReserveEntryContract = {
+        selectedRadikoStationIds: selectedRadikoStationIds,
+        selectedRadiruStationIds: selectedRadiruStationIds,
+        keyword: keyword,
+        searchTitleOnly: searchTitleOnly,
+        excludedKeyword: excludedKeyword,
+        excludeTitleOnly: excludeTitleOnly,
+        selectedDaysOfWeek: selectedDaysOfWeek,
+        recordPath: recordPath,
+        recordFileName: recordFileName,
+        startTimeString: startTimeInput,
+        endTimeString: endTimeInput,
+        isEnabled: true,
+        startDelay: parseInt(startDelayInput),
+        endDelay: parseInt(endDelayInput),
+        tagIds: selectedTagIds,
+        mergeTagBehavior: Number.parseInt(mergeTagBehaviorInput, 10)
     };
 
     try {
@@ -793,10 +806,10 @@ document.getElementById('recordingButton')!.addEventListener('click', async func
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify(data)
+            body: JSON.stringify(requestBody)
         });
 
-        const result = await response.json();
+        const result = await response.json() as ApiResponseContract<null>;
         if (result.success) {
             showSearchToast("自動予約ルールを追加しました。");
         } else {
@@ -806,4 +819,5 @@ document.getElementById('recordingButton')!.addEventListener('click', async func
         showSearchToast("録音予約に失敗しました。", false);
     }
 });
+
 

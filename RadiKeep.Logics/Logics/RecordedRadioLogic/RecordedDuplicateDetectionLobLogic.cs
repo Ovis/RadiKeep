@@ -1,8 +1,8 @@
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.DependencyInjection;
+using RadiKeep.Logics.Domain.AppEvent;
 using RadiKeep.Logics.Logics.NotificationLogic;
-using RadiKeep.Logics.Logics.RecordJobLogic;
 using RadiKeep.Logics.Models;
-using RadiKeep.Logics.Services;
 using ZLogger;
 
 namespace RadiKeep.Logics.Logics.RecordedRadioLogic;
@@ -12,10 +12,11 @@ namespace RadiKeep.Logics.Logics.RecordedRadioLogic;
 /// </summary>
 public class RecordedDuplicateDetectionLobLogic(
     ILogger<RecordedDuplicateDetectionLobLogic> logger,
-    IAppConfigurationService appConfigurationService,
-    RecordJobLobLogic recordJobLobLogic,
+    IServiceScopeFactory serviceScopeFactory,
     RecordedProgramDuplicateDetectionService detectionService,
-    NotificationLobLogic notificationLobLogic)
+    NotificationLobLogic notificationLobLogic,
+    IRecordedDuplicateDetectionStatusPublisher? statusPublisher = null,
+    IAppToastEventPublisher? appToastEventPublisher = null)
 {
     private static readonly SemaphoreSlim ExecutionGate = new(1, 1);
     private static readonly object StatusLock = new();
@@ -33,15 +34,28 @@ public class RecordedDuplicateDetectionLobLogic(
         var normalizedMaxPhase1Groups = NormalizeMaxPhase1Groups(maxPhase1Groups);
         var normalizedPhase2Mode = NormalizePhase2Mode(phase2Mode);
         var normalizedBroadcastClusterWindowHours = NormalizeBroadcastClusterWindowHours(broadcastClusterWindowHours);
-        var (isSuccess, error) = await recordJobLobLogic.SetImmediateDuplicateDetectionJobAsync(
-            normalizedLookbackDays,
-            normalizedMaxPhase1Groups,
-            normalizedPhase2Mode,
-            normalizedBroadcastClusterWindowHours);
-        if (!isSuccess)
-        {
-            return (false, "同一番組候補チェックジョブの開始に失敗しました。", error);
-        }
+
+        // 即時実行はスケジューラを介さず、バックグラウンドタスクとして直接起動する。
+        _ = Task.Run(
+            async () =>
+            {
+                try
+                {
+                    // バックグラウンド用にスコープを作り直し、破棄済みスコープ参照を回避する。
+                    using var scope = serviceScopeFactory.CreateScope();
+                    var scopedLogic = scope.ServiceProvider.GetRequiredService<RecordedDuplicateDetectionLobLogic>();
+                    await scopedLogic.ExecuteAsync(
+                        "manual",
+                        normalizedLookbackDays,
+                        normalizedMaxPhase1Groups,
+                        normalizedPhase2Mode,
+                        normalizedBroadcastClusterWindowHours);
+                }
+                catch (Exception ex)
+                {
+                    logger.ZLogError(ex, $"同一番組候補チェックジョブの起動後実行で例外が発生しました。");
+                }
+            });
 
         return (true, "同一番組候補チェックジョブを開始しました。完了後にお知らせへ通知されます。", null);
     }
@@ -113,7 +127,7 @@ public class RecordedDuplicateDetectionLobLogic(
         }
 
         var startedAt = DateTimeOffset.UtcNow;
-        UpdateStatus(running: true, startedAt, null, false, "抽出処理を開始しました。");
+        await UpdateStatusAsync(running: true, startedAt, null, false, "抽出処理を開始しました。", cancellationToken);
         lock (CandidateLock)
         {
             _lastCandidates = [];
@@ -142,19 +156,20 @@ public class RecordedDuplicateDetectionLobLogic(
             {
                 var message = errorMessage ?? "同一番組候補チェックに失敗しました。";
                 logger.ZLogError(error, $"類似録音抽出ジョブ失敗 source={triggerSource} message={message}");
-                UpdateStatus(false, startedAt, completedAt, false, message);
+                await UpdateStatusAsync(false, startedAt, completedAt, false, message, cancellationToken);
 
                 await notificationLobLogic.SetNotificationAsync(
                     LogLevel.Error,
                     NoticeCategory.DuplicateProgramDetection,
                     $"同一番組候補チェックに失敗しました。({triggerSource}) {message}");
+                await PublishGlobalToastSafeAsync("同一番組候補のチェックに失敗しました。", false, cancellationToken);
                 return;
             }
 
             const string summary = "同一番組候補のチェックが完了しました。";
             logger.ZLogInformation($"{summary}");
 
-            UpdateStatus(false, startedAt, completedAt, true, summary);
+            await UpdateStatusAsync(false, startedAt, completedAt, true, summary, cancellationToken);
             lock (CandidateLock)
             {
                 _lastCandidates = list;
@@ -164,25 +179,27 @@ public class RecordedDuplicateDetectionLobLogic(
                 LogLevel.Information,
                 NoticeCategory.DuplicateProgramDetection,
                 summary);
+            await PublishGlobalToastSafeAsync(summary, true, cancellationToken);
         }
         catch (OperationCanceledException)
         {
             var completedAt = DateTimeOffset.UtcNow;
             const string message = "類似録音抽出ジョブがキャンセルされました。";
             logger.ZLogWarning($"{message}");
-            UpdateStatus(false, startedAt, completedAt, false, message);
+            await UpdateStatusAsync(false, startedAt, completedAt, false, message, cancellationToken);
         }
         catch (Exception ex)
         {
             var completedAt = DateTimeOffset.UtcNow;
             const string message = "類似録音抽出ジョブ実行中に例外が発生しました。";
             logger.ZLogError(ex, $"{message}");
-            UpdateStatus(false, startedAt, completedAt, false, message);
+            await UpdateStatusAsync(false, startedAt, completedAt, false, message, cancellationToken);
 
             await notificationLobLogic.SetNotificationAsync(
                 LogLevel.Error,
                 NoticeCategory.DuplicateProgramDetection,
                 $"{message} ({triggerSource})");
+            await PublishGlobalToastSafeAsync("同一番組候補のチェックに失敗しました。", false, cancellationToken);
         }
         finally
         {
@@ -190,27 +207,18 @@ public class RecordedDuplicateDetectionLobLogic(
         }
     }
 
-    public async ValueTask SchedulePeriodicJobAsync()
-    {
-        var enabled = appConfigurationService.DuplicateDetectionIntervalDays > 0;
-        var (isSuccess, error) = await recordJobLobLogic.SetDuplicateDetectionJobAsync(
-            enabled,
-            appConfigurationService.DuplicateDetectionScheduleDayOfWeek,
-            appConfigurationService.DuplicateDetectionScheduleHour,
-            appConfigurationService.DuplicateDetectionScheduleMinute);
-        if (!isSuccess)
-        {
-            logger.ZLogError(error, $"類似録音抽出定期ジョブのスケジュールに失敗しました。 enabled={enabled}");
-        }
-    }
-
-    private static void UpdateStatus(
+    /// <summary>
+    /// 同一番組候補チェック状態を更新し、SignalRへ配信する。
+    /// </summary>
+    private async ValueTask UpdateStatusAsync(
         bool running,
         DateTimeOffset? startedAtUtc,
         DateTimeOffset? completedAtUtc,
         bool succeeded,
-        string message)
+        string message,
+        CancellationToken cancellationToken)
     {
+        RecordedDuplicateDetectionStatusEntry snapshot;
         lock (StatusLock)
         {
             _status.IsRunning = running;
@@ -218,6 +226,50 @@ public class RecordedDuplicateDetectionLobLogic(
             _status.LastCompletedAtUtc = completedAtUtc;
             _status.LastSucceeded = succeeded;
             _status.LastMessage = message;
+            snapshot = new RecordedDuplicateDetectionStatusEntry
+            {
+                IsRunning = _status.IsRunning,
+                LastStartedAtUtc = _status.LastStartedAtUtc,
+                LastCompletedAtUtc = _status.LastCompletedAtUtc,
+                LastSucceeded = _status.LastSucceeded,
+                LastMessage = _status.LastMessage
+            };
+        }
+
+        if (statusPublisher is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await statusPublisher.PublishAsync(snapshot, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            logger.ZLogWarning(ex, $"同一番組候補チェック状態イベント通知に失敗しました。");
+        }
+    }
+
+    /// <summary>
+    /// 全画面トーストイベント通知を安全に実行する。
+    /// </summary>
+    private async ValueTask PublishGlobalToastSafeAsync(string message, bool isSuccess, CancellationToken cancellationToken)
+    {
+        if (appToastEventPublisher is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await appToastEventPublisher.PublishAsync(
+                new AppToastEvent(message, isSuccess, DateTimeOffset.UtcNow),
+                cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            logger.ZLogWarning(ex, $"全画面トーストイベント通知に失敗しました。");
         }
     }
 

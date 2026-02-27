@@ -12,16 +12,17 @@ async function reserveProgramWithToast(programId, recordingType, button) {
     button.disabled = true;
     button.classList.add('opacity-70');
     try {
+        const requestBody = {
+            programId: programId,
+            radioServiceKind: RadioServiceKind.Radiru,
+            recordingType: recordingType
+        };
         const response = await fetch(API_ENDPOINTS.PROGRAM_RESERVE, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({
-                programId: programId,
-                radioServiceKind: RadioServiceKind.Radiru,
-                recordingType: recordingType
-            })
+            body: JSON.stringify(requestBody)
         });
         const result = await response.json();
         if (response.ok && result.success) {
@@ -83,7 +84,7 @@ async function loadStationList() {
 async function populateDateSelect() {
     const response = await fetch(API_ENDPOINTS.RADIO_DATE);
     const result = await response.json();
-    const dates = result.data;
+    const dates = result.data ?? [];
     const dateSelect = document.getElementById('dateSelect');
     dateSelect.replaceChildren();
     dates.forEach(dateElm => {
@@ -105,7 +106,7 @@ async function loadPrograms() {
     if (stationId && date) {
         const response = await fetch(`${API_ENDPOINTS.PROGRAM_LIST_RADIRU}?d=${date}&s=${stationId}&a=${areaId}`);
         const result = await response.json();
-        const programs = result.data;
+        const programs = result.data ?? [];
         renderPrograms(programs);
     }
     else {

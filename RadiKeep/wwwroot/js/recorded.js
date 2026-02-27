@@ -32,6 +32,9 @@ let currentPlayingSourceUrl = null;
 let currentPlayingSourceToken = null;
 let currentPlayingTitle = null;
 const defaultDocumentTitle = document.title;
+let recordingHubConnection = null;
+let isRealtimeReloadRunning = false;
+let hasRealtimeReloadPending = false;
 function updateDocumentTitleByRecordingId(recordId) {
     if (currentPlayingTitle && currentPlayingTitle.trim().length > 0) {
         document.title = `${currentPlayingTitle.trim()} - RadiKeep`;
@@ -137,6 +140,58 @@ function applySortSelectValue(value) {
 }
 function normalizeTagName(value) {
     return value.trim().toLocaleLowerCase();
+}
+/**
+ * SignalR経由の変更通知を受けた際に録音一覧を再同期する
+ */
+async function reloadRecordingsFromRealtimeAsync() {
+    if (isRealtimeReloadRunning) {
+        hasRealtimeReloadPending = true;
+        return;
+    }
+    isRealtimeReloadRunning = true;
+    try {
+        do {
+            hasRealtimeReloadPending = false;
+            await loadRecordings(currentPage, sortBy, isDescending, searchQuery);
+        } while (hasRealtimeReloadPending);
+    }
+    finally {
+        isRealtimeReloadRunning = false;
+    }
+}
+/**
+ * 録音状態変更のSignalR接続を初期化する
+ */
+async function initializeRecordingHubConnectionAsync() {
+    const signalRNamespace = window.signalR;
+    if (!signalRNamespace) {
+        console.warn('SignalRクライアントが読み込まれていないため、録音Push同期を無効化します。');
+        return;
+    }
+    const connection = new signalRNamespace.HubConnectionBuilder()
+        .withUrl('/hubs/recordings')
+        .withAutomaticReconnect()
+        .configureLogging(signalRNamespace.LogLevel.Warning)
+        .build();
+    connection.on('recordingStateChanged', () => {
+        void reloadRecordingsFromRealtimeAsync();
+    });
+    connection.onreconnected(() => {
+        void reloadRecordingsFromRealtimeAsync();
+    });
+    connection.onclose((error) => {
+        if (error) {
+            console.warn('SignalR接続が切断されました。', error);
+        }
+    });
+    try {
+        await connection.start();
+        recordingHubConnection = connection;
+    }
+    catch (error) {
+        console.warn('SignalR接続の開始に失敗しました。', error);
+    }
 }
 let tagsModalElement = null;
 let tagsModalTitleElement = null;
@@ -444,10 +499,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                 try {
                     const selectedFilterTagIds = Array.from(tagFilterSelect.selectedOptions).map(option => option.value);
                     const selectedBulkTagIds = Array.from(tagBulkSelect.selectedOptions).map(option => option.value);
+                    const requestBody = { name };
                     const response = await fetch(API_ENDPOINTS.TAGS, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ name })
+                        body: JSON.stringify(requestBody)
                     });
                     const result = await response.json();
                     if (!response.ok || !result.success) {
@@ -508,9 +564,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     renderSelectedTagChips(tagBulkSelect, tagBulkChipsContainer, recordedTagChipOptions);
     window.addEventListener('beforeunload', () => {
         persistCurrentPlaybackState();
+        if (recordingHubConnection) {
+            void recordingHubConnection.stop();
+            recordingHubConnection = null;
+        }
     });
     await loadRecordings(currentPage, sortBy, isDescending, searchQuery);
     await tryResumePersistedPlayback();
+    await initializeRecordingHubConnectionAsync();
     window.addEventListener('resize', () => {
         const currentMobileView = isMobileView();
         if (currentMobileView !== previousMobileView) {
@@ -581,7 +642,7 @@ async function loadStationFilters() {
     try {
         const response = await fetch(API_ENDPOINTS.PROGRAM_RECORDED_STATIONS);
         const result = await response.json();
-        const stations = (result.data ?? []);
+        const stations = result.data ?? [];
         stations.forEach((station) => {
             const option = document.createElement('option');
             option.value = station.stationId;
@@ -605,7 +666,7 @@ async function loadTags() {
     try {
         const response = await fetch(API_ENDPOINTS.TAGS);
         const result = await response.json();
-        const tags = (result.data ?? []);
+        const tags = result.data ?? [];
         tagFilterSelect.innerHTML = '';
         tagBulkSelect.innerHTML = '';
         tags.forEach((tag) => {
@@ -1156,7 +1217,7 @@ async function playProgram(recordId) {
         footer.appendChild(playerContainerElm);
         audio = document.getElementById('audio-player-elm');
     }
-    const m3u8Url = `/api/v1/recordings/play/${recordId}`;
+    const m3u8Url = `/api/recordings/play/${recordId}`;
     const title = lastLoadedRecordings.find((x) => x.id === recordId)?.title ?? null;
     await playProgramFromSource(m3u8Url, null, recordId, title, 0, playerPlaybackRateOptions[0]);
 }
@@ -1361,20 +1422,16 @@ async function deleteProgram(recordId) {
     if (!deleteMode) {
         return;
     }
-    const payload = {
-        recordingIds: [recordId],
-        deleteFiles: deleteMode === 'files-and-db'
-    };
+    const deleteFiles = deleteMode === 'files-and-db';
     try {
-        const response = await fetch(API_ENDPOINTS.DELETE_PROGRAM_BULK, {
-            method: 'POST',
-            headers: createMutationHeaders(verificationToken),
-            body: JSON.stringify(payload)
+        const endpoint = `/api/recordings/${encodeURIComponent(recordId)}?deleteFiles=${deleteFiles.toString()}`;
+        const response = await fetch(endpoint, {
+            method: 'DELETE',
+            headers: createMutationHeaders(verificationToken)
         });
         const result = await response.json();
         if (result.success) {
-            const data = result.data;
-            if (data && data.successCount <= 0) {
+            if (!result.data) {
                 showGlobalToast(result.message ?? "削除に失敗しました。", false);
                 return;
             }

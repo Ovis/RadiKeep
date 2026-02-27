@@ -1,9 +1,9 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Moq;
-using Quartz;
 using RadiKeep.Logics.Context;
 using RadiKeep.Logics.Domain.ProgramSchedule;
+using RadiKeep.Logics.Domain.Notification;
 using RadiKeep.Logics.Domain.Reserve;
 using RadiKeep.Logics.Infrastructure.Notification;
 using RadiKeep.Logics.Infrastructure.ProgramSchedule;
@@ -36,11 +36,9 @@ namespace RadiKeep.Logics.Tests.LogicTest
         private Mock<ILogger<ReserveLobLogic>> _loggerMock;
         private Mock<IRadioAppContext> _appContextMock;
         private Mock<RadikoUniqueProcessLogic> _radikoUniqueProcessLogicMock;
-        private Mock<RecordJobLobLogic> _recordJobLobLogicMock;
+        private RecordJobLobLogic _recordJobLobLogic = null!;
         private Mock<NotificationLobLogic> _notificationLobLogicMock;
         private Mock<ProgramScheduleLobLogic> _programScheduleLobLogicMock;
-        private Mock<IScheduler> _schedulerMock = null!;
-        private List<IJobDetail> _scheduledJobDetails = null!;
 
         [SetUp]
         public void Setup()
@@ -60,34 +58,9 @@ namespace RadiKeep.Logics.Tests.LogicTest
             _configServiceMock.SetupGet(x => x.RadikoStationDic).Returns(stations);
             _configServiceMock.SetupGet(x => x.RadiruArea).Returns("130");
 
-            var schedulerFactoryMock = new Mock<ISchedulerFactory>();
-            _schedulerMock = new Mock<IScheduler>();
-            _scheduledJobDetails = [];
-
-            _schedulerMock
-                .Setup(x => x.ScheduleJob(It.IsAny<IJobDetail>(), It.IsAny<ITrigger>(), It.IsAny<CancellationToken>()))
-                .Callback<IJobDetail, ITrigger, CancellationToken>((detail, _, _) =>
-                {
-                    _scheduledJobDetails.Add(detail);
-                })
-                .Returns(Task.FromResult(DateTimeOffset.UtcNow));
-            _schedulerMock
-                .Setup(x => x.DeleteJob(It.IsAny<JobKey>(), It.IsAny<CancellationToken>()))
-                .Returns(Task.FromResult(true));
-            _schedulerMock
-                .Setup(x => x.CheckExists(It.IsAny<JobKey>(), It.IsAny<CancellationToken>()))
-                .Returns(Task.FromResult(false));
-
-            schedulerFactoryMock.Setup(
-                    x => x.GetScheduler(It.IsAny<CancellationToken>()))
-                .Returns(Task.FromResult(_schedulerMock.Object));
-
-            _recordJobLobLogicMock = new Mock<RecordJobLobLogic>(
+            _recordJobLobLogic = new RecordJobLobLogic(
                 new Mock<ILogger<RecordJobLobLogic>>().Object,
-                schedulerFactoryMock.Object,
-                _configServiceMock.Object,
-                _appContextMock.Object
-            );
+                _configServiceMock.Object);
 
             _notificationLobLogicMock = new Mock<NotificationLobLogic>(
                 new Mock<ILogger<NotificationLobLogic>>().Object,
@@ -95,7 +68,8 @@ namespace RadiKeep.Logics.Tests.LogicTest
                 _configServiceMock.Object,
                 _entryMapper,
                 new FakeHttpClientFactory(new HttpClient(new FakeHttpMessageHandler())),
-                new NotificationRepository(DbContext)
+                new NotificationRepository(DbContext),
+                Mock.Of<INotificationEventPublisher>()
             );
 
             _radikoUniqueProcessLogicMock = new Mock<RadikoUniqueProcessLogic>(
@@ -115,7 +89,7 @@ namespace RadiKeep.Logics.Tests.LogicTest
                 radikoApiClientMock.Object,
                 radiruApiClientMock.Object,
                 programScheduleRepository,
-                _recordJobLobLogicMock.Object,
+                _recordJobLobLogic,
                 _entryMapper,
                 _notificationLobLogicMock.Object
             );
@@ -126,7 +100,7 @@ namespace RadiKeep.Logics.Tests.LogicTest
                 _configServiceMock.Object,
                 reserveRepository,
                 programScheduleRepository,
-                _recordJobLobLogicMock.Object,
+                _recordJobLobLogic,
                 _programScheduleLobLogicMock.Object,
                 _notificationLobLogicMock.Object,
                 new TagLobLogic(new Mock<ILogger<TagLobLogic>>().Object, DbContext),
@@ -917,7 +891,7 @@ namespace RadiKeep.Logics.Tests.LogicTest
         }
 
         [Test]
-        public async ValueTask SetKeywordReserveAsync_マージンがScheduleJobとQuartzへ反映される()
+        public async ValueTask SetKeywordReserveAsync_マージンがScheduleJobとスケジューラへ反映される()
         {
             // Arrange
             var now = _appContextMock.Object.StandardDateTimeOffset;
@@ -980,12 +954,9 @@ namespace RadiKeep.Logics.Tests.LogicTest
             Assert.That(scheduled!.StartDelay, Is.EqualTo(TimeSpan.FromSeconds(90)));
             Assert.That(scheduled.EndDelay, Is.EqualTo(TimeSpan.FromSeconds(120)));
 
-            var targetJobDetail = _scheduledJobDetails
-                .FirstOrDefault(j => j.JobDataMap.TryGetString("programId", out var p) && p == programEntry.ProgramId);
-
-            Assert.That(targetJobDetail, Is.Not.Null);
-            Assert.That(Convert.ToDouble(targetJobDetail!.JobDataMap["startDelay"]), Is.EqualTo(90d));
-            Assert.That(Convert.ToDouble(targetJobDetail!.JobDataMap["endDelay"]), Is.EqualTo(120d));
+            // 予約ジョブに保持されるマージン値を確認する。
+            Assert.That(scheduled.StartDelay, Is.EqualTo(TimeSpan.FromSeconds(90)));
+            Assert.That(scheduled.EndDelay, Is.EqualTo(TimeSpan.FromSeconds(120)));
         }
 
         [Test]
@@ -1202,9 +1173,7 @@ namespace RadiKeep.Logics.Tests.LogicTest
             var programScheduleRepoMock = new Mock<IProgramScheduleRepository>();
             var recordJobLogic = new RecordJobLobLogic(
                 new Mock<ILogger<RecordJobLobLogic>>().Object,
-                new Mock<ISchedulerFactory>().Object,
-                _configServiceMock.Object,
-                _appContextMock.Object);
+                _configServiceMock.Object);
 
             var logic = new ReserveLobLogic(
                 _loggerMock.Object,
@@ -1234,7 +1203,7 @@ namespace RadiKeep.Logics.Tests.LogicTest
         }
 
         [Test]
-        public async Task SetRecordingJobByProgramIdAsync_ジョブ登録失敗_失敗を返す()
+        public async Task SetRecordingJobByProgramIdAsync_保存失敗_失敗を返す()
         {
             var now = _appContextMock.Object.StandardDateTimeOffset;
             var programEntry = new RadikoProgram
@@ -1259,30 +1228,16 @@ namespace RadiKeep.Logics.Tests.LogicTest
                 new FakeRadikoApiClient(),
                 new FakeRadiruApiClient(),
                 programScheduleRepository,
-                _recordJobLobLogicMock.Object,
+                _recordJobLobLogic,
                 _entryMapper);
 
             var reserveRepositoryMock = new Mock<IReserveRepository>();
             reserveRepositoryMock.Setup(r => r.AddScheduleJobAsync(It.IsAny<ScheduleJob>(), It.IsAny<CancellationToken>()))
-                .Returns(ValueTask.CompletedTask);
-
-            var schedulerMock = new Mock<IScheduler>();
-            schedulerMock
-                .Setup(x => x.CheckExists(It.IsAny<JobKey>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync(false);
-            schedulerMock
-                .Setup(x => x.ScheduleJob(It.IsAny<IJobDetail>(), It.IsAny<ITrigger>(), It.IsAny<CancellationToken>()))
-                .ThrowsAsync(new Exception("schedule fail"));
-
-            var schedulerFactory = new Mock<ISchedulerFactory>();
-            schedulerFactory.Setup(x => x.GetScheduler(It.IsAny<CancellationToken>()))
-                .ReturnsAsync(schedulerMock.Object);
+                .ThrowsAsync(new Exception("save fail"));
 
             var recordJobLogic = new RecordJobLobLogic(
                 new Mock<ILogger<RecordJobLobLogic>>().Object,
-                schedulerFactory.Object,
-                _configServiceMock.Object,
-                _appContextMock.Object);
+                _configServiceMock.Object);
 
             var logic = new ReserveLobLogic(
                 _loggerMock.Object,
@@ -1303,3 +1258,5 @@ namespace RadiKeep.Logics.Tests.LogicTest
         }
     }
 }
+
+

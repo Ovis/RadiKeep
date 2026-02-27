@@ -7,7 +7,7 @@ using RadiKeep.Logics.RdbContext;
 
 #nullable disable
 
-namespace RadiKeep.Logics.Migrations
+namespace RadiKeep.Logics.RdbContext.Migrations
 {
     [DbContext(typeof(RadioDbContext))]
     partial class RadioDbContextModelSnapshot : ModelSnapshot
@@ -794,11 +794,19 @@ namespace RadiKeep.Logics.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnOrder(1);
 
+                    b.Property<long?>("ActualStartUtc")
+                        .HasColumnType("INTEGER")
+                        .HasColumnOrder(22);
+
                     b.Property<string>("AreaId")
                         .IsRequired()
                         .HasMaxLength(5)
                         .HasColumnType("TEXT")
                         .HasColumnOrder(5);
+
+                    b.Property<long?>("CompletedUtc")
+                        .HasColumnType("INTEGER")
+                        .HasColumnOrder(23);
 
                     b.Property<string>("Description")
                         .IsRequired()
@@ -828,17 +836,34 @@ namespace RadiKeep.Logics.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnOrder(2);
 
+                    b.Property<int>("LastErrorCode")
+                        .HasColumnType("INTEGER")
+                        .HasColumnOrder(25);
+
+                    b.Property<string>("LastErrorDetail")
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT")
+                        .HasColumnOrder(26);
+
                     b.Property<string>("Performer")
                         .IsRequired()
                         .HasMaxLength(150)
                         .HasColumnType("TEXT")
                         .HasColumnOrder(14);
 
+                    b.Property<long>("PrepareStartUtc")
+                        .HasColumnType("INTEGER")
+                        .HasColumnOrder(20);
+
                     b.Property<string>("ProgramId")
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("TEXT")
                         .HasColumnOrder(6);
+
+                    b.Property<long?>("QueuedAtUtc")
+                        .HasColumnType("INTEGER")
+                        .HasColumnOrder(21);
 
                     b.Property<int>("RecordingType")
                         .HasColumnType("INTEGER")
@@ -847,6 +872,10 @@ namespace RadiKeep.Logics.Migrations
                     b.Property<int>("ReserveType")
                         .HasColumnType("INTEGER")
                         .HasColumnOrder(17);
+
+                    b.Property<int>("RetryCount")
+                        .HasColumnType("INTEGER")
+                        .HasColumnOrder(24);
 
                     b.Property<int>("ServiceKind")
                         .HasColumnType("INTEGER")
@@ -859,6 +888,10 @@ namespace RadiKeep.Logics.Migrations
                     b.Property<TimeSpan?>("StartDelay")
                         .HasColumnType("TEXT")
                         .HasColumnOrder(12);
+
+                    b.Property<int>("State")
+                        .HasColumnType("INTEGER")
+                        .HasColumnOrder(19);
 
                     b.Property<string>("StationId")
                         .IsRequired()
@@ -882,6 +915,14 @@ namespace RadiKeep.Logics.Migrations
                         .HasColumnOrder(7);
 
                     b.HasKey("Id");
+
+                    b.HasIndex("IsEnabled", "State", "PrepareStartUtc")
+                        .HasDatabaseName("IX_ScheduleJob_SchedulerScan");
+
+                    b.HasIndex("ProgramId", "ServiceKind", "StartDateTime", "ReserveType", "KeywordReserveId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_ScheduleJob_Active_Unique")
+                        .HasFilter("State IN (0, 1, 2, 3)");
 
                     b.ToTable("ScheduleJob");
                 });

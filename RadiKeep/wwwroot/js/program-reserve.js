@@ -6,6 +6,13 @@ let recordingsCache = [];
 let currentSortKey = 'time';
 let currentSortDirection = 'asc';
 const showToast = createInlineToast('program-reserve-result-toast', 'program-reserve-result-toast-message');
+let reserveHubConnection = null;
+let isRealtimeReloadRunning = false;
+let hasRealtimeReloadPending = false;
+// API由来の録音種別値を表示文字列へ変換する。
+const getRecordingTypeDisplayName = (value) => RecordingTypeMap[Number(value)]?.displayName ?? '未定義';
+// API由来の予約種別値を表示文字列へ変換する。
+const getReserveTypeDisplayName = (value) => ReserveTypeMap[Number(value)]?.displayName ?? '未定義';
 const getSortSelectValue = (sortKey, direction) => `${sortKey}_${direction}`;
 const applySortSelectValue = (value) => {
     const [sortKey, direction] = value.split('_');
@@ -122,13 +129,72 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     }
     await loadRecordings();
+    await initializeReserveHubConnectionAsync();
+    window.addEventListener('beforeunload', () => {
+        if (reserveHubConnection) {
+            void reserveHubConnection.stop();
+            reserveHubConnection = null;
+        }
+    });
 });
+/**
+ * SignalR経由の変更通知を受けた際に予約一覧を再同期する
+ */
+const reloadReservesFromRealtimeAsync = async () => {
+    if (isRealtimeReloadRunning) {
+        hasRealtimeReloadPending = true;
+        return;
+    }
+    isRealtimeReloadRunning = true;
+    try {
+        do {
+            hasRealtimeReloadPending = false;
+            await loadRecordings();
+        } while (hasRealtimeReloadPending);
+    }
+    finally {
+        isRealtimeReloadRunning = false;
+    }
+};
+/**
+ * 録音予定更新のSignalR接続を初期化する
+ */
+const initializeReserveHubConnectionAsync = async () => {
+    const signalRNamespace = window.signalR;
+    if (!signalRNamespace) {
+        console.warn('SignalRクライアントが読み込まれていないため、録音予定Push同期を無効化します。');
+        return;
+    }
+    const connection = new signalRNamespace.HubConnectionBuilder()
+        .withUrl('/hubs/reserves')
+        .withAutomaticReconnect()
+        .configureLogging(signalRNamespace.LogLevel.Warning)
+        .build();
+    connection.on('reserveScheduleChanged', () => {
+        void reloadReservesFromRealtimeAsync();
+    });
+    connection.onreconnected(() => {
+        void reloadReservesFromRealtimeAsync();
+    });
+    connection.onclose((error) => {
+        if (error) {
+            console.warn('録音予定SignalR接続が切断されました。', error);
+        }
+    });
+    try {
+        await connection.start();
+        reserveHubConnection = connection;
+    }
+    catch (error) {
+        console.warn('録音予定SignalR接続の開始に失敗しました。', error);
+    }
+};
 const loadRecordings = async () => {
     try {
         localStorage.removeItem('program-reserve-list');
         const response = await fetch(API_ENDPOINTS.RESERVE_PROGRAM_LIST);
         const result = await response.json();
-        const data = result.data;
+        const data = result.data ?? [];
         recordingsCache = data;
         localStorage.setItem('program-reserve-list', JSON.stringify(data));
         renderRecordings(data);
@@ -160,15 +226,15 @@ const renderRecordings = (recordings) => {
         const onAirStartTime = new Date(reserve.startDateTime).toLocaleDateString('ja-JP', dateTimeFormatOptions);
         const onAirEndTime = new Date(reserve.endDateTime).toLocaleTimeString('ja-JP', timeFormatOptions);
         setTextContent(row, '.onair-date', `${onAirStartTime}～${onAirEndTime}`);
-        setTextContent(row, '.recording-type', RecordingTypeMap[reserve.recordingType].displayName);
-        setTextContent(row, '.reserve-type', ReserveTypeMap[reserve.reserveType].displayName);
+        setTextContent(row, '.recording-type', getRecordingTypeDisplayName(reserve.recordingType));
+        setTextContent(row, '.reserve-type', getReserveTypeDisplayName(reserve.reserveType));
         setTextContent(row, '.reserve-status', reserve.isEnabled ? '有効' : '無効');
         setEventListener(row, '.detail-button', 'click', async () => await showDetailModal(reserve));
         if (reserve.reserveType === ReserveType.Program) {
             row.querySelector('.status-button')?.remove();
             const deleteAction = async () => {
-                const data = {
-                    Id: reserve.id,
+                const requestBody = {
+                    id: reserve.id,
                 };
                 const confirmed = await showConfirmDialog('削除してもよいですか？');
                 if (!confirmed) {
@@ -180,7 +246,7 @@ const renderRecordings = (recordings) => {
                         headers: {
                             'Content-Type': 'application/json'
                         },
-                        body: JSON.stringify(data)
+                        body: JSON.stringify(requestBody)
                     });
                     const rawText = await response.text();
                     let result = null;
@@ -192,7 +258,7 @@ const renderRecordings = (recordings) => {
                             result = null;
                         }
                     }
-                    const message = result?.message ?? result?.Message;
+                    const message = result?.message;
                     const isSuccess = result?.success === true || (response.ok && result == null);
                     if (isSuccess) {
                         row.remove();
@@ -225,8 +291,8 @@ const renderRecordings = (recordings) => {
                 statusButton.setAttribute('aria-label', label);
             }
             const updateStatusAction = async () => {
-                const data = {
-                    Id: reserve.id,
+                const requestBody = {
+                    id: reserve.id,
                 };
                 try {
                     const response = await fetch(API_ENDPOINTS.RESERVE_SWITCH_STATUS, {
@@ -234,7 +300,7 @@ const renderRecordings = (recordings) => {
                         headers: {
                             'Content-Type': 'application/json'
                         },
-                        body: JSON.stringify(data)
+                        body: JSON.stringify(requestBody)
                     });
                     const result = await response.json();
                     if (result.success) {
@@ -274,8 +340,8 @@ const getSortedRecordings = (recordings) => {
             return byTimeThenTitle(a, b);
         }
         if (currentSortKey === 'recordingType') {
-            const aText = RecordingTypeMap[a.recordingType].displayName;
-            const bText = RecordingTypeMap[b.recordingType].displayName;
+            const aText = getRecordingTypeDisplayName(a.recordingType);
+            const bText = getRecordingTypeDisplayName(b.recordingType);
             const compare = aText.localeCompare(bText, 'ja');
             if (compare !== 0) {
                 return compare * multiplier;
@@ -283,8 +349,8 @@ const getSortedRecordings = (recordings) => {
             return byTimeThenTitle(a, b);
         }
         if (currentSortKey === 'reserveType') {
-            const aText = ReserveTypeMap[a.reserveType].displayName;
-            const bText = ReserveTypeMap[b.reserveType].displayName;
+            const aText = getReserveTypeDisplayName(a.reserveType);
+            const bText = getReserveTypeDisplayName(b.reserveType);
             const compare = aText.localeCompare(bText, 'ja');
             if (compare !== 0) {
                 return compare * multiplier;

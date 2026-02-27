@@ -5,6 +5,27 @@ let availableTags = [];
 let keywordReserves = [];
 let draggingReserveId = null;
 let isReordering = false;
+const normalizeKeywordReserve = (entry) => ({
+    id: String(entry.id ?? ''),
+    sortOrder: Number(entry.sortOrder ?? 0),
+    selectedRadikoStationIds: entry.selectedRadikoStationIds ?? [],
+    selectedRadiruStationIds: entry.selectedRadiruStationIds ?? [],
+    keyword: entry.keyword ?? '',
+    searchTitleOnly: entry.searchTitleOnly ?? false,
+    excludedKeyword: entry.excludedKeyword ?? '',
+    excludeTitleOnly: entry.excludeTitleOnly ?? false,
+    recordPath: entry.recordPath ?? '',
+    recordFileName: entry.recordFileName ?? '',
+    selectedDaysOfWeek: (entry.selectedDaysOfWeek ?? []).map((x) => Number(x)),
+    startTime: (entry.startTime ?? entry.startTimeString ?? '00:00:00'),
+    endTime: (entry.endTime ?? entry.endTimeString ?? '00:00:00'),
+    isEnabled: entry.isEnabled ?? false,
+    startDelay: entry.startDelay === null || entry.startDelay === undefined ? undefined : Number(entry.startDelay),
+    endDelay: entry.endDelay === null || entry.endDelay === undefined ? undefined : Number(entry.endDelay),
+    tagIds: entry.tagIds ?? [],
+    tags: entry.tags ?? [],
+    mergeTagBehavior: entry.mergeTagBehavior === undefined ? undefined : Number(entry.mergeTagBehavior)
+});
 const normalizeTagName = (value) => value.trim().toLocaleLowerCase();
 document.addEventListener('DOMContentLoaded', () => {
     loadTags().then(() => loadRecordings());
@@ -13,7 +34,7 @@ const loadTags = async () => {
     try {
         const response = await fetch(API_ENDPOINTS.TAGS);
         const result = await response.json();
-        availableTags = (result.data ?? []);
+        availableTags = result.data ?? [];
     }
     catch (error) {
         console.error('Error loading tags:', error);
@@ -25,6 +46,7 @@ const loadRecordings = async () => {
         const response = await fetch(API_ENDPOINTS.RESERVE_KEYWORD_LIST);
         const result = await response.json();
         const data = (result.data ?? [])
+            .map(normalizeKeywordReserve)
             .slice()
             .sort((a, b) => (a.sortOrder ?? Number.MAX_SAFE_INTEGER) - (b.sortOrder ?? Number.MAX_SAFE_INTEGER));
         keywordReserves = data;
@@ -41,12 +63,13 @@ const persistKeywordReserveOrder = async () => {
     isReordering = true;
     try {
         const ids = keywordReserves.map((reserve) => reserve.id);
+        const requestBody = { ids };
         const response = await fetch(API_ENDPOINTS.RESERVE_KEYWORD_REORDER, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ ids })
+            body: JSON.stringify(requestBody)
         });
         const result = await response.json();
         if (!result.success) {
@@ -138,7 +161,7 @@ const renderRecordings = async (recordings) => {
         setEventListener(row, ".move-down-button", "click", async () => await moveReserve(reserve.id, 'down'));
         const deleteAction = async () => {
             const data = {
-                "Id": reserve.id,
+                id: reserve.id,
             };
             const confirmed = await showConfirmDialog('削除してもよいですか？', { okText: '削除する' });
             if (!confirmed) {
@@ -220,7 +243,7 @@ async function showKeywordReserveModal(rowId) {
         console.error('JSON data is missing on the table row element.');
         return;
     }
-    const reserveEntry = JSON.parse(json);
+    const reserveEntry = normalizeKeywordReserve(JSON.parse(json));
     const template = document.getElementById('keyword-reserve-modal-template');
     const modal = template.content.cloneNode(true);
     setEventListener(modal, ".modal-card .modal-card-head button.delete", "click", () => document.getElementById('keyword-reserve-modal')?.remove());
@@ -375,10 +398,11 @@ async function showKeywordReserveModal(rowId) {
                 }
                 try {
                     const selectedIds = new Set(Array.from(tagSelect.selectedOptions).map(option => option.value));
+                    const requestBody = { name };
                     const response = await fetch(API_ENDPOINTS.TAGS, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ name })
+                        body: JSON.stringify(requestBody)
                     });
                     const result = await response.json();
                     if (!response.ok || !result.success) {
@@ -451,25 +475,25 @@ async function showKeywordReserveModal(rowId) {
         const endDelay = document.getElementById('endDelay').value;
         const mergeTagBehavior = Number.parseInt(document.getElementById('mergeTagBehavior').value, 10);
         const isEnabled = document.getElementById('enabled').checked;
-        const data = {
-            Id: reserveEntry.id,
-            SortOrder: reserveEntry.sortOrder,
-            SelectedRadikoStationIds: selectedRadikoStationIds,
-            SelectedRadiruStationIds: selectedRadiruStationIds,
-            Keyword: keyword,
-            SearchTitleOnly: searchTitleOnly,
-            ExcludedKeyword: excludedKeyword,
-            ExcludeTitleOnly: excludeTitleOnly,
-            SelectedDaysOfWeek: selectedDaysOfWeek,
-            RecordPath: recordPath,
-            RecordFileName: recordFileName,
-            StartTimeString: startTime,
-            EndTimeString: endTime,
-            IsEnabled: isEnabled,
-            StartDelay: parseInt(startDelay),
-            EndDelay: parseInt(endDelay),
-            TagIds: selectedTagIds,
-            MergeTagBehavior: Number.isNaN(mergeTagBehavior) ? 0 : mergeTagBehavior
+        const requestBody = {
+            id: reserveEntry.id,
+            sortOrder: reserveEntry.sortOrder,
+            selectedRadikoStationIds: selectedRadikoStationIds,
+            selectedRadiruStationIds: selectedRadiruStationIds,
+            keyword: keyword,
+            searchTitleOnly: searchTitleOnly,
+            excludedKeyword: excludedKeyword,
+            excludeTitleOnly: excludeTitleOnly,
+            selectedDaysOfWeek: selectedDaysOfWeek,
+            recordPath: recordPath,
+            recordFileName: recordFileName,
+            startTimeString: startTime,
+            endTimeString: endTime,
+            isEnabled: isEnabled,
+            startDelay: parseInt(startDelay),
+            endDelay: parseInt(endDelay),
+            tagIds: selectedTagIds,
+            mergeTagBehavior: Number.isNaN(mergeTagBehavior) ? 0 : mergeTagBehavior
         };
         try {
             const response = await fetch(API_ENDPOINTS.UPDATE_KEYWORD_RESERVE, {
@@ -477,7 +501,7 @@ async function showKeywordReserveModal(rowId) {
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify(data)
+                body: JSON.stringify(requestBody)
             });
             const result = await response.json();
             if (result.success) {
