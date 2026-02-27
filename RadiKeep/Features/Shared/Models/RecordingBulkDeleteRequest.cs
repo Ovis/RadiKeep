@@ -1,4 +1,4 @@
-namespace RadiKeep.Areas.Api.Models
+namespace RadiKeep.Features.Shared.Models
 {
     /// <summary>
     /// 録音番組一括削除のリクエスト
@@ -16,3 +16,4 @@ namespace RadiKeep.Areas.Api.Models
         public bool DeleteFiles { get; set; } = true;
     }
 }
+

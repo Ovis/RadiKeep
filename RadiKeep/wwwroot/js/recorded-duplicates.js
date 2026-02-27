@@ -160,7 +160,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         const audio = getOrCreatePlayer();
-        const m3u8Url = `/api/v1/recordings/play/${recordId}`;
+        const m3u8Url = `/api/recordings/play/${recordId}`;
         const startOffsetSeconds = getPlayerStartOffsetSeconds();
         currentPlayingRecordingId = recordId;
         syncDuplicatePlayButtons();

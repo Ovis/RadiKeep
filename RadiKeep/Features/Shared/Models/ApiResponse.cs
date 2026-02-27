@@ -1,4 +1,4 @@
-namespace RadiKeep.Areas.Api.Models;
+namespace RadiKeep.Features.Shared.Models;
 
 /// <summary>
 /// API共通レスポンス
@@ -96,3 +96,4 @@ public static class ApiResponse
         return ApiResponse<object?>.Fail(message, code);
     }
 }
+

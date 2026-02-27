@@ -1,7 +1,7 @@
-﻿using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
 using RadiKeep.Logics.Models.Enums;
 
-namespace RadiKeep.Areas.Api.Models
+namespace RadiKeep.Features.Shared.Models
 {
     public class ProgramInformationRequestEntry
     {
@@ -21,19 +21,5 @@ namespace RadiKeep.Areas.Api.Models
         /// </summary>
         public RecordingType RecordingType { get; set; }
     }
-
-    public class UpdateRadikoLoginEntity
-    {
-        /// <summary>
-        /// radikoログインユーザーID
-        /// </summary>
-        [Required]
-        public string UserId { get; set; } = string.Empty;
-
-        /// <summary>
-        /// radikoログインパスワード
-        /// </summary>
-        [Required]
-        public string Password { get; set; } = string.Empty;
-    }
 }
+

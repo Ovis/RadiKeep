@@ -1156,7 +1156,7 @@ async function playProgram(recordId) {
         footer.appendChild(playerContainerElm);
         audio = document.getElementById('audio-player-elm');
     }
-    const m3u8Url = `/api/v1/recordings/play/${recordId}`;
+    const m3u8Url = `/api/recordings/play/${recordId}`;
     const title = lastLoadedRecordings.find((x) => x.id === recordId)?.title ?? null;
     await playProgramFromSource(m3u8Url, null, recordId, title, 0, playerPlaybackRateOptions[0]);
 }
@@ -1361,20 +1361,16 @@ async function deleteProgram(recordId) {
     if (!deleteMode) {
         return;
     }
-    const payload = {
-        recordingIds: [recordId],
-        deleteFiles: deleteMode === 'files-and-db'
-    };
+    const deleteFiles = deleteMode === 'files-and-db';
     try {
-        const response = await fetch(API_ENDPOINTS.DELETE_PROGRAM_BULK, {
-            method: 'POST',
-            headers: createMutationHeaders(verificationToken),
-            body: JSON.stringify(payload)
+        const endpoint = `/api/recordings/${encodeURIComponent(recordId)}?deleteFiles=${deleteFiles.toString()}`;
+        const response = await fetch(endpoint, {
+            method: 'DELETE',
+            headers: createMutationHeaders(verificationToken)
         });
         const result = await response.json();
         if (result.success) {
-            const data = result.data;
-            if (data && data.successCount <= 0) {
+            if (!result.data) {
                 showGlobalToast(result.message ?? "削除に失敗しました。", false);
                 return;
             }

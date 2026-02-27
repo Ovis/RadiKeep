@@ -1,4 +1,4 @@
-namespace RadiKeep.Areas.Api.Models;
+namespace RadiKeep.Features.Shared.Models;
 
 /// <summary>
 /// タグ作成・更新リクエスト
@@ -7,3 +7,4 @@ public class TagUpsertRequest
 {
     public string Name { get; set; } = string.Empty;
 }
+

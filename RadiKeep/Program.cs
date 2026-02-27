@@ -8,7 +8,13 @@ using RadiKeep.DependencyInjection;
 using RadiKeep.Endpoints;
 using RadiKeep.Filters;
 using RadiKeep.Features.Recording;
+using RadiKeep.Features.Notification;
+using RadiKeep.Features.General;
 using RadiKeep.Hubs;
+using RadiKeep.Features.Tag;
+using RadiKeep.Features.Reserve;
+using RadiKeep.Features.Program;
+using RadiKeep.Features.Setting;
 using RadiKeep.Logics.Infrastructure.Recording;
 using RadiKeep.Logics.Logics;
 using RadiKeep.Logics.RdbContext;
@@ -112,7 +118,6 @@ app.UseStaticFiles();
     });
 }
 
-
 app.UseRouting();
 
 app.UseAuthorization();
@@ -127,8 +132,15 @@ if (app.Environment.IsDevelopment())
 #pragma warning disable ASP0014
 app.UseEndpoints(endpoints =>
 {
-    endpoints.MapVnextEndpoints();
+    endpoints.MapApiEndpoints();
+    endpoints.MapGeneralEndpoints();
+    endpoints.MapProgramEndpoints();
+    endpoints.MapSettingEndpoints();
+    endpoints.MapExternalImportEndpoints();
     endpoints.MapRecordingEndpoints();
+    endpoints.MapNotificationEndpoints();
+    endpoints.MapTagEndpoints();
+    endpoints.MapReserveEndpoints();
     endpoints.MapHub<RecordingHub>("/hubs/recordings");
 
     endpoints.MapControllerRoute(
@@ -199,3 +211,4 @@ static string? EnsureLinuxSettingsFile(string localSettingsPath, string systemSe
         return null;
     }
 }
+

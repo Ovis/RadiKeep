@@ -1,4 +1,4 @@
-namespace RadiKeep.Areas.Api.Models;
+namespace RadiKeep.Features.Shared.Models;
 
 /// <summary>
 /// 類似録音抽出の手動実行オプション
@@ -25,3 +25,4 @@ public class DuplicateDetectionRunRequest
     /// </summary>
     public int BroadcastClusterWindowHours { get; set; } = 48;
 }
+

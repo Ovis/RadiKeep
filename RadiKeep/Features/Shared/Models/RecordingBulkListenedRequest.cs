@@ -1,4 +1,4 @@
-namespace RadiKeep.Areas.Api.Models;
+namespace RadiKeep.Features.Shared.Models;
 
 /// <summary>
 /// 録音番組の一括既読/未読更新リクエスト
@@ -15,3 +15,4 @@ public class RecordingBulkListenedRequest
     /// </summary>
     public bool IsListened { get; set; }
 }
+
