@@ -5,7 +5,10 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.FileProviders;
 using RadiKeep.Application;
 using RadiKeep.DependencyInjection;
+using RadiKeep.Endpoints;
 using RadiKeep.Filters;
+using RadiKeep.Features.Recording;
+using RadiKeep.Hubs;
 using RadiKeep.Logics.Infrastructure.Recording;
 using RadiKeep.Logics.Logics;
 using RadiKeep.Logics.RdbContext;
@@ -69,6 +72,7 @@ builder.Services.AddLogicDiCollection(config);
 // for API
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddOpenApi();
+builder.Services.AddSignalR();
 
 
 var app = builder.Build();
@@ -123,6 +127,10 @@ if (app.Environment.IsDevelopment())
 #pragma warning disable ASP0014
 app.UseEndpoints(endpoints =>
 {
+    endpoints.MapVnextEndpoints();
+    endpoints.MapRecordingEndpoints();
+    endpoints.MapHub<RecordingHub>("/hubs/recordings");
+
     endpoints.MapControllerRoute(
         name: "areas",
         pattern: "{area:exists}/{controller=Home}/{action=Index}/{id?}"
