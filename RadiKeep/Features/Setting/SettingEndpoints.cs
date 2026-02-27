@@ -280,7 +280,8 @@ public static class SettingEndpoints
 
             try
             {
-                _ = Task.Run(async () => await programUpdateRunner.ExecuteAsync("radiko-login"));
+                // リクエストスコープ内で実行し、破棄済み DbContext 参照を防ぐ。
+                await programUpdateRunner.ExecuteAsync("radiko-login");
             }
             catch (Exception ex)
             {

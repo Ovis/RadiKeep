@@ -59,8 +59,8 @@ public static class ListRecordings
             query.StationId ?? string.Empty,
             parsedTagIds,
             query.TagMode ?? "or",
-            query.UntaggedOnly,
-            query.UnlistenedOnly);
+            query.UntaggedOnly ?? false,
+            query.UnlistenedOnly ?? false);
 
         if (!isSuccess || list == null)
         {
@@ -150,8 +150,8 @@ public sealed record ListRecordingsQuery
     public string? StationId { get; init; }
     public string? TagIds { get; init; }
     public string? TagMode { get; init; } = "or";
-    public bool UntaggedOnly { get; init; }
-    public bool UnlistenedOnly { get; init; }
+    public bool? UntaggedOnly { get; init; }
+    public bool? UnlistenedOnly { get; init; }
 }
 
 /// <summary>

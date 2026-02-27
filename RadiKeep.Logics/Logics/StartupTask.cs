@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.DependencyInjection;
 using RadiKeep.Logics.Errors;
 using RadiKeep.Logics.Logics.NotificationLogic;
 using RadiKeep.Logics.Logics.ProgramScheduleLogic;
@@ -20,6 +21,7 @@ namespace RadiKeep.Logics.Logics
         StorageCapacityMonitorLobLogic storageCapacityMonitorLobLogic,
         StationLobLogic stationLobLogic,
         NotificationLobLogic notificationLobLogic,
+        IServiceScopeFactory? serviceScopeFactory = null,
         ProgramUpdateRunner? programUpdateRunner = null)
     {
         public async Task InitializeAsync()
@@ -81,8 +83,28 @@ namespace RadiKeep.Logics.Logics
                     // 24時間以内に番組表更新が行われていない場合のみ、起動時に即時更新を実行する。
                     if (await programScheduleLogic.HasProgramScheduleBeenUpdatedWithin24Hours() is false)
                     {
-                        if (programUpdateRunner != null)
+                        if (serviceScopeFactory != null)
                         {
+                            // 起動をブロックしないため、更新はバックグラウンドで開始する。
+                            // 専用スコープを作成して破棄済み DbContext 参照を防ぐ。
+                            _ = Task.Run(
+                                async () =>
+                                {
+                                    try
+                                    {
+                                        using var scope = serviceScopeFactory.CreateScope();
+                                        var scopedRunner = scope.ServiceProvider.GetRequiredService<ProgramUpdateRunner>();
+                                        await scopedRunner.ExecuteAsync("startup");
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        logger.ZLogError(ex, $"起動時の番組表更新バックグラウンド実行でエラーが発生しました。");
+                                    }
+                                });
+                        }
+                        else if (programUpdateRunner != null)
+                        {
+                            // サービススコープ生成手段がない場合のみ、既存インスタンスで実行する。
                             _ = Task.Run(async () => await programUpdateRunner.ExecuteAsync("startup"));
                         }
                     }
