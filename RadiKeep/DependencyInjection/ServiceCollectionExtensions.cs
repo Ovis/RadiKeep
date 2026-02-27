@@ -288,6 +288,7 @@ public static class ServiceCollectionExtensions
 
     private static IServiceCollection AddBackgroundJobs(this IServiceCollection services)
     {
+        services.AddHostedService<RecordingScheduleBackgroundService>();
         services.AddHostedService<ProgramUpdateScheduleBackgroundService>();
         services.AddHostedService<MaintenanceCleanupScheduleBackgroundService>();
         services.AddHostedService<StorageCapacityMonitorBackgroundService>();

@@ -72,12 +72,6 @@ namespace RadiKeep.Logics.Logics
                     }
                 }
 
-
-                // ジョブ情報をDBから取得して実行登録
-                {
-                    await programScheduleLogic.SetScheduleJobFromDbAsync();
-                }
-
                 // 番組表更新関係
                 {
                     // 24時間以内に番組表更新が行われていない場合のみ、起動時に即時更新を実行する。
