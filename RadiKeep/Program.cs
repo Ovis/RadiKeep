@@ -58,14 +58,19 @@ builder.Logging.AddLoggingDi(config);
 
 // DataProtection
 {
-    var keysPath = config["RadiKeep:DataProtectionKeysPath"];
-    if (string.IsNullOrWhiteSpace(keysPath))
+    var dataProtectionBuilder = builder.Services.AddDataProtection();
+
+    if (!OperatingSystem.IsWindows())
     {
-        keysPath = Path.Combine(builder.Environment.ContentRootPath, "keys");
+        var keysPath = config["RadiKeep:DataProtectionKeysPath"];
+        if (string.IsNullOrWhiteSpace(keysPath))
+        {
+            keysPath = Path.Combine(builder.Environment.ContentRootPath, "keys");
+        }
+
+        Directory.CreateDirectory(keysPath);
+        dataProtectionBuilder.PersistKeysToFileSystem(new DirectoryInfo(keysPath));
     }
-    Directory.CreateDirectory(keysPath);
-    builder.Services.AddDataProtection()
-        .PersistKeysToFileSystem(new DirectoryInfo(keysPath));
 }
 
 // ServiceCollection
