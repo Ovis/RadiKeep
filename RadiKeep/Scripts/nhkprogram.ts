@@ -7,7 +7,7 @@ import {
 import { API_ENDPOINTS } from './const.js';
 import { RecordingType, RadioServiceKind } from './define.js';
 import type { ProgramInformationRequestContract } from './openapi-contract.js';
-import { sanitizeHtml } from './utils.js';
+import { parseUtcDateTime, sanitizeHtml } from './utils.js';
 import { createInlineToast, wireInlineToastClose } from './inline-toast.js';
 
 const reservedRecordingKeys = new Set<string>();
@@ -255,7 +255,7 @@ function renderPrograms(programs: Program[]): void {
         }
 
         if (onDemandBtn) {
-            const expires = program.onDemandExpiresAtUtc ? new Date(program.onDemandExpiresAtUtc) : null;
+            const expires = parseUtcDateTime(program.onDemandExpiresAtUtc);
             const isExpired = !expires || Number.isNaN(expires.getTime()) || expires.getTime() <= now.getTime();
             const canShow = endTime <= now;
             const hasOnDemandUrl = !!program.onDemandContentUrl;

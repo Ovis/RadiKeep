@@ -15,7 +15,7 @@ import type {
 } from './openapi-contract.js';
 import { showConfirmDialog } from './feedback.js';
 import { generateStationList } from './stationList.js';
-import { sanitizeHtml } from './utils.js';
+import { parseUtcDateTime, sanitizeHtml } from './utils.js';
 import { clearMultiSelect, renderSelectedTagChips, enableTouchLikeMultiSelect } from './tag-select-ui.js';
 import { createInlineToast, wireInlineToastClose } from './inline-toast.js';
 import { setOverlayLoading } from './loading.js';
@@ -859,9 +859,7 @@ document.getElementById('searchButton')!.addEventListener('click', async functio
                 const isTimeFreeAvailable =
                     program.availabilityTimeFree === AvailabilityTimeFree.Available ||
                     program.availabilityTimeFree === AvailabilityTimeFree.PartiallyAvailable;
-                const onDemandExpiresAt = program.onDemandExpiresAtUtc
-                    ? new Date(program.onDemandExpiresAtUtc).getTime()
-                    : Number.NaN;
+                const onDemandExpiresAt = parseUtcDateTime(program.onDemandExpiresAtUtc)?.getTime() ?? Number.NaN;
                 const isOnDemandAvailable =
                     program.serviceKind === RadioServiceKind.Radiru &&
                     !!program.onDemandContentUrl &&
