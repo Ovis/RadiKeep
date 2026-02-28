@@ -2,6 +2,10 @@ type ButtonLoadingOptions = {
     busyText?: string;
 };
 
+type OverlayLoadingOptions = {
+    busyText?: string;
+};
+
 /**
  * ボタンをローディング表示に切り替えて非同期処理を実行する
  */
@@ -28,5 +32,28 @@ export async function withButtonLoading<T>(
         button.innerHTML = originalHtml;
         button.disabled = originalDisabled;
         button.removeAttribute('aria-busy');
+    }
+}
+
+/**
+ * 画面中央のローディングオーバーレイ表示を切り替える
+ */
+export function setOverlayLoading(
+    overlay: HTMLElement,
+    isLoading: boolean,
+    options?: OverlayLoadingOptions): void
+{
+    const message = overlay.querySelector<HTMLElement>('[data-loading-message]');
+    if (message && options?.busyText) {
+        message.textContent = options.busyText;
+    }
+
+    overlay.classList.toggle('is-active', isLoading);
+    overlay.setAttribute('aria-hidden', isLoading ? 'false' : 'true');
+
+    if (isLoading) {
+        overlay.setAttribute('aria-busy', 'true');
+    } else {
+        overlay.removeAttribute('aria-busy');
     }
 }

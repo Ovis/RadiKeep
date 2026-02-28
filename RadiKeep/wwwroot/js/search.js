@@ -6,6 +6,7 @@ import { generateStationList } from './stationList.js';
 import { sanitizeHtml } from './utils.js';
 import { clearMultiSelect, renderSelectedTagChips, enableTouchLikeMultiSelect } from './tag-select-ui.js';
 import { createInlineToast, wireInlineToastClose } from './inline-toast.js';
+import { setOverlayLoading } from './loading.js';
 const reservedRecordingKeys = new Set();
 let availableTags = [];
 const normalizeTagName = (value) => value.trim().toLocaleLowerCase();
@@ -439,6 +440,8 @@ function renderOptionCard() {
     optionDivElm.appendChild(cardElm);
 }
 document.getElementById('searchButton').addEventListener('click', async function () {
+    const searchButton = this;
+    const searchLoadingOverlay = document.getElementById('searchLoadingOverlay');
     const selectedRadikoStationIds = Array.from(document.querySelectorAll('input[name="SelectedRadikoStationIds"]:checked')).map(checkbox => checkbox.value);
     const selectedRadiruStationIds = Array.from(document.querySelectorAll('input[name="SelectedRadiruStationIds"]:checked')).map(checkbox => checkbox.value);
     const keyword = document.getElementById('Keyword').value;
@@ -471,6 +474,10 @@ document.getElementById('searchButton').addEventListener('click', async function
         orderKind: order
     };
     try {
+        searchButton.disabled = true;
+        if (searchLoadingOverlay) {
+            setOverlayLoading(searchLoadingOverlay, true, { busyText: '検索中...' });
+        }
         const response = await fetch(API_ENDPOINTS.PROGRAM_SEARCH, {
             method: 'POST',
             headers: {
@@ -617,6 +624,12 @@ document.getElementById('searchButton').addEventListener('click', async function
     catch (e) {
         console.error(e);
         showSearchToast('検索に失敗しました。', false);
+    }
+    finally {
+        searchButton.disabled = false;
+        if (searchLoadingOverlay) {
+            setOverlayLoading(searchLoadingOverlay, false);
+        }
     }
 });
 // 自動予約ルール追加ボタン
