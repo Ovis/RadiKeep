@@ -723,6 +723,7 @@ document.getElementById('searchButton')!.addEventListener('click', async functio
     const startTime = `${startTimeInput}:00`;
     const endTime = `${endTimeInput}:00`;
     const includeHistoricalPrograms = (document.getElementById('IncludeHistoricalPrograms') as HTMLInputElement).checked;
+    const recordableOnly = (document.getElementById('RecordableOnly') as HTMLInputElement).checked;
 
     const order = (document.getElementById('KeywordReserveOrderKind') as HTMLSelectElement).value;
 
@@ -742,6 +743,7 @@ document.getElementById('searchButton')!.addEventListener('click', async functio
         startTime: startTime,
         endTime: endTime,
         includeHistoricalPrograms: includeHistoricalPrograms,
+        recordableOnly: recordableOnly,
         orderKind: order
     };
 

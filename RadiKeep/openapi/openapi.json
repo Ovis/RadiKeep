@@ -4430,6 +4430,9 @@
           "includeHistoricalPrograms": {
             "type": "boolean"
           },
+          "recordableOnly": {
+            "type": "boolean"
+          },
           "orderKind": {
             "type": "string"
           }

@@ -143,6 +143,51 @@ public class ProgramScheduleRepositoryTests : UnitTestBase
     }
 
     /// <summary>
+    /// radiko番組検索で録音可能な番組のみ抽出できる
+    /// </summary>
+    [Test]
+    public async Task SearchRadikoProgramsAsync_録音可能のみ抽出()
+    {
+        var now = new DateTimeOffset(2026, 2, 11, 12, 0, 0, TimeSpan.FromHours(9));
+        await AddRadikoProgramAsync(
+            "P1",
+            "TBS",
+            now.AddHours(-2),
+            now.AddHours(-1),
+            title: "Ended",
+            description: "desc",
+            availabilityTimeFree: AvailabilityTimeFree.Unavailable);
+        await AddRadikoProgramAsync(
+            "P2",
+            "TBS",
+            now.AddHours(-4),
+            now.AddHours(-3),
+            title: "TimeFree",
+            description: "desc",
+            availabilityTimeFree: AvailabilityTimeFree.Available);
+        await AddRadikoProgramAsync(
+            "P3",
+            "TBS",
+            now.AddMinutes(-10),
+            now.AddMinutes(20),
+            title: "Live",
+            description: "desc",
+            availabilityTimeFree: AvailabilityTimeFree.Unavailable);
+
+        var entity = new ProgramSearchEntity
+        {
+            StartTime = new TimeOnly(0, 0),
+            EndTime = new TimeOnly(23, 59),
+            IncludeHistoricalPrograms = true,
+            RecordableOnly = true
+        };
+
+        var list = await _repository.SearchRadikoProgramsAsync(entity, now);
+
+        Assert.That(list.Select(x => x.ProgramId), Is.EqualTo(new[] { "P2", "P3" }));
+    }
+
+    /// <summary>
     /// 古いradiko番組を削除できる
     /// </summary>
     [Test]
@@ -255,6 +300,39 @@ public class ProgramScheduleRepositoryTests : UnitTestBase
     }
 
     /// <summary>
+    /// らじる★らじる検索で録音可能な番組のみ抽出できる
+    /// </summary>
+    [Test]
+    public async Task SearchRadiruProgramsAsync_録音可能のみ抽出()
+    {
+        var now = new DateTimeOffset(2026, 2, 11, 12, 0, 0, TimeSpan.FromHours(9));
+        await AddRadiruProgramAsync("R1_1", "JP13", "r1", now.AddHours(-2), now.AddHours(-1), title: "Ended");
+        await AddRadiruProgramAsync(
+            "R1_2",
+            "JP13",
+            "r1",
+            now.AddHours(-3),
+            now.AddHours(-2),
+            title: "OnDemand",
+            onDemandContentUrl: "https://example.com/stream.m3u8",
+            onDemandExpiresAtUtc: now.UtcDateTime.AddHours(1));
+        await AddRadiruProgramAsync("R1_3", "JP13", "r1", now.AddMinutes(-10), now.AddMinutes(20), title: "Live");
+
+        var entity = new ProgramSearchEntity
+        {
+            SelectedRadiruStationIds = ["JP13:r1"],
+            StartTime = new TimeOnly(0, 0),
+            EndTime = new TimeOnly(23, 59),
+            IncludeHistoricalPrograms = true,
+            RecordableOnly = true
+        };
+
+        var list = await _repository.SearchRadiruProgramsAsync(entity, now);
+
+        Assert.That(list.Select(x => x.ProgramId), Is.EqualTo(new[] { "R1_2", "R1_3" }));
+    }
+
+    /// <summary>
     /// 最終更新日時を保存/取得できる
     /// </summary>
     [Test]
@@ -311,9 +389,10 @@ public class ProgramScheduleRepositoryTests : UnitTestBase
         DateTimeOffset end,
         string title = "Title",
         string description = "desc",
-        DateOnly? date = null)
+        DateOnly? date = null,
+        AvailabilityTimeFree availabilityTimeFree = AvailabilityTimeFree.Available)
     {
-        var program = CreateRadikoProgram(programId, stationId, start, end, title, description, date);
+        var program = CreateRadikoProgram(programId, stationId, start, end, title, description, date, availabilityTimeFree);
         _dbContext.RadikoPrograms.Add(program);
         await _dbContext.SaveChangesAsync();
         return program;
@@ -329,7 +408,8 @@ public class ProgramScheduleRepositoryTests : UnitTestBase
         DateTimeOffset end,
         string title = "Title",
         string description = "desc",
-        DateOnly? date = null)
+        DateOnly? date = null,
+        AvailabilityTimeFree availabilityTimeFree = AvailabilityTimeFree.Available)
     {
         return new RadikoProgram
         {
@@ -342,7 +422,7 @@ public class ProgramScheduleRepositoryTests : UnitTestBase
             DaysOfWeek = DaysOfWeek.Monday,
             StartTime = start.UtcDateTime,
             EndTime = end.UtcDateTime,
-            AvailabilityTimeFree = AvailabilityTimeFree.Available,
+            AvailabilityTimeFree = availabilityTimeFree,
             ProgramUrl = ""
         };
     }
@@ -357,7 +437,9 @@ public class ProgramScheduleRepositoryTests : UnitTestBase
         DateTimeOffset start,
         DateTimeOffset end,
         string title = "Title",
-        string description = "desc")
+        string description = "desc",
+        string? onDemandContentUrl = null,
+        DateTime? onDemandExpiresAtUtc = null)
     {
         _dbContext.NhkRadiruPrograms.Add(new NhkRadiruProgram
         {
@@ -375,7 +457,9 @@ public class ProgramScheduleRepositoryTests : UnitTestBase
             EventId = "",
             SiteId = "",
             ProgramUrl = "",
-            ImageUrl = ""
+            ImageUrl = "",
+            OnDemandContentUrl = onDemandContentUrl,
+            OnDemandExpiresAtUtc = onDemandExpiresAtUtc
         });
         await _dbContext.SaveChangesAsync();
     }

@@ -28,6 +28,8 @@ namespace RadiKeep.Logics.Models
 
         public bool IncludeHistoricalPrograms { get; set; }
 
+        public bool RecordableOnly { get; set; }
+
         [JsonPropertyName("orderKind")]
         public string OrderKindString { get; set; } = string.Empty;
 

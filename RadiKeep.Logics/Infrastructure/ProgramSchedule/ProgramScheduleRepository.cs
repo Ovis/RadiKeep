@@ -3,6 +3,7 @@ using RadiKeep.Logics.Domain.ProgramSchedule;
 using RadiKeep.Logics.Extensions;
 using RadiKeep.Logics.Models;
 using RadiKeep.Logics.Models.Enums;
+using RadiKeep.Logics.Models.Radiko;
 using RadiKeep.Logics.RdbContext;
 
 namespace RadiKeep.Logics.Infrastructure.ProgramSchedule;
@@ -249,6 +250,15 @@ public class ProgramScheduleRepository(RadioDbContext dbContext) : IProgramSched
             .OrderBy(r => r.StartTime)
             .ToList();
 
+        if (searchEntity.RecordableOnly)
+        {
+            list = list
+                .Where(r =>
+                    r.EndTime > standardDateTimeOffset ||
+                    r.AvailabilityTimeFree is AvailabilityTimeFree.Available or AvailabilityTimeFree.PartiallyAvailable)
+                .ToList();
+        }
+
         return list;
     }
 
@@ -411,6 +421,17 @@ public class ProgramScheduleRepository(RadioDbContext dbContext) : IProgramSched
                     r.EndTime.TimeOfDay <= searchEntity.EndTime.ToTimeSpan())
             .OrderBy(r => r.StartTime)
             .ToList();
+
+        if (searchEntity.RecordableOnly)
+        {
+            list = list
+                .Where(r =>
+                    r.EndTime > standardDateTimeOffset ||
+                    (!string.IsNullOrWhiteSpace(r.OnDemandContentUrl) &&
+                     r.OnDemandExpiresAtUtc.HasValue &&
+                     r.OnDemandExpiresAtUtc.Value > standardDateTimeOffset.UtcDateTime))
+                .ToList();
+        }
 
         return list;
     }
