@@ -15,7 +15,7 @@ import type {
 } from './openapi-contract.js';
 import { showConfirmDialog } from './feedback.js';
 import { generateStationList } from './stationList.js';
-import { sanitizeHtml } from './utils.js';
+import { parseUtcDateTime, sanitizeHtml } from './utils.js';
 import { clearMultiSelect, renderSelectedTagChips, enableTouchLikeMultiSelect } from './tag-select-ui.js';
 import { createInlineToast, wireInlineToastClose } from './inline-toast.js';
 import { setOverlayLoading } from './loading.js';
@@ -723,6 +723,7 @@ document.getElementById('searchButton')!.addEventListener('click', async functio
     const startTime = `${startTimeInput}:00`;
     const endTime = `${endTimeInput}:00`;
     const includeHistoricalPrograms = (document.getElementById('IncludeHistoricalPrograms') as HTMLInputElement).checked;
+    const recordableOnly = (document.getElementById('RecordableOnly') as HTMLInputElement).checked;
 
     const order = (document.getElementById('KeywordReserveOrderKind') as HTMLSelectElement).value;
 
@@ -742,6 +743,7 @@ document.getElementById('searchButton')!.addEventListener('click', async functio
         startTime: startTime,
         endTime: endTime,
         includeHistoricalPrograms: includeHistoricalPrograms,
+        recordableOnly: recordableOnly,
         orderKind: order
     };
 
@@ -857,9 +859,7 @@ document.getElementById('searchButton')!.addEventListener('click', async functio
                 const isTimeFreeAvailable =
                     program.availabilityTimeFree === AvailabilityTimeFree.Available ||
                     program.availabilityTimeFree === AvailabilityTimeFree.PartiallyAvailable;
-                const onDemandExpiresAt = program.onDemandExpiresAtUtc
-                    ? new Date(program.onDemandExpiresAtUtc).getTime()
-                    : Number.NaN;
+                const onDemandExpiresAt = parseUtcDateTime(program.onDemandExpiresAtUtc)?.getTime() ?? Number.NaN;
                 const isOnDemandAvailable =
                     program.serviceKind === RadioServiceKind.Radiru &&
                     !!program.onDemandContentUrl &&

@@ -136,4 +136,22 @@ export function formatDisplayDateTime(date) {
     const minutes = String(date.getMinutes()).padStart(2, '0');
     return `${year}/${month}/${day} ${hours}:${minutes}`;
 }
+/**
+ * タイムゾーン指定のないUTC文字列をUTCとしてDateへ変換する
+ */
+export function parseUtcDateTime(value) {
+    if (!value) {
+        return null;
+    }
+    const trimmed = value.trim();
+    if (!trimmed) {
+        return null;
+    }
+    const normalized = trimmed.includes('T')
+        ? trimmed
+        : trimmed.replace(' ', 'T');
+    const hasTimeZone = /[zZ]|[+-]\d{2}:\d{2}$/.test(normalized);
+    const parsed = new Date(hasTimeZone ? normalized : `${normalized}Z`);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
 //# sourceMappingURL=utils.js.map

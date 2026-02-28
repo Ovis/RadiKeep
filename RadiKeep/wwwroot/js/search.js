@@ -3,7 +3,7 @@ import { API_ENDPOINTS } from './const.js';
 import { AvailabilityTimeFree, RecordingType, RadioServiceKind } from './define.js';
 import { showConfirmDialog } from './feedback.js';
 import { generateStationList } from './stationList.js';
-import { sanitizeHtml } from './utils.js';
+import { parseUtcDateTime, sanitizeHtml } from './utils.js';
 import { clearMultiSelect, renderSelectedTagChips, enableTouchLikeMultiSelect } from './tag-select-ui.js';
 import { createInlineToast, wireInlineToastClose } from './inline-toast.js';
 import { setOverlayLoading } from './loading.js';
@@ -595,6 +595,7 @@ document.getElementById('searchButton').addEventListener('click', async function
     const startTime = `${startTimeInput}:00`;
     const endTime = `${endTimeInput}:00`;
     const includeHistoricalPrograms = document.getElementById('IncludeHistoricalPrograms').checked;
+    const recordableOnly = document.getElementById('RecordableOnly').checked;
     const order = document.getElementById('KeywordReserveOrderKind').value;
     // selectedDaysOfWeekが空の場合はアラートを出して終了
     if (selectedDaysOfWeek.length === 0) {
@@ -612,6 +613,7 @@ document.getElementById('searchButton').addEventListener('click', async function
         startTime: startTime,
         endTime: endTime,
         includeHistoricalPrograms: includeHistoricalPrograms,
+        recordableOnly: recordableOnly,
         orderKind: order
     };
     try {
@@ -711,9 +713,7 @@ document.getElementById('searchButton').addEventListener('click', async function
                 }
                 const isTimeFreeAvailable = program.availabilityTimeFree === AvailabilityTimeFree.Available ||
                     program.availabilityTimeFree === AvailabilityTimeFree.PartiallyAvailable;
-                const onDemandExpiresAt = program.onDemandExpiresAtUtc
-                    ? new Date(program.onDemandExpiresAtUtc).getTime()
-                    : Number.NaN;
+                const onDemandExpiresAt = parseUtcDateTime(program.onDemandExpiresAtUtc)?.getTime() ?? Number.NaN;
                 const isOnDemandAvailable = program.serviceKind === RadioServiceKind.Radiru &&
                     !!program.onDemandContentUrl &&
                     Number.isFinite(onDemandExpiresAt) &&

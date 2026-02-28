@@ -1546,6 +1546,7 @@ export interface components {
             /** Format: time */
             endTime?: string;
             includeHistoricalPrograms?: boolean;
+            recordableOnly?: boolean;
             orderKind?: string;
         };
         ProgramUpdateStatusResponse: {
