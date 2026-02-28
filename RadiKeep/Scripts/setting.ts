@@ -11,6 +11,7 @@ import type {
     UpdateExternalServiceUserAgentContract,
     UpdateMergeTagsFromMatchedRulesContract,
     UpdateMonitoringAdvancedContract,
+    UpdateClockSkewMonitoringContract,
     UpdateNotificationSettingContract,
     UpdateRadikoLoginContract,
     UpdateRadiruAreaContract,
@@ -64,6 +65,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     const storageLowSpaceThresholdUpdateButton = document.getElementById('update-storage-low-space-threshold-btn') as HTMLButtonElement | null;
     const updateMonitoringAdvancedBtn = document.getElementById('update-monitoring-advanced-btn') as HTMLButtonElement | null;
     const updateMonitoringAdvancedBtnDesktop = document.getElementById('update-monitoring-advanced-btn-desktop') as HTMLButtonElement | null;
+    const updateClockSkewMonitoringBtn = document.getElementById('update-clock-skew-monitoring-btn') as HTMLButtonElement | null;
+    const updateClockSkewMonitoringBtnDesktop = document.getElementById('update-clock-skew-monitoring-btn-desktop') as HTMLButtonElement | null;
     const mergeTagsFromMatchedRulesUpdateButton = document.getElementById('update-merge-tags-from-matched-rules-btn') as HTMLButtonElement | null;
     const embedProgramImageOnRecordUpdateButton = document.getElementById('update-embed-program-image-on-record-btn') as HTMLButtonElement | null;
     const resumePlaybackAcrossPagesUpdateButton = document.getElementById('update-resume-playback-across-pages-btn') as HTMLButtonElement | null;
@@ -575,13 +578,31 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     };
 
-    const parseNumberInputByIds = (ids: string[]): number => {
+    const getPreferredElementByIds = <T extends HTMLElement>(ids: string[]): T | null => {
+        let fallback: T | null = null;
+
         for (const id of ids) {
-            const input = document.getElementById(id) as HTMLInputElement | null;
-            if (input && input.value.trim().length > 0) {
-                return Number.parseInt(input.value, 10);
+            const element = document.getElementById(id) as T | null;
+            if (!element) {
+                continue;
+            }
+
+            fallback ??= element;
+
+            if (element.offsetParent !== null) {
+                return element;
             }
         }
+
+        return fallback;
+    };
+
+    const parseNumberInputByIds = (ids: string[]): number => {
+        const input = getPreferredElementByIds<HTMLInputElement>(ids);
+        if (input && input.value.trim().length > 0) {
+            return Number.parseInt(input.value, 10);
+        }
+
         return Number.NaN;
     };
 
@@ -932,6 +953,46 @@ document.addEventListener('DOMContentLoaded', async () => {
     updateMonitoringAdvancedBtn?.addEventListener('click', saveMonitoringAdvancedSettings);
     updateMonitoringAdvancedBtnDesktop?.addEventListener('click', saveMonitoringAdvancedSettings);
 
+    const saveClockSkewMonitoringSettings = async () => {
+        const enabledInput = getPreferredElementByIds<HTMLInputElement>([
+            'clock-skew-monitoring-enabled',
+            'clock-skew-monitoring-enabled-desktop'
+        ]);
+        const checkIntervalHours = parseNumberInputByIds([
+            'clock-skew-check-interval-hours-value',
+            'clock-skew-check-interval-hours-value-desktop'
+        ]);
+        const thresholdSeconds = parseNumberInputByIds([
+            'clock-skew-threshold-seconds-value',
+            'clock-skew-threshold-seconds-value-desktop'
+        ]);
+
+        const enabled = enabledInput?.checked ?? false;
+        if (Number.isNaN(checkIntervalHours) || checkIntervalHours < 1 || checkIntervalHours > 168) {
+            showToast('監視間隔は 1〜168 時間で入力してください。', false);
+            return;
+        }
+        if (Number.isNaN(thresholdSeconds) || thresholdSeconds < 1 || thresholdSeconds > 600) {
+            showToast('ずれしきい値は 1〜600 秒で入力してください。', false);
+            return;
+        }
+
+        try {
+            const requestBody: UpdateClockSkewMonitoringContract = {
+                enabled,
+                checkIntervalHours,
+                thresholdSeconds
+            };
+            await postData(API_ENDPOINTS.SETTING_CLOCK_SKEW_MONITORING, requestBody);
+            showToast('保存しました。');
+        } catch (error) {
+            const message = error instanceof Error ? error.message : `${error}`;
+            showToast(message, false);
+        }
+    };
+    updateClockSkewMonitoringBtn?.addEventListener('click', saveClockSkewMonitoringSettings);
+    updateClockSkewMonitoringBtnDesktop?.addEventListener('click', saveClockSkewMonitoringSettings);
+
     mergeTagsFromMatchedRulesUpdateButton?.addEventListener('click', async () => {
         const enabledInput = document.getElementById('merge-tags-from-matched-rules-enabled') as HTMLInputElement | null;
         const enabled = enabledInput?.checked ?? false;
@@ -995,16 +1056,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     const saveDuplicateDetectionInterval = async () => {
-        const enabledInput =
-            (document.getElementById('duplicate-detection-enabled') as HTMLInputElement | null)
-            ?? (document.getElementById('duplicate-detection-enabled-desktop') as HTMLInputElement | null);
+        const enabledInput = getPreferredElementByIds<HTMLInputElement>([
+            'duplicate-detection-enabled',
+            'duplicate-detection-enabled-desktop'
+        ]);
         const dayOfWeek = parseNumberInputByIds([
             'duplicate-detection-day-of-week',
             'duplicate-detection-day-of-week-desktop'
         ]);
-        const timeInput =
-            (document.getElementById('duplicate-detection-time') as HTMLInputElement | null)
-            ?? (document.getElementById('duplicate-detection-time-desktop') as HTMLInputElement | null);
+        const timeInput = getPreferredElementByIds<HTMLInputElement>([
+            'duplicate-detection-time',
+            'duplicate-detection-time-desktop'
+        ]);
 
         const enabled = enabledInput?.checked ?? false;
         const timeText = (timeInput?.value ?? '').trim();

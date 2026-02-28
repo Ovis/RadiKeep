@@ -13,6 +13,10 @@ namespace RadiKeep.Logics.Services
         int LogRetentionDays { get; }
         int StorageLowSpaceCheckIntervalMinutes { get; }
         int StorageLowSpaceNotificationCooldownHours { get; }
+        bool ClockSkewMonitoringEnabled { get; }
+        int ClockSkewCheckIntervalHours { get; }
+        int ClockSkewThresholdSeconds { get; }
+        string ClockSkewNtpServer { get; }
         int RadiruApiMinRequestIntervalMs { get; }
         int RadiruApiRequestJitterMs { get; }
         string ReleaseCheckGitHubOwner { get; }
@@ -73,6 +77,7 @@ namespace RadiKeep.Logics.Services
         ValueTask UpdateExternalImportFileTimeZoneAsync(string timeZoneId);
         ValueTask UpdateStorageLowSpaceThresholdMbAsync(int thresholdMb);
         ValueTask UpdateMonitoringSettingsAsync(int logRetentionDays, int checkIntervalMinutes, int notificationCooldownHours);
+        ValueTask UpdateClockSkewMonitoringSettingsAsync(bool enabled, int checkIntervalHours, int thresholdSeconds);
         ValueTask UpdateMergeTagsFromAllMatchedKeywordRulesAsync(bool enabled);
         ValueTask UpdateEmbedProgramImageOnRecordAsync(bool enabled);
         ValueTask UpdateResumePlaybackAcrossPagesAsync(bool enabled);

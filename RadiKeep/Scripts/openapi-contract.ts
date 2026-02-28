@@ -31,6 +31,7 @@ export type UpdateRadikoLoginContract = components['schemas']['UpdateRadikoLogin
 export type UpdateExternalImportTimeZoneContract = components['schemas']['UpdateExternalImportTimeZoneEntity'];
 export type UpdateStorageLowSpaceThresholdContract = components['schemas']['UpdateStorageLowSpaceThresholdEntity'];
 export type UpdateMonitoringAdvancedContract = components['schemas']['UpdateMonitoringAdvancedEntity'];
+export type UpdateClockSkewMonitoringContract = components['schemas']['UpdateClockSkewMonitoringEntity'];
 export type UpdateMergeTagsFromMatchedRulesContract = components['schemas']['UpdateMergeTagsFromMatchedRulesEntity'];
 export type UpdateEmbedProgramImageOnRecordContract = components['schemas']['UpdateEmbedProgramImageOnRecordEntity'];
 export type UpdateResumePlaybackAcrossPagesContract = components['schemas']['UpdateResumePlaybackAcrossPagesEntity'];

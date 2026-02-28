@@ -64,6 +64,9 @@ public static class SettingEndpoints
         group.MapPost("/monitoring-advanced", HandleUpdateMonitoringAdvancedAsync)
             .WithName("ApiSettingMonitoringAdvanced")
             .WithSummary("監視関連設定を更新する");
+        group.MapPost("/clock-skew-monitoring", HandleUpdateClockSkewMonitoringAsync)
+            .WithName("ApiSettingClockSkewMonitoring")
+            .WithSummary("NTP時刻ずれ監視設定を更新する");
         group.MapPost("/merge-tags-from-matched-rules", HandleUpdateMergeTagsFromMatchedRulesAsync)
             .WithName("ApiSettingMergeTagsFromMatchedRules")
             .WithSummary("複数キーワード一致時のタグ集約付与設定を更新する");
@@ -408,6 +411,29 @@ public static class SettingEndpoints
     }
 
     /// <summary>
+    /// NTP時刻ずれ監視設定を更新する。
+    /// </summary>
+    private static async Task<Results<Ok<ApiResponse<EmptyData?>>, BadRequest<ApiResponse<EmptyData?>>>> HandleUpdateClockSkewMonitoringAsync(
+        IAppConfigurationService appConfigurationService,
+        UpdateClockSkewMonitoringEntity entity)
+    {
+        if (entity.CheckIntervalHours is < 1 or > 168)
+        {
+            return TypedResults.BadRequest(ApiResponse.Fail("監視間隔は 1〜168 時間の範囲で指定してください。"));
+        }
+        if (entity.ThresholdSeconds is < 1 or > 600)
+        {
+            return TypedResults.BadRequest(ApiResponse.Fail("ずれしきい値は 1〜600 秒の範囲で指定してください。"));
+        }
+
+        await appConfigurationService.UpdateClockSkewMonitoringSettingsAsync(
+            entity.Enabled,
+            entity.CheckIntervalHours,
+            entity.ThresholdSeconds);
+        return TypedResults.Ok(ApiResponse.Ok("更新しました。"));
+    }
+
+    /// <summary>
     /// 複数キーワード一致時のタグ集約付与設定を更新する。
     /// </summary>
     private static async Task<Ok<ApiResponse<EmptyData?>>> HandleUpdateMergeTagsFromMatchedRulesAsync(
@@ -600,6 +626,16 @@ public static class SettingEndpoints
         public int LogRetentionDays { get; set; }
         public int StorageLowSpaceCheckIntervalMinutes { get; set; }
         public int StorageLowSpaceNotificationCooldownHours { get; set; }
+    }
+
+    /// <summary>
+    /// NTP時刻ずれ監視設定更新要求。
+    /// </summary>
+    public sealed class UpdateClockSkewMonitoringEntity
+    {
+        public bool Enabled { get; set; }
+        public int CheckIntervalHours { get; set; }
+        public int ThresholdSeconds { get; set; }
     }
 
     /// <summary>

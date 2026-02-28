@@ -362,6 +362,27 @@
         }
       }
     },
+    "/api/programs/update-status": {
+      "get": {
+        "tags": [
+          "ProgramsApi"
+        ],
+        "summary": "番組表更新状態を取得する",
+        "operationId": "ApiProgramUpdateStatus",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponseOfProgramUpdateStatusResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/programs/reserve": {
       "post": {
         "tags": [
@@ -939,6 +960,47 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/UpdateMonitoringAdvancedEntity"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponseOfEmptyData"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponseOfEmptyData"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/settings/clock-skew-monitoring": {
+      "post": {
+        "tags": [
+          "SettingsApi"
+        ],
+        "summary": "NTP時刻ずれ監視設定を更新する",
+        "operationId": "ApiSettingClockSkewMonitoring",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateClockSkewMonitoringEntity"
               }
             }
           },
@@ -3413,6 +3475,46 @@
           }
         }
       },
+      "ApiResponseOfProgramUpdateStatusResponse": {
+        "required": [
+          "success",
+          "data",
+          "error",
+          "message"
+        ],
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "data": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ProgramUpdateStatusResponse"
+              }
+            ]
+          },
+          "error": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ApiError"
+              }
+            ]
+          },
+          "message": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
       "ApiResponseOfRadioProgramEntry": {
         "required": [
           "success",
@@ -4333,6 +4435,51 @@
           }
         }
       },
+      "ProgramUpdateStatusResponse": {
+        "required": [
+          "isRunning",
+          "triggerSource",
+          "message",
+          "startedAtUtc",
+          "lastCompletedAtUtc",
+          "lastSucceeded"
+        ],
+        "type": "object",
+        "properties": {
+          "isRunning": {
+            "type": "boolean"
+          },
+          "triggerSource": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "startedAtUtc": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "lastCompletedAtUtc": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "lastSucceeded": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          }
+        }
+      },
       "RadikoStationInformationEntry": {
         "type": "object",
         "properties": {
@@ -5085,6 +5232,30 @@
         }
       },
       "Ulid": { },
+      "UpdateClockSkewMonitoringEntity": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "checkIntervalHours": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "thresholdSeconds": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        }
+      },
       "UpdateDuplicateDetectionIntervalEntity": {
         "type": "object",
         "properties": {
