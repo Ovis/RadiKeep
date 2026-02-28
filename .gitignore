@@ -408,6 +408,7 @@ FodyWeavers.xsd
 
 
 # RadiKeep
+output/
 RadiKeep/keys/
 RadiKeep/static/
 RadiKeep/Properties/PublishProfiles/
@@ -415,3 +416,5 @@ RadiKeep/.npm-cache/
 RadiKeep/version.json
 RadiKeep/appsettings.Development.json
 RadiKeep/radikeep.settings.json
+
+
