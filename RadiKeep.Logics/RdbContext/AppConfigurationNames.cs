@@ -61,9 +61,9 @@ public static class AppConfigurationNames
     public const string ExternalImportFileTimeZoneId = "ExternalImportFileTimeZoneId";
 
     /// <summary>
-    /// radikoログインユーザーID
+    /// radikoログインユーザーID（暗号化済み）
     /// </summary>
-    public const string RadikoUserId = "RadikoUserId";
+    public const string RadikoUserIdProtected = "RadikoUserIdProtected";
 
     /// <summary>
     /// radikoログインパスワード（暗号化済み）
