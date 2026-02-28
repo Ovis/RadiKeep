@@ -143,6 +143,7 @@
                 </div>
             </div>
             <footer class="card-footer">
+                <button type="button" class="card-footer-item play-btn hidden">再生</button>
                 <button type="button" class="card-footer-item record-btn">リアルタイム録音</button>
                 <button type="button" class="card-footer-item timefree-btn">タイムフリー録音</button>
                 <button type="button" class="card-footer-item ondemand-btn hidden">聞き逃し配信録音</button>
@@ -176,5 +177,6 @@
 </div>
 
 @section Scripts {
+    <script src="~/lib/hls.js/hls.min.js" asp-append-version="true"></script>
     <script type="module" src="~/js/search.js" asp-append-version="true"></script>
 }

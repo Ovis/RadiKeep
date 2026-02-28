@@ -7,10 +7,16 @@ import { sanitizeHtml } from './utils.js';
 import { clearMultiSelect, renderSelectedTagChips, enableTouchLikeMultiSelect } from './tag-select-ui.js';
 import { createInlineToast, wireInlineToastClose } from './inline-toast.js';
 import { setOverlayLoading } from './loading.js';
+import { createStandardPlayerJumpControls } from './player-jump-controls.js';
+import { applyPlaybackRate, playerPlaybackRateOptions } from './player-rate-control.js';
+import { clearPersistedPlayerState, writePersistedPlayerState } from './player-state-store.js';
 const reservedRecordingKeys = new Set();
 let availableTags = [];
 const normalizeTagName = (value) => value.trim().toLocaleLowerCase();
 const showSearchToast = createInlineToast('search-result-toast', 'search-result-toast-message');
+let currentPlayingSourceUrl = null;
+let currentPlayingSourceToken = null;
+let currentPlayingProgramTitle = null;
 function createTemplateTokenHelp(sectionLabel, targetInputId) {
     const wrapper = document.createElement('div');
     wrapper.className = 'mt-2';
@@ -111,6 +117,140 @@ async function reserveProgramWithToast(programId, serviceKind, recordingType, bu
     }
     button.disabled = false;
     button.classList.remove('opacity-70');
+}
+function persistCurrentPlaybackState() {
+    const audio = document.getElementById('audio-player-elm');
+    if (!currentPlayingSourceUrl || !audio) {
+        return;
+    }
+    writePersistedPlayerState({
+        sourceUrl: currentPlayingSourceUrl,
+        sourceToken: currentPlayingSourceToken,
+        title: currentPlayingProgramTitle,
+        currentTime: Number.isFinite(audio.currentTime) ? audio.currentTime : 0,
+        playbackRate: Number.isFinite(audio.playbackRate) ? audio.playbackRate : 1,
+        savedAtUtc: new Date().toISOString()
+    });
+}
+async function playProgramWithToast(program) {
+    const requestBody = {
+        programId: program.programId,
+        radioServiceKind: program.serviceKind
+    };
+    try {
+        const response = await fetch(API_ENDPOINTS.PROGRAM_PLAY, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(requestBody)
+        });
+        if (!response.ok) {
+            const failedResult = await response.json();
+            showSearchToast(failedResult.message ?? '再生に失敗しました。', false);
+            return;
+        }
+        const result = await response.json();
+        const data = result.data;
+        if (!data?.url) {
+            showSearchToast(result.message ?? '再生に失敗しました。', false);
+            return;
+        }
+        const sourceToken = program.serviceKind === RadioServiceKind.Radiko ? data.token : null;
+        await playProgramFromSource(data.url, sourceToken, program.title, 0, playerPlaybackRateOptions[0]);
+    }
+    catch (error) {
+        console.error('Error:', error);
+        showSearchToast('再生に失敗しました。', false);
+    }
+}
+async function playProgramFromSource(sourceUrl, sourceToken, programTitle, startTimeSeconds, playbackRate) {
+    const footer = document.getElementById('audio-player');
+    if (!footer) {
+        showSearchToast('プレイヤーの初期化に失敗しました。', false);
+        return;
+    }
+    let audio = document.getElementById('audio-player-elm');
+    if (!audio) {
+        footer.innerHTML = '';
+        const playerContainerElm = document.createElement('div');
+        playerContainerElm.className = 'player-container';
+        const playerMainRowElm = document.createElement('div');
+        playerMainRowElm.className = 'player-main-row';
+        const audioPlayerElm = document.createElement('audio');
+        audioPlayerElm.id = 'audio-player-elm';
+        audioPlayerElm.style.width = '100%';
+        audioPlayerElm.style.height = '2rem';
+        audioPlayerElm.controls = true;
+        audioPlayerElm.addEventListener('timeupdate', persistCurrentPlaybackState);
+        audioPlayerElm.addEventListener('pause', persistCurrentPlaybackState);
+        audioPlayerElm.addEventListener('ratechange', persistCurrentPlaybackState);
+        const closeButton = document.createElement('button');
+        closeButton.type = 'button';
+        closeButton.className = 'player-close-button';
+        closeButton.setAttribute('aria-label', 'プレイヤーを閉じる');
+        closeButton.innerHTML = '<i class="fas fa-xmark" aria-hidden="true"></i>';
+        closeButton.addEventListener('click', () => {
+            const player = document.getElementById('audio-player-elm');
+            if (player) {
+                player.pause();
+                player.removeAttribute('src');
+                player.load();
+            }
+            currentPlayingSourceUrl = null;
+            currentPlayingSourceToken = null;
+            currentPlayingProgramTitle = null;
+            clearPersistedPlayerState();
+            footer.innerHTML = '';
+        });
+        playerMainRowElm.appendChild(audioPlayerElm);
+        playerMainRowElm.appendChild(closeButton);
+        playerContainerElm.appendChild(playerMainRowElm);
+        playerContainerElm.appendChild(createStandardPlayerJumpControls(audioPlayerElm));
+        footer.appendChild(playerContainerElm);
+        audio = audioPlayerElm;
+    }
+    const previousSourceUrl = currentPlayingSourceUrl;
+    const previousSourceToken = currentPlayingSourceToken;
+    currentPlayingSourceUrl = sourceUrl;
+    currentPlayingSourceToken = sourceToken;
+    currentPlayingProgramTitle = programTitle;
+    const isSameSource = previousSourceUrl === sourceUrl &&
+        (previousSourceToken ?? '') === (sourceToken ?? '');
+    const effectivePlaybackRate = isSameSource ? playbackRate : playerPlaybackRateOptions[0];
+    const hlsConstructor = window.Hls;
+    if (hlsConstructor?.isSupported?.()) {
+        const hls = new hlsConstructor();
+        applyPlaybackRate(audio, effectivePlaybackRate);
+        if (sourceToken) {
+            hls.config.xhrSetup = function (xhr) {
+                xhr.setRequestHeader('X-Radiko-AuthToken', sourceToken);
+            };
+        }
+        hls.loadSource(sourceUrl);
+        hls.attachMedia(audio);
+        hls.on(hlsConstructor.Events.MANIFEST_PARSED, () => {
+            if (startTimeSeconds > 0) {
+                audio.currentTime = startTimeSeconds;
+            }
+            void audio.play();
+        });
+    }
+    else if (audio.canPlayType('application/vnd.apple.mpegurl')) {
+        applyPlaybackRate(audio, effectivePlaybackRate);
+        audio.src = sourceUrl;
+        audio.onloadedmetadata = () => {
+            if (startTimeSeconds > 0) {
+                audio.currentTime = startTimeSeconds;
+            }
+            void audio.play();
+        };
+    }
+    else {
+        showSearchToast('このブラウザはHLS再生に対応していません。', false);
+        return;
+    }
+    persistCurrentPlaybackState();
 }
 document.querySelectorAll('.modal-closeProcess').forEach(elm => {
     elm.addEventListener('click', closeModal);
@@ -507,6 +647,7 @@ document.getElementById('searchButton').addEventListener('click', async function
                 const endElm = card.querySelector('.endTime');
                 const descriptionElm = card.querySelector('.description');
                 const descriptionToggleElm = card.querySelector('.description-toggle');
+                const playBtn = card.querySelector('.play-btn');
                 const timeFreeBtn = card.querySelector('.timefree-btn');
                 const realtimeBtn = card.querySelector('.record-btn');
                 const onDemandBtn = card.querySelector('.ondemand-btn');
@@ -576,6 +717,19 @@ document.getElementById('searchButton').addEventListener('click', async function
                     !!program.onDemandContentUrl &&
                     Number.isFinite(onDemandExpiresAt) &&
                     onDemandExpiresAt > now;
+                const isCurrentlyOnAir = startTime.getTime() <= now && endTime.getTime() > now;
+                const canPlay = isCurrentlyOnAir;
+                if (playBtn) {
+                    if (canPlay) {
+                        playBtn.classList.remove('hidden');
+                        playBtn.onclick = () => {
+                            void playProgramWithToast(program);
+                        };
+                    }
+                    else {
+                        playBtn.classList.add('hidden');
+                    }
+                }
                 if (timeFreeBtn) {
                     if (isTimeFreeAvailable) {
                         timeFreeBtn.onclick = () => reserveProgramWithToast(program.programId, program.serviceKind, RecordingType.TimeFree, timeFreeBtn);
