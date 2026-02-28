@@ -107,6 +107,7 @@ function wirePersist(audioElm: HTMLAudioElement): void {
             ...currentState,
             currentTime: Number.isFinite(audioElm.currentTime) ? audioElm.currentTime : 0,
             playbackRate: Number.isFinite(audioElm.playbackRate) ? audioElm.playbackRate : 1,
+            wasPlaying: !audioElm.paused && !audioElm.ended,
             savedAtUtc: new Date().toISOString()
         });
     };
@@ -157,6 +158,7 @@ async function tryRestorePlayer(): Promise<void> {
 
     currentState = state;
     updateDocumentTitle(state.title);
+    const shouldResumePlaying = state.wasPlaying !== false;
     applyPlaybackRate(
         audioElm,
         Number.isFinite(state.playbackRate ?? NaN) ? (state.playbackRate as number) : 1,
@@ -186,7 +188,9 @@ async function tryRestorePlayer(): Promise<void> {
             if (Number.isFinite(state.currentTime ?? NaN) && (state.currentTime ?? 0) > 0) {
                 audioElm.currentTime = state.currentTime as number;
             }
-            void audioElm.play();
+            if (shouldResumePlaying) {
+                void audioElm.play();
+            }
         });
     } else if (canNativeHls) {
         audioElm.src = state.sourceUrl;
@@ -194,7 +198,9 @@ async function tryRestorePlayer(): Promise<void> {
             if (Number.isFinite(state.currentTime ?? NaN) && (state.currentTime ?? 0) > 0) {
                 audioElm.currentTime = state.currentTime as number;
             }
-            void audioElm.play();
+            if (shouldResumePlaying) {
+                void audioElm.play();
+            }
         };
     } else {
         clearPersistedPlayerState();

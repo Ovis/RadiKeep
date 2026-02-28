@@ -45,6 +45,7 @@ function persistCurrentPlaybackState(): void {
         title: currentPlayingProgramTitle,
         currentTime: audio ? audio.currentTime : 0,
         playbackRate: audio ? audio.playbackRate : 1,
+        wasPlaying: audio ? !audio.paused && !audio.ended : true,
         savedAtUtc: new Date().toISOString()
     });
 }

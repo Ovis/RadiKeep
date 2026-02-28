@@ -85,6 +85,7 @@ function wirePersist(audioElm) {
             ...currentState,
             currentTime: Number.isFinite(audioElm.currentTime) ? audioElm.currentTime : 0,
             playbackRate: Number.isFinite(audioElm.playbackRate) ? audioElm.playbackRate : 1,
+            wasPlaying: !audioElm.paused && !audioElm.ended,
             savedAtUtc: new Date().toISOString()
         });
     };
@@ -127,6 +128,7 @@ async function tryRestorePlayer() {
     }
     currentState = state;
     updateDocumentTitle(state.title);
+    const shouldResumePlaying = state.wasPlaying !== false;
     applyPlaybackRate(audioElm, Number.isFinite(state.playbackRate ?? NaN) ? state.playbackRate : 1, playerPlaybackRateOptions);
     const canNativeHls = !!audioElm.canPlayType('application/vnd.apple.mpegurl');
     const canUseHlsJs = await ensureHlsScriptLoaded();
@@ -150,7 +152,9 @@ async function tryRestorePlayer() {
             if (Number.isFinite(state.currentTime ?? NaN) && (state.currentTime ?? 0) > 0) {
                 audioElm.currentTime = state.currentTime;
             }
-            void audioElm.play();
+            if (shouldResumePlaying) {
+                void audioElm.play();
+            }
         });
     }
     else if (canNativeHls) {
@@ -159,7 +163,9 @@ async function tryRestorePlayer() {
             if (Number.isFinite(state.currentTime ?? NaN) && (state.currentTime ?? 0) > 0) {
                 audioElm.currentTime = state.currentTime;
             }
-            void audioElm.play();
+            if (shouldResumePlaying) {
+                void audioElm.play();
+            }
         };
     }
     else {

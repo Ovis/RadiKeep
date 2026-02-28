@@ -18,4 +18,21 @@ export async function withButtonLoading(button, action, options) {
         button.removeAttribute('aria-busy');
     }
 }
+/**
+ * 画面中央のローディングオーバーレイ表示を切り替える
+ */
+export function setOverlayLoading(overlay, isLoading, options) {
+    const message = overlay.querySelector('[data-loading-message]');
+    if (message && options?.busyText) {
+        message.textContent = options.busyText;
+    }
+    overlay.classList.toggle('is-active', isLoading);
+    overlay.setAttribute('aria-hidden', isLoading ? 'false' : 'true');
+    if (isLoading) {
+        overlay.setAttribute('aria-busy', 'true');
+    }
+    else {
+        overlay.removeAttribute('aria-busy');
+    }
+}
 //# sourceMappingURL=loading.js.map

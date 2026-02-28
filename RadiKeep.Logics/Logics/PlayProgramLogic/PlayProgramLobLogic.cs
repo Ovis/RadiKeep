@@ -40,6 +40,17 @@ namespace RadiKeep.Logics.Logics.PlayProgramLogic
                 return (false, null, null, new DomainException("番組情報の取得に失敗しました。"));
             }
 
+            var now = DateTimeOffset.UtcNow;
+            if (program.StartTime > now)
+            {
+                return (false, null, null, new DomainException("この番組はまだ放送前のため再生できません。"));
+            }
+
+            if (program.EndTime <= now)
+            {
+                return (false, null, null, new DomainException("この番組はすでに放送終了しているため再生できません。"));
+            }
+
             {
                 var (isSuccess, areaString) = await radikoUniqueProcessLogic.GetRadikoAreaAsync();
 
@@ -52,8 +63,9 @@ namespace RadiKeep.Logics.Logics.PlayProgramLogic
             }
 
             string loginSession;
+            bool isAreaFree;
             {
-                var (_, loginSessionString, isPremiumUser, _) = await radikoUniqueProcessLogic.LoginRadikoAsync();
+                var (_, loginSessionString, isPremiumUser, currentIsAreaFree) = await radikoUniqueProcessLogic.LoginRadikoAsync();
 
                 var stationInformation = await dbContext.RadikoStations.FindAsync(program.StationId);
 
@@ -66,6 +78,7 @@ namespace RadiKeep.Logics.Logics.PlayProgramLogic
                 }
 
                 loginSession = loginSessionString;
+                isAreaFree = currentIsAreaFree;
             }
 
             var (authSuccess, token, _) = await radikoUniqueProcessLogic.AuthorizeRadikoAsync(loginSession);
@@ -93,6 +106,17 @@ namespace RadiKeep.Logics.Logics.PlayProgramLogic
             {
                 logger.ZLogError($"らじる再生処理で番組情報の取得に失敗 programId={programId}");
                 return (false, null, null, new DomainException("番組の再生ができませんでした。"));
+            }
+
+            var now = DateTimeOffset.UtcNow;
+            if (program.StartTime > now)
+            {
+                return (false, null, null, new DomainException("この番組はまだ放送前のため再生できません。"));
+            }
+
+            if (program.EndTime <= now)
+            {
+                return (false, null, null, new DomainException("この番組はすでに放送終了しているため再生できません。"));
             }
 
             var station = await dbContext.NhkRadiruStations

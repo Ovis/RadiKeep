@@ -113,6 +113,18 @@
     </div>
 </section>
 
+<div id="searchLoadingOverlay" class="modal" aria-hidden="true">
+    <div class="modal-background"></div>
+    <div class="modal-content">
+        <div class="box has-text-centered p-6">
+            <span class="icon is-large">
+                <i class="fas fa-spinner fa-spin fa-2x" aria-hidden="true"></i>
+            </span>
+            <p class="mt-4 has-text-weight-semibold" data-loading-message>検索中...</p>
+        </div>
+    </div>
+</div>
+
 <template id="search-program-card-template">
     <div class="rk-program-card">
         <div class="card">
@@ -131,6 +143,7 @@
                 </div>
             </div>
             <footer class="card-footer">
+                <button type="button" class="card-footer-item play-btn hidden">再生</button>
                 <button type="button" class="card-footer-item record-btn">リアルタイム録音</button>
                 <button type="button" class="card-footer-item timefree-btn">タイムフリー録音</button>
                 <button type="button" class="card-footer-item ondemand-btn hidden">聞き逃し配信録音</button>
@@ -164,5 +177,6 @@
 </div>
 
 @section Scripts {
+    <script src="~/lib/hls.js/hls.min.js" asp-append-version="true"></script>
     <script type="module" src="~/js/search.js" asp-append-version="true"></script>
 }
