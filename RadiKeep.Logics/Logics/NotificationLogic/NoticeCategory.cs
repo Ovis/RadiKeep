@@ -34,6 +34,9 @@ namespace RadiKeep.Logics.Logics.NotificationLogic
         [EnumDisplayName("ディスク容量不足")]
         StorageLowSpace = 400,
 
+        [EnumDisplayName("時刻ずれ検知")]
+        ClockSkewDetected = 410,
+
         [EnumDisplayName("新しいリリース")]
         NewRelease = 500,
 

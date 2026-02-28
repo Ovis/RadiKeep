@@ -256,6 +256,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<LogMaintenanceLobLogic>();
         services.AddScoped<TemporaryStorageMaintenanceLobLogic>();
         services.AddScoped<StorageCapacityMonitorLobLogic>();
+        services.AddScoped<ClockSkewMonitorLobLogic>();
         services.AddScoped<ReleaseCheckLobLogic>();
         services.AddScoped<RecordJobLobLogic>();
         services.AddScoped<RadikoUniqueProcessLogic>();
@@ -292,6 +293,7 @@ public static class ServiceCollectionExtensions
         services.AddHostedService<ProgramUpdateScheduleBackgroundService>();
         services.AddHostedService<MaintenanceCleanupScheduleBackgroundService>();
         services.AddHostedService<StorageCapacityMonitorBackgroundService>();
+        services.AddHostedService<ClockSkewMonitorBackgroundService>();
         services.AddHostedService<ReleaseCheckBackgroundService>();
         services.AddHostedService<DuplicateDetectionScheduleBackgroundService>();
         return services;

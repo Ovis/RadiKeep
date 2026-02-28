@@ -96,6 +96,26 @@ public static class AppConfigurationNames
     public const string StorageLowSpaceNotificationCooldownHours = "StorageLowSpaceNotificationCooldownHours";
 
     /// <summary>
+    /// NTP時刻ずれ監視の有効/無効
+    /// </summary>
+    public const string ClockSkewMonitoringEnabled = "ClockSkewMonitoringEnabled";
+
+    /// <summary>
+    /// NTP時刻ずれ監視の実行間隔（時間）
+    /// </summary>
+    public const string ClockSkewCheckIntervalHours = "ClockSkewCheckIntervalHours";
+
+    /// <summary>
+    /// NTP時刻ずれしきい値（秒）
+    /// </summary>
+    public const string ClockSkewThresholdSeconds = "ClockSkewThresholdSeconds";
+
+    /// <summary>
+    /// 時刻同期に利用するNTPサーバー名
+    /// </summary>
+    public const string ClockSkewNtpServer = "ClockSkewNtpServer";
+
+    /// <summary>
     /// らじる★らじる番組表API連続アクセス時の最小待機時間（ミリ秒）
     /// </summary>
     public const string RadiruApiMinRequestIntervalMs = "RadiruApiMinRequestIntervalMs";

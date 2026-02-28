@@ -36,6 +36,10 @@ namespace RadiKeep.Logics.Services
         public int LogRetentionDays { get; private set; }
         public int StorageLowSpaceCheckIntervalMinutes { get; private set; }
         public int StorageLowSpaceNotificationCooldownHours { get; private set; }
+        public bool ClockSkewMonitoringEnabled { get; private set; }
+        public int ClockSkewCheckIntervalHours { get; private set; }
+        public int ClockSkewThresholdSeconds { get; private set; }
+        public string ClockSkewNtpServer { get; private set; } = string.Empty;
         public int RadiruApiMinRequestIntervalMs { get; private set; }
         public int RadiruApiRequestJitterMs { get; private set; }
         public string ReleaseCheckGitHubOwner => ReleaseOptions.ReleaseCheckGitHubOwner;
@@ -595,6 +599,31 @@ namespace RadiKeep.Logics.Services
             }
         }
 
+        public async ValueTask UpdateClockSkewMonitoringSettingsAsync(bool enabled, int checkIntervalHours, int thresholdSeconds)
+        {
+            if (checkIntervalHours <= 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(checkIntervalHours), "checkIntervalHours must be greater than zero.");
+            }
+            if (thresholdSeconds <= 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(thresholdSeconds), "thresholdSeconds must be greater than zero.");
+            }
+
+            using var scope = CreateDbContextScope(out var dbContext);
+
+            await UpsertIntAsync(dbContext, AppConfigurationNames.ClockSkewMonitoringEnabled, enabled ? 1 : 0);
+            await UpsertIntAsync(dbContext, AppConfigurationNames.ClockSkewCheckIntervalHours, checkIntervalHours);
+            await UpsertIntAsync(dbContext, AppConfigurationNames.ClockSkewThresholdSeconds, thresholdSeconds);
+
+            lock (_lock)
+            {
+                ClockSkewMonitoringEnabled = enabled;
+                ClockSkewCheckIntervalHours = checkIntervalHours;
+                ClockSkewThresholdSeconds = thresholdSeconds;
+            }
+        }
+
         public async ValueTask UpdateMergeTagsFromAllMatchedKeywordRulesAsync(bool enabled)
         {
             using var scope = CreateDbContextScope(out var dbContext);
@@ -853,6 +882,21 @@ namespace RadiKeep.Logics.Services
             StorageLowSpaceNotificationCooldownHours =
                 GetIntValue(dbContext, AppConfigurationNames.StorageLowSpaceNotificationCooldownHours)
                 ?? MonitoringOptions.StorageLowSpaceNotificationCooldownHours;
+            var clockSkewMonitoringEnabled = GetIntValue(dbContext, AppConfigurationNames.ClockSkewMonitoringEnabled);
+            ClockSkewMonitoringEnabled = clockSkewMonitoringEnabled.HasValue
+                ? clockSkewMonitoringEnabled.Value != 0
+                : MonitoringOptions.ClockSkewMonitoringEnabled;
+            ClockSkewCheckIntervalHours =
+                GetIntValue(dbContext, AppConfigurationNames.ClockSkewCheckIntervalHours)
+                ?? MonitoringOptions.ClockSkewCheckIntervalHours;
+            ClockSkewThresholdSeconds =
+                GetIntValue(dbContext, AppConfigurationNames.ClockSkewThresholdSeconds)
+                ?? MonitoringOptions.ClockSkewThresholdSeconds;
+            var clockSkewNtpServer =
+                GetStringValue(dbContext, AppConfigurationNames.ClockSkewNtpServer);
+            ClockSkewNtpServer = string.IsNullOrWhiteSpace(clockSkewNtpServer)
+                ? MonitoringOptions.ClockSkewNtpServer
+                : clockSkewNtpServer;
 
             // 複数キーワード一致時タグマージの全体設定
             var mergeTagsFromAllMatchedRules =

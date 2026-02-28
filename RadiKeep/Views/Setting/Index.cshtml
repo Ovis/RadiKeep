@@ -507,28 +507,6 @@
             </div>
         </div>
 
-        <!-- ストレージ空き容量通知設定 -->
-        <div class="rk-panel">
-            <header class="mb-3">
-                <h2 class="rk-panel-head">保存先ストレージ空き容量通知</h2>
-            </header>
-            <div class="content">
-                <div class="rk-setting-summary">
-                    <p>録音保存先ストレージの空き容量がしきい値を下回った場合に通知します。</p>
-                    <p>しきい値はMB単位で指定します。</p>
-                </div>
-                <div class="field">
-                    <div class="flex items-center gap-2">
-                        <div class="flex-1">
-                            <input class="input" type="number" min="1" max="@int.MaxValue" step="1" id="storage-low-space-threshold-mb-value" value="@AppConfigurationService.StorageLowSpaceThresholdMb">
-                        </div>
-                        <button class="button is-static shrink-0" type="button" tabindex="-1">MB</button>
-                        <button class="button is-primary shrink-0" id="update-storage-low-space-threshold-btn">保存</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-
         <div class="rk-panel">
             <header class="mb-3">
                 <h2 id="settings-automation" class="rk-panel-head">自動予約タグ付与の挙動</h2>
@@ -553,95 +531,7 @@
             </div>
         </div>
 
-        <div class="rk-panel">
-            <header class="mb-3">
-                <h2 class="rk-panel-head">類似番組抽出の定期実行</h2>
-            </header>
-            <div class="content">
-                <div class="rk-setting-summary">
-                    <p>録音済み番組から類似内容の候補を抽出する処理を定期実行します。</p>
-                    <p>抽出完了時はお知らせへ結果を通知します。</p>
-                </div>
-                <div class="md:hidden">
-                    <div class="field">
-                        <label class="checkbox">
-                            <input type="checkbox" id="duplicate-detection-enabled" @(AppConfigurationService.DuplicateDetectionIntervalDays > 0 ? "checked" : "") />
-                            定期実行を有効にする
-                        </label>
-                    </div>
-                    <div class="field">
-                        <label class="label">実行曜日</label>
-                        <div class="control">
-                            <div class="select is-fullwidth">
-                                <select id="duplicate-detection-day-of-week">
-                                    <option value="0" selected="@(AppConfigurationService.DuplicateDetectionScheduleDayOfWeek == 0)">日曜日</option>
-                                    <option value="1" selected="@(AppConfigurationService.DuplicateDetectionScheduleDayOfWeek == 1)">月曜日</option>
-                                    <option value="2" selected="@(AppConfigurationService.DuplicateDetectionScheduleDayOfWeek == 2)">火曜日</option>
-                                    <option value="3" selected="@(AppConfigurationService.DuplicateDetectionScheduleDayOfWeek == 3)">水曜日</option>
-                                    <option value="4" selected="@(AppConfigurationService.DuplicateDetectionScheduleDayOfWeek == 4)">木曜日</option>
-                                    <option value="5" selected="@(AppConfigurationService.DuplicateDetectionScheduleDayOfWeek == 5)">金曜日</option>
-                                    <option value="6" selected="@(AppConfigurationService.DuplicateDetectionScheduleDayOfWeek == 6)">土曜日</option>
-                                </select>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="field">
-                        <label class="label">実行時刻</label>
-                        <div class="control">
-                            <input class="input" id="duplicate-detection-time" type="time" value="@($"{AppConfigurationService.DuplicateDetectionScheduleHour:D2}:{AppConfigurationService.DuplicateDetectionScheduleMinute:D2}")" />
-                        </div>
-                    </div>
-                    <div class="field">
-                        <div class="control">
-                            <button class="button is-primary" id="update-duplicate-detection-interval-btn">保存</button>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="hidden md:block">
-                    <div class="field">
-                        <label class="checkbox">
-                            <input type="checkbox" id="duplicate-detection-enabled-desktop" @(AppConfigurationService.DuplicateDetectionIntervalDays > 0 ? "checked" : "") />
-                            定期実行を有効にする
-                        </label>
-                    </div>
-                    <div class="columns is-multiline is-desktop">
-                        <div class="column">
-                            <label class="label">実行曜日</label>
-                            <div class="control">
-                                <div class="select is-fullwidth">
-                                    <select id="duplicate-detection-day-of-week-desktop">
-                                        <option value="0" selected="@(AppConfigurationService.DuplicateDetectionScheduleDayOfWeek == 0)">日曜日</option>
-                                        <option value="1" selected="@(AppConfigurationService.DuplicateDetectionScheduleDayOfWeek == 1)">月曜日</option>
-                                        <option value="2" selected="@(AppConfigurationService.DuplicateDetectionScheduleDayOfWeek == 2)">火曜日</option>
-                                        <option value="3" selected="@(AppConfigurationService.DuplicateDetectionScheduleDayOfWeek == 3)">水曜日</option>
-                                        <option value="4" selected="@(AppConfigurationService.DuplicateDetectionScheduleDayOfWeek == 4)">木曜日</option>
-                                        <option value="5" selected="@(AppConfigurationService.DuplicateDetectionScheduleDayOfWeek == 5)">金曜日</option>
-                                        <option value="6" selected="@(AppConfigurationService.DuplicateDetectionScheduleDayOfWeek == 6)">土曜日</option>
-                                    </select>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="column">
-                            <label class="label">実行時刻</label>
-                            <div class="control">
-                                <input class="input" id="duplicate-detection-time-desktop" type="time" value="@($"{AppConfigurationService.DuplicateDetectionScheduleHour:D2}:{AppConfigurationService.DuplicateDetectionScheduleMinute:D2}")" />
-                            </div>
-                        </div>
-                        <div class="column is-narrow">
-                            <label class="label">&nbsp;</label>
-                            <div class="control">
-                                <button class="button is-primary" id="update-duplicate-detection-interval-btn-desktop">保存</button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div class="field">
-                    <p class="help">有効時は指定した曜日・時刻に毎週実行します。</p>
-                </div>
-            </div>
-        </div>
-
+        
         <div class="rk-panel">
             <header class="mb-3">
                 <h2 id="settings-release" class="rk-panel-head">新しいリリースの確認</h2>
@@ -822,6 +712,188 @@
                     </div>
                 </div>
             </div>
+            
+            <!-- ストレージ空き容量通知設定 -->
+            <div class="rk-panel">
+                <header class="mb-3">
+                    <h2 class="rk-panel-head">保存先ストレージ空き容量通知</h2>
+                </header>
+                <div class="content">
+                    <div class="rk-setting-summary">
+                        <p>録音保存先ストレージの空き容量がしきい値を下回った場合に通知します。</p>
+                        <p>しきい値はMB単位で指定します。</p>
+                    </div>
+                    <div class="field">
+                        <div class="flex items-center gap-2">
+                            <div class="flex-1">
+                                <input class="input" type="number" min="1" max="@int.MaxValue" step="1" id="storage-low-space-threshold-mb-value" value="@AppConfigurationService.StorageLowSpaceThresholdMb">
+                            </div>
+                            <button class="button is-static shrink-0" type="button" tabindex="-1">MB</button>
+                            <button class="button is-primary shrink-0" id="update-storage-low-space-threshold-btn">保存</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="rk-panel">
+                <header class="mb-3">
+                    <h2 class="rk-panel-head">NTP時刻ずれ監視</h2>
+                </header>
+                <div class="content">
+                    <div class="rk-setting-summary">
+                        <p>指定間隔でNTPサーバーと時刻を比較し、しきい値以上のずれを検知した場合にお知らせへ登録します。</p>
+                        <p>Discord通知は「Discord通知設定」の通知対象カテゴリで「時刻ずれ検知」を選択した場合に送信されます。</p>
+                    </div>
+                    <div class="md:hidden">
+                        <div class="field">
+                            <label class="checkbox">
+                                <input type="checkbox" id="clock-skew-monitoring-enabled" checked="@AppConfigurationService.ClockSkewMonitoringEnabled" />
+                                監視を有効にする
+                            </label>
+                        </div>
+                        <div class="field">
+                            <label class="label">監視間隔（時間）</label>
+                            <div class="control">
+                                <input class="input" type="number" min="1" max="168" step="1" id="clock-skew-check-interval-hours-value" value="@AppConfigurationService.ClockSkewCheckIntervalHours">
+                            </div>
+                        </div>
+                        <div class="field">
+                            <label class="label">ずれしきい値（秒）</label>
+                            <div class="control">
+                                <input class="input" type="number" min="1" max="600" step="1" id="clock-skew-threshold-seconds-value" value="@AppConfigurationService.ClockSkewThresholdSeconds">
+                            </div>
+                        </div>
+                        <div class="field">
+                            <div class="control">
+                                <button class="button is-primary" id="update-clock-skew-monitoring-btn">保存</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="hidden md:block">
+                        <div class="field">
+                            <label class="checkbox">
+                                <input type="checkbox" id="clock-skew-monitoring-enabled-desktop" checked="@AppConfigurationService.ClockSkewMonitoringEnabled" />
+                                監視を有効にする
+                            </label>
+                        </div>
+                        <div class="columns is-multiline is-desktop">
+                            <div class="column">
+                                <div class="field">
+                                    <label class="label">監視間隔（時間）</label>
+                                    <div class="control">
+                                        <input class="input" type="number" min="1" max="168" step="1" id="clock-skew-check-interval-hours-value-desktop" value="@AppConfigurationService.ClockSkewCheckIntervalHours">
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="column">
+                                <div class="field">
+                                    <label class="label">ずれしきい値（秒）</label>
+                                    <div class="control">
+                                        <input class="input" type="number" min="1" max="600" step="1" id="clock-skew-threshold-seconds-value-desktop" value="@AppConfigurationService.ClockSkewThresholdSeconds">
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="column is-narrow">
+                                <label class="label">&nbsp;</label>
+                                <div class="control">
+                                    <button class="button is-primary" id="update-clock-skew-monitoring-btn-desktop">保存</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="rk-panel">
+                <header class="mb-3">
+                    <h2 class="rk-panel-head">類似番組抽出の定期実行</h2>
+                </header>
+                <div class="content">
+                    <div class="rk-setting-summary">
+                        <p>録音済み番組から類似内容の候補を抽出する処理を定期実行します。</p>
+                        <p>抽出完了時はお知らせへ結果を通知します。</p>
+                    </div>
+                    <div class="md:hidden">
+                        <div class="field">
+                            <label class="checkbox">
+                                <input type="checkbox" id="duplicate-detection-enabled" @(AppConfigurationService.DuplicateDetectionIntervalDays > 0 ? "checked" : "") />
+                                定期実行を有効にする
+                            </label>
+                        </div>
+                        <div class="field">
+                            <label class="label">実行曜日</label>
+                            <div class="control">
+                                <div class="select is-fullwidth">
+                                    <select id="duplicate-detection-day-of-week">
+                                        <option value="0" selected="@(AppConfigurationService.DuplicateDetectionScheduleDayOfWeek == 0)">日曜日</option>
+                                        <option value="1" selected="@(AppConfigurationService.DuplicateDetectionScheduleDayOfWeek == 1)">月曜日</option>
+                                        <option value="2" selected="@(AppConfigurationService.DuplicateDetectionScheduleDayOfWeek == 2)">火曜日</option>
+                                        <option value="3" selected="@(AppConfigurationService.DuplicateDetectionScheduleDayOfWeek == 3)">水曜日</option>
+                                        <option value="4" selected="@(AppConfigurationService.DuplicateDetectionScheduleDayOfWeek == 4)">木曜日</option>
+                                        <option value="5" selected="@(AppConfigurationService.DuplicateDetectionScheduleDayOfWeek == 5)">金曜日</option>
+                                        <option value="6" selected="@(AppConfigurationService.DuplicateDetectionScheduleDayOfWeek == 6)">土曜日</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="field">
+                            <label class="label">実行時刻</label>
+                            <div class="control">
+                                <input class="input" id="duplicate-detection-time" type="time" value="@($"{AppConfigurationService.DuplicateDetectionScheduleHour:D2}:{AppConfigurationService.DuplicateDetectionScheduleMinute:D2}")" />
+                            </div>
+                        </div>
+                        <div class="field">
+                            <div class="control">
+                                <button class="button is-primary" id="update-duplicate-detection-interval-btn">保存</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="hidden md:block">
+                        <div class="field">
+                            <label class="checkbox">
+                                <input type="checkbox" id="duplicate-detection-enabled-desktop" @(AppConfigurationService.DuplicateDetectionIntervalDays > 0 ? "checked" : "") />
+                                定期実行を有効にする
+                            </label>
+                        </div>
+                        <div class="columns is-multiline is-desktop">
+                            <div class="column">
+                                <label class="label">実行曜日</label>
+                                <div class="control">
+                                    <div class="select is-fullwidth">
+                                        <select id="duplicate-detection-day-of-week-desktop">
+                                            <option value="0" selected="@(AppConfigurationService.DuplicateDetectionScheduleDayOfWeek == 0)">日曜日</option>
+                                            <option value="1" selected="@(AppConfigurationService.DuplicateDetectionScheduleDayOfWeek == 1)">月曜日</option>
+                                            <option value="2" selected="@(AppConfigurationService.DuplicateDetectionScheduleDayOfWeek == 2)">火曜日</option>
+                                            <option value="3" selected="@(AppConfigurationService.DuplicateDetectionScheduleDayOfWeek == 3)">水曜日</option>
+                                            <option value="4" selected="@(AppConfigurationService.DuplicateDetectionScheduleDayOfWeek == 4)">木曜日</option>
+                                            <option value="5" selected="@(AppConfigurationService.DuplicateDetectionScheduleDayOfWeek == 5)">金曜日</option>
+                                            <option value="6" selected="@(AppConfigurationService.DuplicateDetectionScheduleDayOfWeek == 6)">土曜日</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="column">
+                                <label class="label">実行時刻</label>
+                                <div class="control">
+                                    <input class="input" id="duplicate-detection-time-desktop" type="time" value="@($"{AppConfigurationService.DuplicateDetectionScheduleHour:D2}:{AppConfigurationService.DuplicateDetectionScheduleMinute:D2}")" />
+                                </div>
+                            </div>
+                            <div class="column is-narrow">
+                                <label class="label">&nbsp;</label>
+                                <div class="control">
+                                    <button class="button is-primary" id="update-duplicate-detection-interval-btn-desktop">保存</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="field">
+                        <p class="help">有効時は指定した曜日・時刻に毎週実行します。</p>
+                    </div>
+                </div>
+            </div>
+
         </div>
 
         <div id="setting-panel-tags" class="hidden">

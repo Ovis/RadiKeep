@@ -42,6 +42,7 @@ export const API_ENDPOINTS = {
     SETTING_EXTERNAL_IMPORT_TIMEZONE: `/api/settings/external-import-timezone`,
     SETTING_STORAGE_LOW_SPACE_THRESHOLD: `/api/settings/storage-low-space-threshold`,
     SETTING_MONITORING_ADVANCED: `/api/settings/monitoring-advanced`,
+    SETTING_CLOCK_SKEW_MONITORING: `/api/settings/clock-skew-monitoring`,
     SETTING_MERGE_TAGS_FROM_MATCHED_RULES: `/api/settings/merge-tags-from-matched-rules`,
     SETTING_EMBED_PROGRAM_IMAGE_ON_RECORD: `/api/settings/embed-program-image-on-record`,
     SETTING_RESUME_PLAYBACK_ACROSS_PAGES: `/api/settings/resume-playback-across-pages`,

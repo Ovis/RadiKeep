@@ -207,6 +207,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/programs/update-status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 番組表更新状態を取得する */
+        get: operations["ApiProgramUpdateStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/programs/reserve": {
         parameters: {
             query?: never;
@@ -473,6 +490,23 @@ export interface paths {
         put?: never;
         /** 監視関連設定を更新する */
         post: operations["ApiSettingMonitoringAdvanced"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/clock-skew-monitoring": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** NTP時刻ずれ監視設定を更新する */
+        post: operations["ApiSettingClockSkewMonitoring"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1294,6 +1328,12 @@ export interface components {
             error: null | components["schemas"]["ApiError"];
             message: null | string;
         };
+        ApiResponseOfProgramUpdateStatusResponse: {
+            success: boolean;
+            data: null | components["schemas"]["ProgramUpdateStatusResponse"];
+            error: null | components["schemas"]["ApiError"];
+            message: null | string;
+        };
         ApiResponseOfRadioProgramEntry: {
             success: boolean;
             data: null | components["schemas"]["RadioProgramEntry"];
@@ -1507,6 +1547,16 @@ export interface components {
             endTime?: string;
             includeHistoricalPrograms?: boolean;
             orderKind?: string;
+        };
+        ProgramUpdateStatusResponse: {
+            isRunning: boolean;
+            triggerSource: null | string;
+            message: string;
+            /** Format: date-time */
+            startedAtUtc: null | string;
+            /** Format: date-time */
+            lastCompletedAtUtc: null | string;
+            lastSucceeded: null | boolean;
         };
         RadikoStationInformationEntry: {
             stationId?: string;
@@ -1733,6 +1783,13 @@ export interface components {
             name?: string;
         };
         Ulid: unknown;
+        UpdateClockSkewMonitoringEntity: {
+            enabled?: boolean;
+            /** Format: int32 */
+            checkIntervalHours?: number | string;
+            /** Format: int32 */
+            thresholdSeconds?: number | string;
+        };
         UpdateDuplicateDetectionIntervalEntity: {
             enabled?: boolean;
             /** Format: int32 */
@@ -2073,6 +2130,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ApiResponseOfEmptyData"];
+                };
+            };
+        };
+    };
+    ApiProgramUpdateStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponseOfProgramUpdateStatusResponse"];
                 };
             };
         };
@@ -2547,6 +2624,39 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["UpdateMonitoringAdvancedEntity"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponseOfEmptyData"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponseOfEmptyData"];
+                };
+            };
+        };
+    };
+    ApiSettingClockSkewMonitoring: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateClockSkewMonitoringEntity"];
             };
         };
         responses: {
