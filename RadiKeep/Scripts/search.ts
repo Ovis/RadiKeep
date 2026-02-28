@@ -160,6 +160,7 @@ function persistCurrentPlaybackState(): void {
         title: currentPlayingProgramTitle,
         currentTime: Number.isFinite(audio.currentTime) ? audio.currentTime : 0,
         playbackRate: Number.isFinite(audio.playbackRate) ? audio.playbackRate : 1,
+        wasPlaying: !audio.paused && !audio.ended,
         savedAtUtc: new Date().toISOString()
     });
 }

@@ -7,6 +7,7 @@ export type PersistedPlayerState = {
     recordId?: string | null;
     currentTime?: number;
     playbackRate?: number;
+    wasPlaying?: boolean;
     savedAtUtc: string;
 };
 
