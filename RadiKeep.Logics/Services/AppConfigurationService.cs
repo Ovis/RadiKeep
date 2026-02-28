@@ -233,9 +233,10 @@ namespace RadiKeep.Logics.Services
 
             try
             {
+                var protectedUserId = _dataProtector.Protect(userId);
                 var protectedPassword = _dataProtector.Protect(password);
 
-                await UpsertStringAsync(dbContext, AppConfigurationNames.RadikoUserId, userId);
+                await UpsertStringAsync(dbContext, AppConfigurationNames.RadikoUserIdProtected, protectedUserId);
                 await UpsertStringAsync(dbContext, AppConfigurationNames.RadikoPasswordProtected, protectedPassword);
 
                 await transaction.CommitAsync();
@@ -262,7 +263,7 @@ namespace RadiKeep.Logics.Services
 
             try
             {
-                await UpsertStringAsync(dbContext, AppConfigurationNames.RadikoUserId, string.Empty);
+                await UpsertStringAsync(dbContext, AppConfigurationNames.RadikoUserIdProtected, string.Empty);
                 await UpsertStringAsync(dbContext, AppConfigurationNames.RadikoPasswordProtected, string.Empty);
 
                 await transaction.CommitAsync();
@@ -292,16 +293,17 @@ namespace RadiKeep.Logics.Services
         {
             using var scope = CreateDbContextScope(out var dbContext);
 
-            var userId = GetStringValue(dbContext, AppConfigurationNames.RadikoUserId) ?? string.Empty;
+            var protectedUserId = GetStringValue(dbContext, AppConfigurationNames.RadikoUserIdProtected) ?? string.Empty;
             var protectedPassword = GetStringValue(dbContext, AppConfigurationNames.RadikoPasswordProtected) ?? string.Empty;
 
-            if (string.IsNullOrWhiteSpace(userId) || string.IsNullOrWhiteSpace(protectedPassword))
+            if (string.IsNullOrWhiteSpace(protectedUserId) || string.IsNullOrWhiteSpace(protectedPassword))
             {
                 return ValueTask.FromResult((false, string.Empty, string.Empty));
             }
 
             try
             {
+                var userId = _dataProtector.Unprotect(protectedUserId);
                 var password = _dataProtector.Unprotect(protectedPassword);
                 return ValueTask.FromResult((true, userId, password));
             }
@@ -970,13 +972,14 @@ namespace RadiKeep.Logics.Services
             UnreadBadgeNoticeCategories = ParseNoticeCategories(unreadBadgeNoticeCategories, defaultUnreadBadgeCategories);
 
             // radikoログイン情報（暗号化）
-            var userId = GetStringValue(dbContext, AppConfigurationNames.RadikoUserId);
+            var protectedUserId = GetStringValue(dbContext, AppConfigurationNames.RadikoUserIdProtected);
             var protectedPassword = GetStringValue(dbContext, AppConfigurationNames.RadikoPasswordProtected);
 
-            if (!string.IsNullOrWhiteSpace(userId) && !string.IsNullOrWhiteSpace(protectedPassword))
+            if (!string.IsNullOrWhiteSpace(protectedUserId) && !string.IsNullOrWhiteSpace(protectedPassword))
             {
                 try
                 {
+                    var userId = _dataProtector.Unprotect(protectedUserId);
                     _dataProtector.Unprotect(protectedPassword);
 
                     RadikoOptions.RadikoUserId = userId;

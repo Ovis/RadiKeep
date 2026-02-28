@@ -115,10 +115,11 @@ public class AppConfigurationServiceTests
 
         using var scope = _provider.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<RadioDbContext>();
-        var userId = db.AppConfigurations.Single(r => r.ConfigurationName == AppConfigurationNames.RadikoUserId).Val1;
+        var protectedUserId = db.AppConfigurations.Single(r => r.ConfigurationName == AppConfigurationNames.RadikoUserIdProtected).Val1;
         var protectedPassword = db.AppConfigurations.Single(r => r.ConfigurationName == AppConfigurationNames.RadikoPasswordProtected).Val1;
 
-        Assert.That(userId, Is.EqualTo("user@example.com"));
+        Assert.That(protectedUserId, Is.Not.EqualTo("user@example.com"));
+        Assert.That(string.IsNullOrEmpty(protectedUserId), Is.False);
         Assert.That(protectedPassword, Is.Not.EqualTo("password123"));
         Assert.That(string.IsNullOrEmpty(protectedPassword), Is.False);
     }
@@ -158,7 +159,7 @@ public class AppConfigurationServiceTests
 
         using var scope = _provider.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<RadioDbContext>();
-        var userId = db.AppConfigurations.Single(r => r.ConfigurationName == AppConfigurationNames.RadikoUserId).Val1;
+        var userId = db.AppConfigurations.Single(r => r.ConfigurationName == AppConfigurationNames.RadikoUserIdProtected).Val1;
         var protectedPassword = db.AppConfigurations.Single(r => r.ConfigurationName == AppConfigurationNames.RadikoPasswordProtected).Val1;
 
         Assert.That(userId, Is.EqualTo(string.Empty));
