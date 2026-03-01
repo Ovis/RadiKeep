@@ -4,6 +4,7 @@ using RadiKeep.Logics.Extensions;
 using RadiKeep.Logics.Models;
 using RadiKeep.Logics.Models.Enums;
 using RadiKeep.Logics.Models.Radiko;
+using RadiKeep.Logics.Primitives;
 using RadiKeep.Logics.RdbContext;
 
 namespace RadiKeep.Logics.Infrastructure.ProgramSchedule;
@@ -13,6 +14,8 @@ namespace RadiKeep.Logics.Infrastructure.ProgramSchedule;
 /// </summary>
 public class ProgramScheduleRepository(RadioDbContext dbContext) : IProgramScheduleRepository
 {
+    private static readonly TimeZoneInfo JapanStandardTimeZone = JapanTimeZone.Resolve();
+
     /// <summary>
     /// 指定時刻に放送中のradiko番組を取得する
     /// </summary>
@@ -245,8 +248,11 @@ public class ProgramScheduleRepository(RadioDbContext dbContext) : IProgramSched
             .Where(
                 r =>
                     (searchEntity.IncludeHistoricalPrograms || r.EndTime >= standardDateTimeOffset) &&
-                    r.StartTime.TimeOfDay >= searchEntity.StartTime.ToTimeSpan() &&
-                    r.EndTime.TimeOfDay <= searchEntity.EndTime.ToTimeSpan())
+                    IsProgramWithinSearchTimeRange(
+                        r.StartTime,
+                        r.EndTime,
+                        searchEntity.StartTime,
+                        searchEntity.EndTime))
             .OrderBy(r => r.StartTime)
             .ToList();
 
@@ -417,8 +423,11 @@ public class ProgramScheduleRepository(RadioDbContext dbContext) : IProgramSched
             .Where(
                 r =>
                     (searchEntity.IncludeHistoricalPrograms || r.EndTime >= standardDateTimeOffset) &&
-                    r.StartTime.TimeOfDay >= searchEntity.StartTime.ToTimeSpan() &&
-                    r.EndTime.TimeOfDay <= searchEntity.EndTime.ToTimeSpan())
+                    IsProgramWithinSearchTimeRange(
+                        r.StartTime,
+                        r.EndTime,
+                        searchEntity.StartTime,
+                        searchEntity.EndTime))
             .OrderBy(r => r.StartTime)
             .ToList();
 
@@ -550,5 +559,43 @@ public class ProgramScheduleRepository(RadioDbContext dbContext) : IProgramSched
             await transaction.RollbackAsync(cancellationToken);
             throw;
         }
+    }
+
+    private static bool IsProgramWithinSearchTimeRange(
+        DateTimeOffset startUtc,
+        DateTimeOffset endUtc,
+        TimeOnly searchStart,
+        TimeOnly searchEnd)
+    {
+        var day = TimeSpan.FromDays(1);
+        var localStart = TimeZoneInfo.ConvertTime(startUtc, JapanStandardTimeZone).TimeOfDay;
+        var localEnd = TimeZoneInfo.ConvertTime(endUtc, JapanStandardTimeZone).TimeOfDay;
+        if (localEnd <= localStart)
+        {
+            localEnd += day;
+        }
+
+        var searchStartSpan = searchStart.ToTimeSpan();
+        var searchEndSpan = searchEnd.ToTimeSpan();
+        if (searchEndSpan <= searchStartSpan)
+        {
+            searchEndSpan += day;
+        }
+
+        var programRanges = new[]
+        {
+            (Start: localStart, End: localEnd),
+            (Start: localStart + day, End: localEnd + day)
+        };
+        var searchRanges = new[]
+        {
+            (Start: searchStartSpan, End: searchEndSpan),
+            (Start: searchStartSpan + day, End: searchEndSpan + day)
+        };
+
+        return programRanges.Any(programRange =>
+            searchRanges.Any(searchRange =>
+                programRange.Start >= searchRange.Start &&
+                programRange.End <= searchRange.End));
     }
 }

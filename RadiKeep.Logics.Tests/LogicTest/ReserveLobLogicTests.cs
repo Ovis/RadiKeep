@@ -963,7 +963,8 @@ namespace RadiKeep.Logics.Tests.LogicTest
         public async ValueTask SetKeywordReserveAsync_放送中かつタイムフリー可能番組も予約対象になる()
         {
             // Arrange
-            var now = _appContextMock.Object.StandardDateTimeOffset;
+            var now = new DateTimeOffset(2026, 2, 10, 12, 0, 0, TimeSpan.FromHours(9));
+            _appContextMock.SetupGet(x => x.StandardDateTimeOffset).Returns(now);
             var dayOfWeek = (DaysOfWeek)now.DayOfWeek;
 
             var onAirTimeFreeProgram = new RadikoProgram
