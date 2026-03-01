@@ -293,6 +293,43 @@ public class RecordingLobLogicTests : UnitTestBase
         Assert.That(error, Is.Not.Null);
     }
 
+    [Test]
+    public async Task RecordRadioAsync_TimeFreeFailure_お知らせに失敗詳細が登録される()
+    {
+        var scheduleJobId = Ulid.NewUlid();
+        DbContext.ScheduleJob.Add(CreateScheduleJob(scheduleJobId));
+        await DbContext.SaveChangesAsync();
+
+        var logic = new RecordingLobLogic(
+            new Mock<ILogger<RecordingLobLogic>>().Object,
+            CreateDbOrchestrator(transcodeResult: false),
+            DbContext,
+            CreateDbNotificationLobLogic(),
+            CreateAppConfigurationService(),
+            new TagLobLogic(new Mock<ILogger<TagLobLogic>>().Object, DbContext));
+
+        var (isSuccess, error) = await logic.RecordRadioAsync(
+            serviceKind: RadioServiceKind.Radiko,
+            programId: "P1",
+            programName: "Test",
+            scheduleJobId: scheduleJobId.ToString(),
+            isTimeFree: true,
+            startDelay: 0,
+            endDelay: 0);
+
+        Assert.That(isSuccess, Is.False);
+        Assert.That(error, Is.Not.Null);
+        Assert.That(error!.Message, Is.EqualTo("タイムフリー録音チャンク取得に失敗しました。"));
+
+        var notification = await DbContext.Notification
+            .OrderByDescending(x => x.Timestamp)
+            .FirstOrDefaultAsync();
+
+        Assert.That(notification, Is.Not.Null);
+        Assert.That(notification!.Category, Is.EqualTo(NoticeCategory.RecordingError));
+        Assert.That(notification.Message, Is.EqualTo("Test の録音に失敗しました。理由: タイムフリー録音チャンク取得に失敗しました。"));
+    }
+
     /// <summary>
     /// 異常系: 録音失敗時はスケジュールが残る
     /// </summary>

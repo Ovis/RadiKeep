@@ -121,8 +121,13 @@ public class RecordingOrchestrator(
             var ok = await transcoder.RecordAsync(sourceResult, mediaPath, cancellationToken);
             if (!ok)
             {
-                await UpdateStateSafeAsync(RecordingState.Failed, "録音処理に失敗しました。");
-                return new RecordingResult(false, recordingId, "録音処理に失敗しました。");
+                var errorMessage = command.IsTimeFree
+                    ? "タイムフリー録音チャンク取得に失敗しました。"
+                    : command.IsOnDemand
+                        ? "聞き逃し配信録音に失敗しました。"
+                        : "録音処理に失敗しました。";
+                await UpdateStateSafeAsync(RecordingState.Failed, errorMessage);
+                return new RecordingResult(false, recordingId, errorMessage);
             }
 
             mediaPath = await storage.CommitAsync(mediaPath, cancellationToken);
