@@ -19,10 +19,12 @@ namespace RadiKeep.Logics.BackgroundServices;
 public class RecordingScheduleBackgroundService(
     ILogger<RecordingScheduleBackgroundService> logger,
     IServiceScopeFactory serviceScopeFactory,
-    IAppConfigurationService appConfigurationService) : BackgroundService
+    IAppConfigurationService appConfigurationService,
+    IRecordingScheduleWakeup recordingScheduleWakeup) : BackgroundService
 {
     private static readonly TimeSpan PeriodicScanInterval = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan StartupRecoveryTimeout = TimeSpan.FromHours(2);
+    private static readonly TimeSpan TimeFreeReadyLeadTime = TimeSpan.FromMinutes(3);
     private static readonly ConcurrentDictionary<Ulid, byte> RunningJobMap = new();
 
     /// <summary>
@@ -35,27 +37,43 @@ public class RecordingScheduleBackgroundService(
 
         await RecoverJobsOnStartupAsync(stoppingToken);
 
-        using var periodicTimer = new PeriodicTimer(PeriodicScanInterval);
+        var nextPeriodicAtUtc = DateTimeOffset.UtcNow.Add(PeriodicScanInterval);
         while (!stoppingToken.IsCancellationRequested)
         {
             try
             {
                 await QueueDueJobsAsync(stoppingToken);
                 var nextDelay = await CalculateNextOneShotDelayAsync(stoppingToken);
+                var wakeupTask = recordingScheduleWakeup.WaitAsync(stoppingToken).AsTask();
+                var nowUtc = DateTimeOffset.UtcNow;
+
+                while (nextPeriodicAtUtc <= nowUtc)
+                {
+                    nextPeriodicAtUtc = nextPeriodicAtUtc.Add(PeriodicScanInterval);
+                }
+
+                var periodicDelay = nextPeriodicAtUtc - nowUtc;
+                var periodicTask = Task.Delay(periodicDelay, stoppingToken);
 
                 if (!nextDelay.HasValue)
                 {
-                    if (!await periodicTimer.WaitForNextTickAsync(stoppingToken))
+                    var completedTask = await Task.WhenAny(periodicTask, wakeupTask);
+
+                    if (completedTask == wakeupTask)
                     {
-                        break;
+                        logger.ZLogDebug($"録音スケジューラが起床通知で再評価を再開します。");
                     }
 
                     continue;
                 }
 
-                var periodicTask = periodicTimer.WaitForNextTickAsync(stoppingToken).AsTask();
                 var oneShotTask = Task.Delay(nextDelay.Value, stoppingToken);
-                await Task.WhenAny(periodicTask, oneShotTask);
+                var completed = await Task.WhenAny(periodicTask, oneShotTask, wakeupTask);
+
+                if (completed == wakeupTask)
+                {
+                    logger.ZLogDebug($"録音スケジューラが起床通知で再評価を再開します。");
+                }
             }
             catch (OperationCanceledException)
             {
@@ -145,6 +163,8 @@ public class RecordingScheduleBackgroundService(
 
         foreach (var jobId in dueJobIds)
         {
+            logger.ZLogDebug($"録音スケジューラが実行対象ジョブを検出しました。 jobId={jobId}");
+
             var updated = await dbContext.ScheduleJob
                 .Where(x => x.Id == jobId && x.State == ScheduleJobState.Pending && x.IsEnabled)
                 .ExecuteUpdateAsync(setters => setters
@@ -153,11 +173,13 @@ public class RecordingScheduleBackgroundService(
 
             if (updated != 1)
             {
+                logger.ZLogDebug($"録音スケジューラがジョブのキュー投入をスキップしました。 jobId={jobId} reason=state_changed");
                 continue;
             }
 
             if (!RunningJobMap.TryAdd(jobId, 0))
             {
+                logger.ZLogDebug($"録音スケジューラがジョブのキュー投入をスキップしました。 jobId={jobId} reason=already_running");
                 continue;
             }
 
@@ -218,8 +240,12 @@ public class RecordingScheduleBackgroundService(
 
         if (job == null)
         {
+            logger.ZLogDebug($"録音ジョブを開始できませんでした。 jobId={jobId} reason=not_found_or_disabled");
             return;
         }
+
+        logger.ZLogDebug(
+            $"録音ジョブの実行準備を開始します。 jobId={jobId} programId={job.ProgramId} title={job.Title} recordingType={job.RecordingType} start={job.StartDateTime:O} end={job.EndDateTime:O} prepareStartUtc={job.PrepareStartUtc:O}");
 
         var preparingUpdated = await dbContext.ScheduleJob
             .Where(x => x.Id == jobId && x.State == ScheduleJobState.Queued)
@@ -227,11 +253,13 @@ public class RecordingScheduleBackgroundService(
                 .SetProperty(x => x.State, ScheduleJobState.Preparing), cancellationToken);
         if (preparingUpdated != 1)
         {
+            logger.ZLogDebug($"録音ジョブの実行準備を開始できませんでした。 jobId={jobId} reason=not_queued");
             return;
         }
 
         var fireAtUtc = ResolveFireAtUtc(job);
         var wait = fireAtUtc - DateTimeOffset.UtcNow;
+        logger.ZLogDebug($"録音ジョブの実行時刻を評価しました。 jobId={jobId} fireAtUtc={fireAtUtc:O} waitMs={Math.Max(0, (long)wait.TotalMilliseconds)}");
         if (wait > TimeSpan.Zero)
         {
             await Task.Delay(wait, cancellationToken);
@@ -244,8 +272,11 @@ public class RecordingScheduleBackgroundService(
                 .SetProperty(x => x.ActualStartUtc, DateTimeOffset.UtcNow), cancellationToken);
         if (recordingUpdated != 1)
         {
+            logger.ZLogDebug($"録音ジョブを録音状態へ遷移できませんでした。 jobId={jobId} reason=not_preparing");
             return;
         }
+
+        logger.ZLogDebug($"録音ジョブを開始します。 jobId={jobId}");
 
         using var recordCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         RecordingCancellationRegistry.Register(jobId.ToString(), recordCts);
@@ -351,13 +382,15 @@ public class RecordingScheduleBackgroundService(
     private DateTimeOffset ResolveFireAtUtc(ScheduleJob job)
     {
         var startDelaySeconds = job.StartDelay?.TotalSeconds ?? appConfigurationService.RecordStartDuration.TotalSeconds;
+        var nowUtc = DateTimeOffset.UtcNow;
+        var timeFreeReadyAtUtc = job.EndDateTime.ToUniversalTime().Add(TimeFreeReadyLeadTime);
         return job.RecordingType switch
         {
-            RecordingType.TimeFree => job.EndDateTime.AddMinutes(3).ToUniversalTime(),
-            RecordingType.OnDemand => DateTimeOffset.UtcNow,
-            RecordingType.Immediate => DateTimeOffset.UtcNow,
+            RecordingType.TimeFree => timeFreeReadyAtUtc > nowUtc ? timeFreeReadyAtUtc : nowUtc,
+            RecordingType.OnDemand => nowUtc,
+            RecordingType.Immediate => nowUtc,
             RecordingType.RealTime => job.StartDateTime.AddSeconds(-startDelaySeconds).AddSeconds(-1).ToUniversalTime(),
-            _ => DateTimeOffset.UtcNow
+            _ => nowUtc
         };
     }
 
