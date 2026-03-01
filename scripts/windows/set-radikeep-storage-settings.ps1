@@ -4,7 +4,8 @@
 
     [string]$TempDir,
 
-    [string]$AppSettingsPath = ".\RadiKeep\appsettings.json",
+    [Alias('AppSettingsPath')]
+    [string]$SettingsPath = ".\RadiKeep\radikeep.settings.json",
 
     [switch]$CreateDirectories,
 
@@ -18,7 +19,41 @@ $ErrorActionPreference = 'Stop'
 
 $recordKey = 'RecordFileSaveFolder'
 $tempKey = 'TemporaryFileSaveFolder'
-$generalOptionsKey = 'GeneralOptions'
+$radiKeepKey = 'RadiKeep'
+
+function Get-DefaultSettingsObject {
+    return [pscustomobject]@{
+        RadiKeep = [pscustomobject]@{
+            RecordFileSaveFolder = ''
+            TemporaryFileSaveFolder = ''
+            FfmpegExecutablePath = ''
+        }
+    }
+}
+
+function Load-OrInitializeSettings {
+    param([Parameter(Mandatory = $true)][string]$TargetPath)
+
+    if (Test-Path -Path $TargetPath) {
+        $loaded = Get-Content -Raw -Path $TargetPath | ConvertFrom-Json
+        if ($null -eq $loaded) {
+            throw "JSON の解析に失敗しました: $TargetPath"
+        }
+        return $loaded
+    }
+
+    $baseDir = Split-Path -Path $TargetPath -Parent
+    $samplePath = Join-Path $baseDir 'radikeep.settings.sample.json'
+    if (Test-Path -Path $samplePath) {
+        $loaded = Get-Content -Raw -Path $samplePath | ConvertFrom-Json
+        if ($null -eq $loaded) {
+            throw "JSON の解析に失敗しました: $samplePath"
+        }
+        return $loaded
+    }
+
+    return Get-DefaultSettingsObject
+}
 
 function Test-IsAdministrator {
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
@@ -66,36 +101,28 @@ if ($CreateDirectories) {
     }
 }
 
-if (-not (Test-Path -Path $AppSettingsPath)) {
-    throw "appsettings.json が見つかりません: $AppSettingsPath"
+# Load and patch only the RadiKeep storage keys.
+$settings = Load-OrInitializeSettings -TargetPath $SettingsPath
+if (-not ($settings.PSObject.Properties.Name -contains $radiKeepKey)) {
+    $settings | Add-Member -MemberType NoteProperty -Name $radiKeepKey -Value ([pscustomobject]@{})
 }
 
-# Load and patch only the GeneralOptions storage keys.
-$appsettings = Get-Content -Raw -Path $AppSettingsPath | ConvertFrom-Json
-if ($null -eq $appsettings) {
-    throw "JSON の解析に失敗しました: $AppSettingsPath"
-}
-
-if (-not ($appsettings.PSObject.Properties.Name -contains $generalOptionsKey)) {
-    $appsettings | Add-Member -MemberType NoteProperty -Name $generalOptionsKey -Value ([pscustomobject]@{})
-}
-
-$appsettings.GeneralOptions | Add-Member -MemberType NoteProperty -Name $recordKey -Value $RecordDir -Force
+$settings.RadiKeep | Add-Member -MemberType NoteProperty -Name $recordKey -Value $RecordDir -Force
 if (-not [string]::IsNullOrWhiteSpace($TempDir)) {
-    $appsettings.GeneralOptions | Add-Member -MemberType NoteProperty -Name $tempKey -Value $TempDir -Force
+    $settings.RadiKeep | Add-Member -MemberType NoteProperty -Name $tempKey -Value $TempDir -Force
 }
 
-$json = $appsettings | ConvertTo-Json -Depth 10
-Set-Content -Path $AppSettingsPath -Value $json -Encoding UTF8
+$json = $settings | ConvertTo-Json -Depth 10
+Set-Content -Path $SettingsPath -Value $json -Encoding UTF8
 
-Write-Host "appsettings を更新しました: $AppSettingsPath"
-Write-Host "GeneralOptions.$recordKey = $RecordDir"
+Write-Host "radikeep.settings.json を更新しました: $SettingsPath"
+Write-Host "RadiKeep.$recordKey = $RecordDir"
 if (-not [string]::IsNullOrWhiteSpace($TempDir)) {
-    Write-Host "GeneralOptions.$tempKey = $TempDir"
+    Write-Host "RadiKeep.$tempKey = $TempDir"
 }
 
 if ($RestartService) {
-    # Service restart applies updated appsettings without manual operation.
+    # Service restart applies updated settings without manual operation.
     Ensure-ElevatedSelf
 
     $task = Get-ScheduledTask -TaskName $ServiceName -ErrorAction SilentlyContinue
