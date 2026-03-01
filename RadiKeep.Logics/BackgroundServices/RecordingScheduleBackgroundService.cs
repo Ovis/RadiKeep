@@ -255,6 +255,11 @@ public class RecordingScheduleBackgroundService(
             var startDelaySeconds = job.StartDelay?.TotalSeconds ?? appConfigurationService.RecordStartDuration.TotalSeconds;
             var endDelaySeconds = job.EndDelay?.TotalSeconds ?? appConfigurationService.RecordEndDuration.TotalSeconds;
 
+            await notificationLobLogic.SetNotificationAsync(
+                logLevel: LogLevel.Information,
+                category: NoticeCategory.RecordingStart,
+                message: $"{job.Title} の録音を開始します。");
+
             var (isSuccess, error) = await recordingLobLogic.RecordRadioAsync(
                 serviceKind: job.ServiceKind,
                 programId: job.ProgramId,

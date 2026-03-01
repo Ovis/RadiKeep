@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Moq;
 using RadiKeep.Logics.Domain.Recording;
+using RadiKeep.Logics.Infrastructure.Notification;
 using RadiKeep.Logics.Infrastructure.Recording;
 using RadiKeep.Logics.Logics.NotificationLogic;
 using RadiKeep.Logics.Logics.RecordingLogic;
@@ -37,6 +38,29 @@ public class RecordingLobLogicTests : UnitTestBase
         var entryMapper = new EntryMapper(configMock.Object);
         var httpClientFactory = new FakeHttpClientFactory(new HttpClient(new FakeHttpMessageHandler()));
         var notificationRepository = new FakeNotificationRepository();
+
+        return new NotificationLobLogic(
+            logger,
+            appContext,
+            configMock.Object,
+            entryMapper,
+            httpClientFactory,
+            notificationRepository);
+    }
+
+    private NotificationLobLogic CreateDbNotificationLobLogic()
+    {
+        var logger = new Mock<ILogger<NotificationLobLogic>>().Object;
+        var appContext = new FakeRadioAppContext();
+
+        var configMock = new Mock<IAppConfigurationService>();
+        configMock.SetupGet(c => c.DiscordWebhookUrl).Returns(string.Empty);
+        configMock.SetupGet(c => c.NoticeCategories).Returns([]);
+        configMock.SetupGet(c => c.RadikoStationDic).Returns(new System.Collections.Concurrent.ConcurrentDictionary<string, string>());
+
+        var entryMapper = new EntryMapper(configMock.Object);
+        var httpClientFactory = new FakeHttpClientFactory(new HttpClient(new FakeHttpMessageHandler()));
+        var notificationRepository = new NotificationRepository(DbContext);
 
         return new NotificationLobLogic(
             logger,
@@ -196,6 +220,42 @@ public class RecordingLobLogicTests : UnitTestBase
 
         var deleted = await DbContext.ScheduleJob.FindAsync(scheduleJobId);
         Assert.That(deleted, Is.Null);
+    }
+
+    [Test]
+    public async Task RecordRadioAsync_Success_お知らせに録音完了が登録される()
+    {
+        var scheduleJobId = Ulid.NewUlid();
+        DbContext.ScheduleJob.Add(CreateScheduleJob(scheduleJobId));
+        await DbContext.SaveChangesAsync();
+
+        var logic = new RecordingLobLogic(
+            new Mock<ILogger<RecordingLobLogic>>().Object,
+            CreateDbOrchestrator(transcodeResult: true),
+            DbContext,
+            CreateDbNotificationLobLogic(),
+            CreateAppConfigurationService(),
+            new TagLobLogic(new Mock<ILogger<TagLobLogic>>().Object, DbContext));
+
+        var (isSuccess, error) = await logic.RecordRadioAsync(
+            serviceKind: RadioServiceKind.Radiko,
+            programId: "P1",
+            programName: "Test",
+            scheduleJobId: scheduleJobId.ToString(),
+            isTimeFree: false,
+            startDelay: 0,
+            endDelay: 0);
+
+        Assert.That(isSuccess, Is.True);
+        Assert.That(error, Is.Null);
+
+        var notification = await DbContext.Notification
+            .OrderByDescending(x => x.Timestamp)
+            .FirstOrDefaultAsync();
+
+        Assert.That(notification, Is.Not.Null);
+        Assert.That(notification!.Category, Is.EqualTo(NoticeCategory.RecordingSuccess));
+        Assert.That(notification.Message, Is.EqualTo("Test の録音が完了しました。"));
     }
 
     /// <summary>
