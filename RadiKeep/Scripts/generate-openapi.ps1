@@ -38,3 +38,4 @@ try {
 catch {
     throw "OpenAPI取得に失敗しました。先にアプリを起動してください。 endpoint=$openApiUrl"
 }
+

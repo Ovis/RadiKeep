@@ -1,4 +1,4 @@
-param(
+﻿param(
     [Parameter(Mandatory = $true)]
     [string]$RuntimeConfigPath,
     [string]$LogPath = "$env:TEMP\radikeep-dotnet-precheck.log"
@@ -158,3 +158,4 @@ catch {
     Write-Log ("事前チェックで例外が発生しました: {0}" -f $_.Exception.Message)
     exit 99
 }
+
