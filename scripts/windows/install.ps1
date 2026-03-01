@@ -189,36 +189,65 @@ function Resolve-FfmpegExecutablePath {
     return $null
 }
 
-# アプリが必ず同一 ffmpeg を使うよう appsettings に絶対パスを保存する。
-function Set-FfmpegExecutablePathInAppSettings {
+# アプリが読む設定ファイルに ffmpeg の絶対パスを保存する。
+function Get-DefaultRadiKeepSettingsObject {
+    return [pscustomobject]@{
+        RadiKeep = [pscustomobject]@{
+            RecordFileSaveFolder = ''
+            TemporaryFileSaveFolder = ''
+            FfmpegExecutablePath = ''
+            DbDirectory = 'db'
+            LogDirectory = 'logs'
+            DataProtectionKeysPath = 'keys'
+        }
+    }
+}
+
+function Load-OrInitializeRadiKeepSettings {
+    param([Parameter(Mandatory = $true)][string]$SettingsPath)
+
+    if (Test-Path -Path $SettingsPath) {
+        $json = Get-Content -Raw -Path $SettingsPath | ConvertFrom-Json
+        if ($null -eq $json) {
+            Exit-WithCode -Code $ExitCodeInstall -Message "radikeep.settings.json の読み込みに失敗しました。"
+        }
+        return $json
+    }
+
+    $baseDir = Split-Path -Path $SettingsPath -Parent
+    $samplePath = Join-Path $baseDir "radikeep.settings.sample.json"
+    if (Test-Path -Path $samplePath) {
+        $json = Get-Content -Raw -Path $samplePath | ConvertFrom-Json
+        if ($null -eq $json) {
+            Exit-WithCode -Code $ExitCodeInstall -Message "radikeep.settings.sample.json の読み込みに失敗しました。"
+        }
+        return $json
+    }
+
+    return Get-DefaultRadiKeepSettingsObject
+}
+
+function Set-FfmpegExecutablePathInSettings {
     param(
-        [Parameter(Mandatory = $true)][string]$AppSettingsPath,
+        [Parameter(Mandatory = $true)][string]$SettingsPath,
         [Parameter(Mandatory = $true)][string]$ExecutablePath
     )
 
-    if (-not (Test-Path -Path $AppSettingsPath)) {
-        Exit-WithCode -Code $ExitCodeInstall -Message "appsettings.json が見つかりません。"
+    $json = Load-OrInitializeRadiKeepSettings -SettingsPath $SettingsPath
+    if (-not ($json.PSObject.Properties.Name -contains "RadiKeep")) {
+        $json | Add-Member -MemberType NoteProperty -Name "RadiKeep" -Value ([pscustomobject]@{})
     }
 
-    $json = Get-Content -Raw -Path $AppSettingsPath | ConvertFrom-Json
-    if ($null -eq $json) {
-        Exit-WithCode -Code $ExitCodeInstall -Message "appsettings.json の読み込みに失敗しました。"
-    }
-
-    if (-not ($json.PSObject.Properties.Name -contains "GeneralOptions")) {
-        $json | Add-Member -MemberType NoteProperty -Name "GeneralOptions" -Value ([pscustomobject]@{})
-    }
-
-    $json.GeneralOptions | Add-Member -MemberType NoteProperty -Name "FfmpegExecutablePath" -Value $ExecutablePath -Force
+    $json.RadiKeep | Add-Member -MemberType NoteProperty -Name "FfmpegExecutablePath" -Value $ExecutablePath -Force
     $out = $json | ConvertTo-Json -Depth 15
-    [System.IO.File]::WriteAllText($AppSettingsPath, $out, [System.Text.UTF8Encoding]::new($false))
-    Write-Log ("GeneralOptions.FfmpegExecutablePath を設定しました: {0}" -f $ExecutablePath)
+    [System.IO.File]::WriteAllText($SettingsPath, $out, [System.Text.UTF8Encoding]::new($false))
+    Write-Log ("RadiKeep.FfmpegExecutablePath を設定しました: {0}" -f $ExecutablePath)
 }
 
 function Ensure-Ffmpeg {
     param(
         [Parameter(Mandatory = $true)][string]$TargetInstallDir,
-        [Parameter(Mandatory = $true)][string]$AppSettingsPath,
+        [Parameter(Mandatory = $true)][string]$SettingsPath,
         [Parameter(Mandatory = $true)][bool]$WingetEnabled,
         [Parameter(Mandatory = $true)][bool]$DirectDownloadEnabled,
         [Parameter(Mandatory = $true)][bool]$ChocolateyEnabled,
@@ -228,14 +257,14 @@ function Ensure-Ffmpeg {
     if (-not [string]::IsNullOrWhiteSpace($ExplicitFfmpegPath)) {
         # 明示指定がある場合は自動導入を行わず、そのパスを最優先で採用する
         if (-not (Test-Path -Path $ExplicitFfmpegPath)) { Exit-WithCode -Code $ExitCodeFfmpeg -Message "指定された -FfmpegPath が見つかりません。" }
-        Set-FfmpegExecutablePathInAppSettings -AppSettingsPath $AppSettingsPath -ExecutablePath $ExplicitFfmpegPath
+        Set-FfmpegExecutablePathInSettings -SettingsPath $SettingsPath -ExecutablePath $ExplicitFfmpegPath
         return
     }
 
     $existingPath = Resolve-FfmpegExecutablePath
     if (-not [string]::IsNullOrWhiteSpace($existingPath)) {
         # 既存導入済み ffmpeg が見つかれば追加インストールは行わない
-        Set-FfmpegExecutablePathInAppSettings -AppSettingsPath $AppSettingsPath -ExecutablePath $existingPath
+        Set-FfmpegExecutablePathInSettings -SettingsPath $SettingsPath -ExecutablePath $existingPath
         return
     }
 
@@ -243,28 +272,28 @@ function Ensure-Ffmpeg {
     if ($WingetEnabled -and (Install-FfmpegByWinget)) {
         $wingetPath = Resolve-FfmpegExecutablePath
         if (-not [string]::IsNullOrWhiteSpace($wingetPath)) {
-            Set-FfmpegExecutablePathInAppSettings -AppSettingsPath $AppSettingsPath -ExecutablePath $wingetPath
+            Set-FfmpegExecutablePathInSettings -SettingsPath $SettingsPath -ExecutablePath $wingetPath
             return
         }
     }
     if ($DirectDownloadEnabled -and (Install-FfmpegByDirectDownload -TargetInstallDir $TargetInstallDir)) {
         $bundled = Join-Path $TargetInstallDir "ffmpeg.exe"
         if (Test-Path -Path $bundled) {
-            Set-FfmpegExecutablePathInAppSettings -AppSettingsPath $AppSettingsPath -ExecutablePath $bundled
+            Set-FfmpegExecutablePathInSettings -SettingsPath $SettingsPath -ExecutablePath $bundled
             return
         }
     }
     if ($ChocolateyEnabled -and (Install-FfmpegByChocolatey)) {
         $chocoPath = Resolve-FfmpegExecutablePath
         if (-not [string]::IsNullOrWhiteSpace($chocoPath)) {
-            Set-FfmpegExecutablePathInAppSettings -AppSettingsPath $AppSettingsPath -ExecutablePath $chocoPath
+            Set-FfmpegExecutablePathInSettings -SettingsPath $SettingsPath -ExecutablePath $chocoPath
             return
         }
     }
 
     $bundledExe = Join-Path $TargetInstallDir "ffmpeg.exe"
     if (Test-Path -Path $bundledExe) {
-        Set-FfmpegExecutablePathInAppSettings -AppSettingsPath $AppSettingsPath -ExecutablePath $bundledExe
+        Set-FfmpegExecutablePathInSettings -SettingsPath $SettingsPath -ExecutablePath $bundledExe
         return
     }
 
@@ -606,17 +635,16 @@ try {
     # -------------------------------
     $settingsScriptPath = Join-Path $PSScriptRoot "set-radikeep-storage-settings.ps1"
     if (-not (Test-Path -Path $settingsScriptPath)) { Exit-WithCode -Code $ExitCodeInstall -Message "設定スクリプトが見つかりません。" }
-    $appSettingsPath = Join-Path $InstallDir "appsettings.json"
-    if (-not (Test-Path -Path $appSettingsPath)) { Exit-WithCode -Code $ExitCodeInstall -Message "appsettings.json が見つかりません。" }
+    $settingsPath = Join-Path $InstallDir "radikeep.settings.json"
 
     try {
-        & $settingsScriptPath -RecordDir $RecordDir -TempDir $TempDir -AppSettingsPath $appSettingsPath -CreateDirectories
+        & $settingsScriptPath -RecordDir $RecordDir -TempDir $TempDir -SettingsPath $settingsPath -CreateDirectories
     }
     catch {
-        Exit-WithCode -Code $ExitCodeInstall -Message ("appsettings.json の更新に失敗しました: {0}" -f $_.Exception.Message)
+        Exit-WithCode -Code $ExitCodeInstall -Message ("radikeep.settings.json の更新に失敗しました: {0}" -f $_.Exception.Message)
     }
 
-    Ensure-Ffmpeg -TargetInstallDir $InstallDir -AppSettingsPath $appSettingsPath -WingetEnabled $UseWingetForFfmpeg -DirectDownloadEnabled $UseDirectDownloadForFfmpeg -ChocolateyEnabled $UseChocolateyForFfmpeg -ExplicitFfmpegPath $FfmpegPath
+    Ensure-Ffmpeg -TargetInstallDir $InstallDir -SettingsPath $settingsPath -WingetEnabled $UseWingetForFfmpeg -DirectDownloadEnabled $UseDirectDownloadForFfmpeg -ChocolateyEnabled $UseChocolateyForFfmpeg -ExplicitFfmpegPath $FfmpegPath
     Ensure-RadiKeepFirewallRule -Port $HttpPort
 
     # -------------------------------
