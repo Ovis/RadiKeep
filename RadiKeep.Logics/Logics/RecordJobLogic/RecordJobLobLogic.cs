@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using RadiKeep.Logics.BackgroundServices;
 using RadiKeep.Logics.Errors;
 using RadiKeep.Logics.Logics.RecordingLogic;
 using RadiKeep.Logics.Models.Enums;
@@ -17,9 +18,11 @@ namespace RadiKeep.Logics.Logics.RecordJobLogic;
 public class RecordJobLobLogic(
     ILogger<RecordJobLobLogic> logger,
     IAppConfigurationService appConfig,
-    IServiceScopeFactory? serviceScopeFactory = null)
+    IServiceScopeFactory? serviceScopeFactory = null,
+    IRecordingScheduleWakeup? recordingScheduleWakeup = null)
 {
     private static readonly TimeSpan PreparingLeadTime = TimeSpan.FromSeconds(10);
+    private static readonly TimeSpan TimeFreeReadyLeadTime = TimeSpan.FromMinutes(3);
 
     /// <summary>
     /// 録音予約のジョブをスケジュール可能状態へ初期化する。
@@ -37,6 +40,9 @@ public class RecordJobLobLogic(
             var fireAtUtc = ResolveFireAtUtc(job);
             var prepareStartUtc = fireAtUtc - PreparingLeadTime;
 
+            logger.ZLogDebug(
+                $"録音予約ジョブを初期化します。 jobId={job.Id} programId={job.ProgramId} title={job.Title} recordingType={job.RecordingType} start={job.StartDateTime:O} end={job.EndDateTime:O} fireAtUtc={fireAtUtc:O} prepareStartUtc={prepareStartUtc:O}");
+
             using var scope = serviceScopeFactory.CreateScope();
             var dbContext = scope.ServiceProvider.GetRequiredService<RadioDbContext>();
 
@@ -52,12 +58,32 @@ public class RecordJobLobLogic(
                     .SetProperty(x => x.LastErrorCode, ScheduleJobErrorCode.None)
                     .SetProperty(x => x.LastErrorDetail, (string?)null));
 
+            PublishWakeupSafe(recordingScheduleWakeup);
+
             return (true, null);
         }
         catch (Exception ex)
         {
             logger.ZLogError(ex, $"録音予約ジョブ初期化処理で失敗");
             return (false, ex);
+        }
+    }
+
+    private void PublishWakeupSafe(IRecordingScheduleWakeup? wakeup)
+    {
+        if (wakeup is null)
+        {
+            return;
+        }
+
+        try
+        {
+            logger.ZLogDebug($"録音スケジューラへ即時再評価を通知します。");
+            wakeup.Wake();
+        }
+        catch (Exception ex)
+        {
+            logger.ZLogWarning(ex, $"録音スケジューラ起床通知に失敗しました。");
         }
     }
 
@@ -121,11 +147,13 @@ public class RecordJobLobLogic(
     private DateTimeOffset ResolveFireAtUtc(ScheduleJob job)
     {
         var startDelaySeconds = job.StartDelay?.TotalSeconds ?? appConfig.RecordStartDuration.TotalSeconds;
+        var nowUtc = DateTimeOffset.UtcNow;
+        var timeFreeReadyAtUtc = job.EndDateTime.ToUniversalTime().Add(TimeFreeReadyLeadTime);
         return job.RecordingType switch
         {
-            RecordingType.TimeFree => job.EndDateTime.AddMinutes(3).ToUniversalTime(),
-            RecordingType.OnDemand => DateTimeOffset.UtcNow,
-            RecordingType.Immediate => DateTimeOffset.UtcNow,
+            RecordingType.TimeFree => timeFreeReadyAtUtc > nowUtc ? timeFreeReadyAtUtc : nowUtc,
+            RecordingType.OnDemand => nowUtc,
+            RecordingType.Immediate => nowUtc,
             RecordingType.RealTime => job.StartDateTime.AddSeconds(-startDelaySeconds).AddSeconds(-1).ToUniversalTime(),
             _ => throw new DomainException("録音タイプが不正です。")
         };

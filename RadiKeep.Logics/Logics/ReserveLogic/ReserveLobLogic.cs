@@ -207,6 +207,12 @@ namespace RadiKeep.Logics.Logics.ReserveLogic
                 job.RecordingType = RecordingType.TimeFree;
             }
 
+            if (job.RecordingType == RecordingType.TimeFree)
+            {
+                logger.ZLogInformation(
+                    $"タイムフリー録音予約を作成します。 programId={entry.ProgramId} title={entry.Title} station={entry.StationId} requestedType={type} actualType={job.RecordingType} now={currentDate:O} programStart={entry.StartTime:O} programEnd={entry.EndTime:O}");
+            }
+
             try
             {
                 await reserveRepository.AddScheduleJobAsync(job);
