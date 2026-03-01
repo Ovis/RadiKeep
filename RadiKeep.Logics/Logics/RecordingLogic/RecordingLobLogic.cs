@@ -68,7 +68,12 @@ namespace RadiKeep.Logics.Logics.RecordingLogic
                 var result = await orchestrator.RecordAsync(command, cancellationToken);
                 if (!result.IsSuccess)
                 {
-                    return (false, new DomainException(result.ErrorMessage ?? "録音に失敗しました。"));
+                    var errorMessage = result.ErrorMessage ?? "録音に失敗しました。";
+                    await notificationLobLogic.SetNotificationAsync(
+                        logLevel: LogLevel.Error,
+                        category: NoticeCategory.RecordingError,
+                        message: $"{programName} の録音に失敗しました。理由: {errorMessage}");
+                    return (false, new DomainException(errorMessage));
                 }
 
                 await notificationLobLogic.SetNotificationAsync(
