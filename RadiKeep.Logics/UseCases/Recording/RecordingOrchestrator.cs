@@ -26,12 +26,6 @@ public class RecordingOrchestrator(
     /// <returns>録音結果</returns>
     public async ValueTask<RecordingResult> RecordAsync(RecordingCommand command, CancellationToken cancellationToken = default)
     {
-        var source = sources.FirstOrDefault(s => s.CanHandle(command.ServiceKind));
-        if (source == null)
-        {
-            return new RecordingResult(false, null, "未対応のサービスです。");
-        }
-
         Ulid? recordingId = null;
         MediaPath? mediaPath = null;
         var isCommitted = false;
@@ -92,6 +86,12 @@ public class RecordingOrchestrator(
             }
         }
 
+        async ValueTask PublishFailureToastSafeAsync(string reason)
+        {
+            var title = string.IsNullOrWhiteSpace(command.ProgramName) ? "録音" : $"{command.ProgramName} の録音";
+            await PublishGlobalToastSafeAsync($"{title}に失敗しました。理由: {reason}", false);
+        }
+
         // コミット前に失敗した場合は一時ファイルを確実に削除する
         async ValueTask CleanupTempSafeAsync()
         {
@@ -108,6 +108,14 @@ public class RecordingOrchestrator(
             {
                 logger.ZLogError(ex, $"一時ファイルの削除に失敗しました。");
             }
+        }
+
+        var source = sources.FirstOrDefault(s => s.CanHandle(command.ServiceKind));
+        if (source == null)
+        {
+            const string errorMessage = "未対応のサービスです。";
+            await PublishFailureToastSafeAsync(errorMessage);
+            return new RecordingResult(false, null, errorMessage);
         }
 
         try
@@ -127,6 +135,7 @@ public class RecordingOrchestrator(
                         ? "聞き逃し配信録音に失敗しました。"
                         : "録音処理に失敗しました。";
                 await UpdateStateSafeAsync(RecordingState.Failed, errorMessage);
+                await PublishFailureToastSafeAsync(errorMessage);
                 return new RecordingResult(false, recordingId, errorMessage);
             }
 
@@ -140,21 +149,26 @@ public class RecordingOrchestrator(
         }
         catch (OperationCanceledException)
         {
-            logger.ZLogWarning($"録音処理がキャンセルされました。");
-            await UpdateStateSafeAsync(RecordingState.Failed, "録音処理がキャンセルされました。");
-            return new RecordingResult(false, recordingId, "録音処理がキャンセルされました。");
+            const string errorMessage = "録音処理がキャンセルされました。";
+            logger.ZLogWarning($"{errorMessage}");
+            await UpdateStateSafeAsync(RecordingState.Failed, errorMessage);
+            await PublishFailureToastSafeAsync(errorMessage);
+            return new RecordingResult(false, recordingId, errorMessage);
         }
         catch (DomainException ex)
         {
             logger.ZLogWarning(ex, $"録音処理でドメイン例外が発生しました。");
             await UpdateStateSafeAsync(RecordingState.Failed, ex.UserMessage);
+            await PublishFailureToastSafeAsync(ex.UserMessage);
             return new RecordingResult(false, recordingId, ex.UserMessage);
         }
         catch (Exception ex)
         {
-            logger.ZLogError(ex, $"録音処理で例外が発生しました。");
-            await UpdateStateSafeAsync(RecordingState.Failed, "録音処理で例外が発生しました。");
-            return new RecordingResult(false, recordingId, "録音処理で例外が発生しました。");
+            const string errorMessage = "録音処理で例外が発生しました。";
+            logger.ZLogError(ex, $"{errorMessage}");
+            await UpdateStateSafeAsync(RecordingState.Failed, errorMessage);
+            await PublishFailureToastSafeAsync(errorMessage);
+            return new RecordingResult(false, recordingId, errorMessage);
         }
         finally
         {

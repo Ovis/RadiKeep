@@ -82,16 +82,11 @@ export const initSettingMaintenance = (verificationToken, showToast) => {
             .filter(x => x.isSelected ?? true)
             .map(x => x.recordingId);
     };
-    const handleMaintenanceActionResult = (result, successMessage) => {
-        if (!result) {
-            showToast(successMessage);
-            return;
-        }
-        const message = `${successMessage} 成功:${result.successCount} / スキップ:${result.skipCount} / 失敗:${result.failCount}`;
-        showToast(message, result.failCount === 0);
-    };
-    const scanMaintenance = async (showSuccessToast = true) => {
-        const response = await fetch(API_ENDPOINTS.EXTERNAL_IMPORT_MAINTENANCE_SCAN_MISSING, {
+    const scanMaintenance = async (showSuccessToast = true, silentServer = false) => {
+        const endpoint = silentServer
+            ? `${API_ENDPOINTS.EXTERNAL_IMPORT_MAINTENANCE_SCAN_MISSING}?silent=true`
+            : API_ENDPOINTS.EXTERNAL_IMPORT_MAINTENANCE_SCAN_MISSING;
+        const response = await fetch(endpoint, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -124,7 +119,7 @@ export const initSettingMaintenance = (verificationToken, showToast) => {
             suppressNextMaintenanceSyncAction = null;
             return;
         }
-        void scanMaintenance(false).catch(() => {
+        void scanMaintenance(false, true).catch(() => {
             // 再同期失敗時は明示トーストを追加しない
         });
     });
@@ -139,7 +134,7 @@ export const initSettingMaintenance = (verificationToken, showToast) => {
         await withButtonLoading(maintenanceScanButton, async () => {
             updateMaintenanceButtons(true);
             try {
-                await scanMaintenance(false);
+                await scanMaintenance(false, false);
             }
             catch (error) {
                 const message = error instanceof Error ? error.message : `${error}`;
@@ -171,10 +166,9 @@ export const initSettingMaintenance = (verificationToken, showToast) => {
                 if (!response.ok) {
                     throw new Error(await parseErrorResponse(response));
                 }
-                const result = await response.json();
+                await response.json();
                 suppressNextMaintenanceSyncAction = 'relink-missing';
-                handleMaintenanceActionResult(result.data, result.message ?? '再紐付けが完了しました。');
-                await scanMaintenance(false);
+                await scanMaintenance(false, true);
             }
             catch (error) {
                 const message = error instanceof Error ? error.message : `${error}`;
@@ -213,10 +207,9 @@ export const initSettingMaintenance = (verificationToken, showToast) => {
                 if (!response.ok) {
                     throw new Error(await parseErrorResponse(response));
                 }
-                const result = await response.json();
+                await response.json();
                 suppressNextMaintenanceSyncAction = 'delete-missing';
-                handleMaintenanceActionResult(result.data, result.message ?? '欠損レコード削除が完了しました。');
-                await scanMaintenance(false);
+                await scanMaintenance(false, true);
             }
             catch (error) {
                 const message = error instanceof Error ? error.message : `${error}`;

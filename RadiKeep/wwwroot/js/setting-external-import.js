@@ -287,7 +287,6 @@ export const initExternalImport = (verificationToken, showToast) => {
                     showToast(details ?? (result.message ?? '保存に失敗しました。'), false);
                     return;
                 }
-                showToast(result.message ?? `取り込みが完了しました。（${result.data.savedCount}件）`);
                 candidates = [];
                 currentPage = 1;
                 renderTable();
