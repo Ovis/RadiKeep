@@ -55,3 +55,4 @@ try {
 catch {
     Exit-WithCode -Code $ExitCodeUnexpected -Message ("想定外エラー: {0}" -f $_.Exception.Message)
 }
+

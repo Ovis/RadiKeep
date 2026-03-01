@@ -22,3 +22,4 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Write-Host "Type definitions generated: $outFile"
+
