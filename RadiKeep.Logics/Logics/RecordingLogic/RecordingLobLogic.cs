@@ -71,6 +71,11 @@ namespace RadiKeep.Logics.Logics.RecordingLogic
                     return (false, new DomainException(result.ErrorMessage ?? "録音に失敗しました。"));
                 }
 
+                await notificationLobLogic.SetNotificationAsync(
+                    logLevel: LogLevel.Information,
+                    category: NoticeCategory.RecordingSuccess,
+                    message: $"{programName} の録音が完了しました。");
+
                 if (result.RecordingId.HasValue)
                 {
                     await TryApplyKeywordReserveTagsAsync(scheduleJobId, result.RecordingId.Value);
