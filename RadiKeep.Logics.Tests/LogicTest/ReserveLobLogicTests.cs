@@ -1113,6 +1113,124 @@ namespace RadiKeep.Logics.Tests.LogicTest
         }
 
         [Test]
+        public async Task SetAllKeywordReserveScheduleAsync_既存予約より高優先ルールがあれば主ルールを昇格する()
+        {
+            var now = _appContextMock.Object.StandardDateTimeOffset;
+            var dayOfWeek = (DaysOfWeek)now.DayOfWeek;
+            var lowReserveId = Ulid.NewUlid();
+            var highReserveId = Ulid.NewUlid();
+            var scheduleJobId = Ulid.NewUlid();
+
+            var program = new RadikoProgram
+            {
+                ProgramId = "TBS_PRIORITY_001",
+                Title = "High Low Program",
+                StartTime = now.AddHours(2),
+                EndTime = now.AddHours(2).AddMinutes(30),
+                StationId = "TBS",
+                RadioDate = DateOnly.FromDateTime(now.UtcDateTime.Date),
+                DaysOfWeek = dayOfWeek,
+                AvailabilityTimeFree = AvailabilityTimeFree.Available
+            };
+
+            var lowReserve = new KeywordReserve
+            {
+                Id = lowReserveId,
+                Keyword = "Low",
+                ExcludedKeyword = string.Empty,
+                IsTitleOnly = true,
+                IsExcludeTitleOnly = false,
+                FileName = "low_$Title$",
+                FolderPath = "low",
+                StartTime = new TimeOnly(0, 0),
+                EndTime = new TimeOnly(23, 59),
+                IsEnable = true,
+                DaysOfWeek = dayOfWeek,
+                StartDelay = TimeSpan.FromSeconds(10),
+                EndDelay = TimeSpan.FromSeconds(20),
+                SortOrder = 10
+            };
+
+            var highReserve = new KeywordReserve
+            {
+                Id = highReserveId,
+                Keyword = "High",
+                ExcludedKeyword = string.Empty,
+                IsTitleOnly = true,
+                IsExcludeTitleOnly = false,
+                FileName = "high_$Title$",
+                FolderPath = "high",
+                StartTime = new TimeOnly(0, 0),
+                EndTime = new TimeOnly(23, 59),
+                IsEnable = true,
+                DaysOfWeek = dayOfWeek,
+                StartDelay = TimeSpan.FromSeconds(30),
+                EndDelay = TimeSpan.FromSeconds(40),
+                SortOrder = 1
+            };
+
+            var scheduleJob = new ScheduleJob
+            {
+                Id = scheduleJobId,
+                KeywordReserveId = lowReserveId,
+                ServiceKind = RadioServiceKind.Radiko,
+                StationId = "TBS",
+                AreaId = string.Empty,
+                ProgramId = program.ProgramId,
+                Title = program.Title,
+                FilePath = lowReserve.FolderPath,
+                StartDateTime = program.StartTime.ToUniversalTime(),
+                EndDateTime = program.EndTime.ToUniversalTime(),
+                StartDelay = lowReserve.StartDelay,
+                EndDelay = lowReserve.EndDelay,
+                RecordingType = RecordingType.RealTime,
+                ReserveType = ReserveType.Keyword,
+                IsEnabled = true,
+                State = ScheduleJobState.Pending
+            };
+
+            await DbContext.RadikoPrograms.AddAsync(program);
+            await DbContext.KeywordReserve.AddRangeAsync(lowReserve, highReserve);
+            await DbContext.KeywordReserveRadioStations.AddRangeAsync(
+            [
+                new KeywordReserveRadioStation
+                {
+                    Id = lowReserveId,
+                    RadioServiceKind = RadioServiceKind.Radiko,
+                    RadioStation = "TBS"
+                },
+                new KeywordReserveRadioStation
+                {
+                    Id = highReserveId,
+                    RadioServiceKind = RadioServiceKind.Radiko,
+                    RadioStation = "TBS"
+                }
+            ]);
+            await DbContext.ScheduleJob.AddAsync(scheduleJob);
+            await DbContext.ScheduleJobKeywordReserveRelations.AddAsync(new ScheduleJobKeywordReserveRelation
+            {
+                ScheduleJobId = scheduleJobId,
+                KeywordReserveId = lowReserveId
+            });
+            await DbContext.SaveChangesAsync();
+
+            await _reserveLobLogic.SetAllKeywordReserveScheduleAsync();
+
+            var updated = await DbContext.ScheduleJob.FirstAsync(x => x.Id == scheduleJobId);
+            var relationIds = await DbContext.ScheduleJobKeywordReserveRelations
+                .Where(x => x.ScheduleJobId == scheduleJobId)
+                .Select(x => x.KeywordReserveId)
+                .OrderBy(x => x)
+                .ToListAsync();
+
+            Assert.That(updated.KeywordReserveId, Is.EqualTo(highReserveId));
+            Assert.That(updated.FilePath, Is.EqualTo(highReserve.FolderPath));
+            Assert.That(updated.StartDelay, Is.EqualTo(highReserve.StartDelay));
+            Assert.That(updated.EndDelay, Is.EqualTo(highReserve.EndDelay));
+            Assert.That(relationIds, Is.EqualTo(new[] { highReserveId, lowReserveId }.OrderBy(x => x).ToList()));
+        }
+
+        [Test]
         public async ValueTask SwitchKeywordReserveEntryStatusAsync_WhenCalledWithValidId_ReturnsSuccess()
         {
             var keywordReserve = new ScheduleJob

@@ -526,6 +526,21 @@ namespace RadiKeep.Logics.Logics.ReserveLogic
                             ScheduleJobId = existingScheduleJob.Id,
                             KeywordReserveId = keywordReserve.Id
                         });
+
+                        if (await ShouldPromotePrimaryKeywordReserveAsync(existingScheduleJob, keywordReserve))
+                        {
+                            existingScheduleJob.KeywordReserveId = keywordReserve.Id;
+                            existingScheduleJob.FilePath = keywordReserve.FolderPath;
+                            existingScheduleJob.StartDelay = keywordReserve.StartDelay;
+                            existingScheduleJob.EndDelay = keywordReserve.EndDelay;
+
+                            await reserveRepository.UpdateScheduleJobAsync(existingScheduleJob);
+
+                            if (existingScheduleJob.IsEnabled && existingScheduleJob.State == ScheduleJobState.Pending)
+                            {
+                                await recordJobLobLogic.SetScheduleJobAsync(existingScheduleJob);
+                            }
+                        }
                     }
 
                     continue;
@@ -695,6 +710,32 @@ namespace RadiKeep.Logics.Logics.ReserveLogic
             return Enum.IsDefined(typeof(KeywordReserveTagMergeBehavior), behavior)
                 ? behavior
                 : KeywordReserveTagMergeBehavior.Default;
+        }
+
+        private async ValueTask<bool> ShouldPromotePrimaryKeywordReserveAsync(ScheduleJob scheduleJob, KeywordReserve candidate)
+        {
+            if (scheduleJob.KeywordReserveId == null)
+            {
+                return true;
+            }
+
+            if (scheduleJob.KeywordReserveId == candidate.Id)
+            {
+                return false;
+            }
+
+            var currentPrimary = await reserveRepository.GetKeywordReserveByIdAsync(scheduleJob.KeywordReserveId.Value);
+            if (currentPrimary == null)
+            {
+                return true;
+            }
+
+            if (candidate.SortOrder != currentPrimary.SortOrder)
+            {
+                return candidate.SortOrder < currentPrimary.SortOrder;
+            }
+
+            return candidate.Id.CompareTo(currentPrimary.Id) < 0;
         }
     }
 
