@@ -695,6 +695,7 @@ namespace RadiKeep.Logics.Logics.ReserveLogic
                 }
 
                 await reserveRepository.ReorderKeywordReservesAsync(orderedIds);
+                await RefreshPendingKeywordScheduleJobsAsync();
 
                 return (true, null);
             }
@@ -710,6 +711,80 @@ namespace RadiKeep.Logics.Logics.ReserveLogic
             return Enum.IsDefined(typeof(KeywordReserveTagMergeBehavior), behavior)
                 ? behavior
                 : KeywordReserveTagMergeBehavior.Default;
+        }
+
+        private async ValueTask RefreshPendingKeywordScheduleJobsAsync()
+        {
+            var pendingKeywordJobs = (await reserveRepository.GetScheduleJobsAsync())
+                .Where(x => x.ReserveType == ReserveType.Keyword && x.State == ScheduleJobState.Pending)
+                .ToList();
+
+            if (pendingKeywordJobs.Count == 0)
+            {
+                return;
+            }
+
+            var reserveIdsMap = await reserveRepository.GetKeywordReserveIdsByScheduleJobIdsAsync(pendingKeywordJobs.Select(x => x.Id));
+            if (reserveIdsMap.Count == 0)
+            {
+                return;
+            }
+
+            var allReserveIds = reserveIdsMap.Values
+                .SelectMany(x => x)
+                .Distinct()
+                .ToList();
+
+            if (allReserveIds.Count == 0)
+            {
+                return;
+            }
+
+            var reserveById = (await reserveRepository.GetKeywordReservesAsync())
+                .Where(x => allReserveIds.Contains(x.Id))
+                .ToDictionary(x => x.Id, x => x);
+
+            foreach (var job in pendingKeywordJobs)
+            {
+                if (!reserveIdsMap.TryGetValue(job.Id, out var relatedReserveIds))
+                {
+                    continue;
+                }
+
+                var primaryReserve = ResolvePrimaryKeywordReserve(
+                    relatedReserveIds
+                        .Where(reserveById.ContainsKey)
+                        .Select(id => reserveById[id])
+                        .ToList());
+
+                if (primaryReserve == null)
+                {
+                    continue;
+                }
+
+                var isChanged =
+                    job.KeywordReserveId != primaryReserve.Id ||
+                    !string.Equals(job.FilePath, primaryReserve.FolderPath, StringComparison.Ordinal) ||
+                    job.StartDelay != primaryReserve.StartDelay ||
+                    job.EndDelay != primaryReserve.EndDelay;
+
+                if (!isChanged)
+                {
+                    continue;
+                }
+
+                job.KeywordReserveId = primaryReserve.Id;
+                job.FilePath = primaryReserve.FolderPath;
+                job.StartDelay = primaryReserve.StartDelay;
+                job.EndDelay = primaryReserve.EndDelay;
+
+                await reserveRepository.UpdateScheduleJobAsync(job);
+
+                if (job.IsEnabled)
+                {
+                    await recordJobLobLogic.SetScheduleJobAsync(job);
+                }
+            }
         }
 
         private async ValueTask<bool> ShouldPromotePrimaryKeywordReserveAsync(ScheduleJob scheduleJob, KeywordReserve candidate)
@@ -736,6 +811,14 @@ namespace RadiKeep.Logics.Logics.ReserveLogic
             }
 
             return candidate.Id.CompareTo(currentPrimary.Id) < 0;
+        }
+
+        private static KeywordReserve? ResolvePrimaryKeywordReserve(IEnumerable<KeywordReserve> reserves)
+        {
+            return reserves
+                .OrderBy(x => x.SortOrder)
+                .ThenBy(x => x.Id)
+                .FirstOrDefault();
         }
     }
 
