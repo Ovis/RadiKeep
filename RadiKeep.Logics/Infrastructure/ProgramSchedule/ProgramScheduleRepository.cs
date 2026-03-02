@@ -186,7 +186,9 @@ public class ProgramScheduleRepository(RadioDbContext dbContext) : IProgramSched
         DateTimeOffset standardDateTimeOffset,
         CancellationToken cancellationToken = default)
     {
-        var query = dbContext.RadikoPrograms.AsQueryable();
+        var query = dbContext.RadikoPrograms
+            .AsNoTracking()
+            .AsQueryable();
 
         if (searchEntity.SelectedRadikoStationIds.Count != 0)
         {
@@ -359,7 +361,9 @@ public class ProgramScheduleRepository(RadioDbContext dbContext) : IProgramSched
         DateTimeOffset standardDateTimeOffset,
         CancellationToken cancellationToken = default)
     {
-        var query = dbContext.NhkRadiruPrograms.AsQueryable();
+        var query = dbContext.NhkRadiruPrograms
+            .AsNoTracking()
+            .AsQueryable();
 
         if (searchEntity.SelectedRadiruStationIds.Count != 0)
         {
