@@ -91,6 +91,24 @@ public class ProgramScheduleRepositoryTests : UnitTestBase
     }
 
     /// <summary>
+    /// radiko番組更新時に入力側で同一IDが重複していても更新できる
+    /// </summary>
+    [Test]
+    public async Task AddRadikoProgramsIfMissingAsync_入力に同一ID重複があっても更新できる()
+    {
+        await AddRadikoProgramAsync("P1", "TBS", DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddMinutes(30), title: "Old");
+
+        var updatedA = CreateRadikoProgram("P1", "TBS", DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddMinutes(30), title: "NewA");
+        var updatedB = CreateRadikoProgram("P1", "TBS", DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddMinutes(30), title: "NewB");
+
+        Assert.DoesNotThrowAsync(async () => await _repository.AddRadikoProgramsIfMissingAsync([updatedA, updatedB]));
+
+        var result = await _repository.GetRadikoProgramByIdAsync("P1");
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result!.Title, Is.EqualTo("NewB"));
+    }
+
+    /// <summary>
     /// radiko番組検索ができる
     /// </summary>
     [Test]
