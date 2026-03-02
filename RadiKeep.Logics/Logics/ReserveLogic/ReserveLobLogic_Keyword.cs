@@ -469,8 +469,7 @@ namespace RadiKeep.Logics.Logics.ReserveLogic
                         .Where(p =>
                             p.StartTime > currentUtc ||
                             (p.StartTime <= currentUtc &&
-                             p.EndTime > currentUtc &&
-                             p.AvailabilityTimeFree is AvailabilityTimeFree.Available or AvailabilityTimeFree.PartiallyAvailable))
+                             p.EndTime > currentUtc))
                         .Select(p => entryMapper.ToRadioProgramEntry(p)));
             }
 
@@ -564,9 +563,7 @@ namespace RadiKeep.Logics.Logics.ReserveLogic
                     IsEnabled = true,
                     StartDelay = keywordReserve.StartDelay,
                     EndDelay = keywordReserve.EndDelay,
-                    RecordingType = p.AvailabilityTimeFree is AvailabilityTimeFree.Available or AvailabilityTimeFree.PartiallyAvailable
-                        ? RecordingType.TimeFree
-                        : RecordingType.RealTime,
+                    RecordingType = ResolveKeywordReserveRecordingType(p),
                     ReserveType = ReserveType.Keyword
                 };
 
@@ -819,6 +816,13 @@ namespace RadiKeep.Logics.Logics.ReserveLogic
                 .OrderBy(x => x.SortOrder)
                 .ThenBy(x => x.Id)
                 .FirstOrDefault();
+        }
+
+        private static RecordingType ResolveKeywordReserveRecordingType(RadioProgramEntry program)
+        {
+            return program.AvailabilityTimeFree is AvailabilityTimeFree.Available or AvailabilityTimeFree.PartiallyAvailable
+                ? RecordingType.TimeFree
+                : RecordingType.RealTime;
         }
     }
 

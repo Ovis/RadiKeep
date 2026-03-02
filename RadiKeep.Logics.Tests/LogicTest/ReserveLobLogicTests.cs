@@ -1023,6 +1023,56 @@ namespace RadiKeep.Logics.Tests.LogicTest
         }
 
         [Test]
+        public async ValueTask SetKeywordReserveAsync_放送中でタイムフリー不可でも予約対象になりリアルタイムになる()
+        {
+            var now = new DateTimeOffset(2026, 2, 10, 12, 0, 0, TimeSpan.FromHours(9));
+            _appContextMock.SetupGet(x => x.StandardDateTimeOffset).Returns(now);
+            var dayOfWeek = (DaysOfWeek)now.DayOfWeek;
+
+            var onAirProgram = new RadikoProgram
+            {
+                ProgramId = "TBS_ONAIR_UNAVAILABLE_001",
+                Title = "OnAir Unavailable Program",
+                StartTime = now.AddMinutes(-10),
+                EndTime = now.AddMinutes(50),
+                StationId = "TBS",
+                RadioDate = DateOnly.FromDateTime(now.UtcDateTime.Date),
+                DaysOfWeek = dayOfWeek,
+                AvailabilityTimeFree = AvailabilityTimeFree.Unavailable
+            };
+
+            await DbContext.RadikoPrograms.AddAsync(onAirProgram);
+            await DbContext.SaveChangesAsync();
+
+            var entry = new KeywordReserveEntry
+            {
+                Id = Ulid.NewUlid(),
+                Keyword = "OnAir Unavailable",
+                SearchTitleOnly = true,
+                ExcludeTitleOnly = false,
+                RecordFileName = "onair-unavailable.m4a",
+                RecordPath = @"Folder\Path1",
+                StartTimeString = new TimeOnly(0, 0, 0).ToLongTimeString(),
+                EndTimeString = new TimeOnly(23, 59, 59).ToLongTimeString(),
+                SelectedDaysOfWeek = [dayOfWeek],
+                SelectedRadikoStationIds = ["TBS"],
+                IsEnabled = true
+            };
+
+            var result = await _reserveLobLogic.SetKeywordReserveAsync(entry);
+
+            Assert.That(result.IsSuccess, Is.True);
+            Assert.That(result.Error, Is.Null);
+
+            var scheduled = await DbContext.ScheduleJob
+                .Where(s => s.ProgramId == onAirProgram.ProgramId)
+                .SingleOrDefaultAsync();
+
+            Assert.That(scheduled, Is.Not.Null);
+            Assert.That(scheduled!.RecordingType, Is.EqualTo(RecordingType.RealTime));
+        }
+
+        [Test]
         public async ValueTask SetKeywordReserveAsync_らじるエリア優先テスト()
         {
             var now = new DateTimeOffset(2026, 2, 10, 12, 0, 0, TimeSpan.FromHours(9));
