@@ -120,15 +120,46 @@ public class RecordingOrchestrator(
 
         try
         {
-            var sourceResult = await source.PrepareAsync(command, cancellationToken);
-            mediaPath = await storage.PrepareAsync(sourceResult.ProgramInfo, cancellationToken);
-
-            recordingId = await repository.CreateAsync(sourceResult.ProgramInfo, mediaPath, sourceResult.Options, cancellationToken);
-            await UpdateStateSafeAsync(RecordingState.Recording, null);
-
-            var ok = await transcoder.RecordAsync(sourceResult, mediaPath, cancellationToken);
-            if (!ok)
+            var maxAttempts = command.IsTimeFree ? 2 : 1;
+            for (var attempt = 1; attempt <= maxAttempts; attempt++)
             {
+                if (attempt > 1 && source is IRecordingSourceRetryHandler retryHandler)
+                {
+                    logger.ZLogWarning($"録音ソースの再試行準備を実行します。 programId={command.ProgramId} attempt={attempt}/{maxAttempts}");
+                    await retryHandler.PrepareForRetryAsync(command, cancellationToken);
+                }
+
+                var sourceResult = await source.PrepareAsync(command, cancellationToken);
+                if (mediaPath == null)
+                {
+                    mediaPath = await storage.PrepareAsync(sourceResult.ProgramInfo, cancellationToken);
+                }
+
+                if (recordingId == null)
+                {
+                    recordingId = await repository.CreateAsync(sourceResult.ProgramInfo, mediaPath, sourceResult.Options, cancellationToken);
+                    await UpdateStateSafeAsync(RecordingState.Recording, null);
+                }
+
+                var ok = await transcoder.RecordAsync(sourceResult, mediaPath, cancellationToken);
+                if (ok)
+                {
+                    mediaPath = await storage.CommitAsync(mediaPath, cancellationToken);
+                    isCommitted = true;
+                    await repository.UpdateFilePathAsync(recordingId.Value, mediaPath, cancellationToken);
+                    await UpdateStateSafeAsync(RecordingState.Completed, null);
+                    await PublishGlobalToastSafeAsync($"{command.ProgramName} の録音が完了しました。", true);
+
+                    return new RecordingResult(true, recordingId, null);
+                }
+
+                if (command.IsTimeFree && attempt < maxAttempts)
+                {
+                    logger.ZLogWarning($"タイムフリー録音に失敗したため、認証情報を更新して再試行します。 programId={command.ProgramId} attempt={attempt}/{maxAttempts}");
+                    await CleanupTempSafeAsync();
+                    continue;
+                }
+
                 var errorMessage = command.IsTimeFree
                     ? "タイムフリー録音チャンク取得に失敗しました。"
                     : command.IsOnDemand
@@ -139,13 +170,10 @@ public class RecordingOrchestrator(
                 return new RecordingResult(false, recordingId, errorMessage);
             }
 
-            mediaPath = await storage.CommitAsync(mediaPath, cancellationToken);
-            isCommitted = true;
-            await repository.UpdateFilePathAsync(recordingId.Value, mediaPath, cancellationToken);
-            await UpdateStateSafeAsync(RecordingState.Completed, null);
-            await PublishGlobalToastSafeAsync($"{command.ProgramName} の録音が完了しました。", true);
-
-            return new RecordingResult(true, recordingId, null);
+            const string retryErrorMessage = "録音処理に失敗しました。";
+            await UpdateStateSafeAsync(RecordingState.Failed, retryErrorMessage);
+            await PublishFailureToastSafeAsync(retryErrorMessage);
+            return new RecordingResult(false, recordingId, retryErrorMessage);
         }
         catch (OperationCanceledException)
         {
