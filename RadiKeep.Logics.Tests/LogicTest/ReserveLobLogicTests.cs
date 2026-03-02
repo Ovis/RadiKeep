@@ -1113,6 +1113,186 @@ namespace RadiKeep.Logics.Tests.LogicTest
         }
 
         [Test]
+        public async Task ReorderKeywordReservesAsync_並び順変更時_Pendingの既存予約へ主ルールを即時反映する()
+        {
+            var reserveIdA = Ulid.NewUlid();
+            var reserveIdB = Ulid.NewUlid();
+            var scheduleJobId = Ulid.NewUlid();
+
+            var reserveA = new KeywordReserve
+            {
+                Id = reserveIdA,
+                Keyword = "A",
+                ExcludedKeyword = string.Empty,
+                IsTitleOnly = false,
+                IsExcludeTitleOnly = false,
+                FileName = string.Empty,
+                FolderPath = "folder-a",
+                StartTime = new TimeOnly(0, 0),
+                EndTime = new TimeOnly(23, 59),
+                IsEnable = true,
+                DaysOfWeek = DaysOfWeek.Monday,
+                StartDelay = TimeSpan.FromSeconds(10),
+                EndDelay = TimeSpan.FromSeconds(20),
+                SortOrder = 0
+            };
+
+            var reserveB = new KeywordReserve
+            {
+                Id = reserveIdB,
+                Keyword = "B",
+                ExcludedKeyword = string.Empty,
+                IsTitleOnly = false,
+                IsExcludeTitleOnly = false,
+                FileName = string.Empty,
+                FolderPath = "folder-b",
+                StartTime = new TimeOnly(0, 0),
+                EndTime = new TimeOnly(23, 59),
+                IsEnable = true,
+                DaysOfWeek = DaysOfWeek.Monday,
+                StartDelay = TimeSpan.FromSeconds(30),
+                EndDelay = TimeSpan.FromSeconds(40),
+                SortOrder = 1
+            };
+
+            var scheduleJob = new ScheduleJob
+            {
+                Id = scheduleJobId,
+                KeywordReserveId = reserveIdA,
+                ServiceKind = RadioServiceKind.Radiko,
+                StationId = "TBS",
+                ProgramId = "TBS_REORDER_PENDING_001",
+                FilePath = reserveA.FolderPath,
+                StartDateTime = DateTimeOffset.UtcNow.AddHours(3),
+                EndDateTime = DateTimeOffset.UtcNow.AddHours(4),
+                Title = "Pending Job",
+                StartDelay = reserveA.StartDelay,
+                EndDelay = reserveA.EndDelay,
+                RecordingType = RecordingType.RealTime,
+                ReserveType = ReserveType.Keyword,
+                IsEnabled = true,
+                State = ScheduleJobState.Pending
+            };
+
+            await DbContext.KeywordReserve.AddRangeAsync(reserveA, reserveB);
+            await DbContext.ScheduleJob.AddAsync(scheduleJob);
+            await DbContext.ScheduleJobKeywordReserveRelations.AddRangeAsync(
+            [
+                new ScheduleJobKeywordReserveRelation { ScheduleJobId = scheduleJobId, KeywordReserveId = reserveIdA },
+                new ScheduleJobKeywordReserveRelation { ScheduleJobId = scheduleJobId, KeywordReserveId = reserveIdB }
+            ]);
+            await DbContext.SaveChangesAsync();
+
+            var orderedIds = await DbContext.KeywordReserve
+                .Select(x => x.Id)
+                .Where(x => x != reserveIdA && x != reserveIdB)
+                .ToListAsync();
+            orderedIds.Insert(0, reserveIdA);
+            orderedIds.Insert(0, reserveIdB);
+
+            var result = await _reserveLobLogic.ReorderKeywordReservesAsync(orderedIds);
+
+            Assert.That(result.IsSuccess, Is.True);
+            Assert.That(result.Error, Is.Null);
+
+            var updated = await DbContext.ScheduleJob.FirstAsync(x => x.Id == scheduleJobId);
+            Assert.That(updated.KeywordReserveId, Is.EqualTo(reserveIdB));
+            Assert.That(updated.FilePath, Is.EqualTo(reserveB.FolderPath));
+            Assert.That(updated.StartDelay, Is.EqualTo(reserveB.StartDelay));
+            Assert.That(updated.EndDelay, Is.EqualTo(reserveB.EndDelay));
+        }
+
+        [Test]
+        public async Task ReorderKeywordReservesAsync_並び順変更時_Recordingの既存予約は更新しない()
+        {
+            var reserveIdA = Ulid.NewUlid();
+            var reserveIdB = Ulid.NewUlid();
+            var scheduleJobId = Ulid.NewUlid();
+
+            var reserveA = new KeywordReserve
+            {
+                Id = reserveIdA,
+                Keyword = "A",
+                ExcludedKeyword = string.Empty,
+                IsTitleOnly = false,
+                IsExcludeTitleOnly = false,
+                FileName = string.Empty,
+                FolderPath = "folder-a",
+                StartTime = new TimeOnly(0, 0),
+                EndTime = new TimeOnly(23, 59),
+                IsEnable = true,
+                DaysOfWeek = DaysOfWeek.Monday,
+                StartDelay = TimeSpan.FromSeconds(10),
+                EndDelay = TimeSpan.FromSeconds(20),
+                SortOrder = 0
+            };
+
+            var reserveB = new KeywordReserve
+            {
+                Id = reserveIdB,
+                Keyword = "B",
+                ExcludedKeyword = string.Empty,
+                IsTitleOnly = false,
+                IsExcludeTitleOnly = false,
+                FileName = string.Empty,
+                FolderPath = "folder-b",
+                StartTime = new TimeOnly(0, 0),
+                EndTime = new TimeOnly(23, 59),
+                IsEnable = true,
+                DaysOfWeek = DaysOfWeek.Monday,
+                StartDelay = TimeSpan.FromSeconds(30),
+                EndDelay = TimeSpan.FromSeconds(40),
+                SortOrder = 1
+            };
+
+            var scheduleJob = new ScheduleJob
+            {
+                Id = scheduleJobId,
+                KeywordReserveId = reserveIdA,
+                ServiceKind = RadioServiceKind.Radiko,
+                StationId = "TBS",
+                ProgramId = "TBS_REORDER_RECORDING_001",
+                FilePath = reserveA.FolderPath,
+                StartDateTime = DateTimeOffset.UtcNow.AddHours(3),
+                EndDateTime = DateTimeOffset.UtcNow.AddHours(4),
+                Title = "Recording Job",
+                StartDelay = reserveA.StartDelay,
+                EndDelay = reserveA.EndDelay,
+                RecordingType = RecordingType.RealTime,
+                ReserveType = ReserveType.Keyword,
+                IsEnabled = true,
+                State = ScheduleJobState.Recording
+            };
+
+            await DbContext.KeywordReserve.AddRangeAsync(reserveA, reserveB);
+            await DbContext.ScheduleJob.AddAsync(scheduleJob);
+            await DbContext.ScheduleJobKeywordReserveRelations.AddRangeAsync(
+            [
+                new ScheduleJobKeywordReserveRelation { ScheduleJobId = scheduleJobId, KeywordReserveId = reserveIdA },
+                new ScheduleJobKeywordReserveRelation { ScheduleJobId = scheduleJobId, KeywordReserveId = reserveIdB }
+            ]);
+            await DbContext.SaveChangesAsync();
+
+            var orderedIds = await DbContext.KeywordReserve
+                .Select(x => x.Id)
+                .Where(x => x != reserveIdA && x != reserveIdB)
+                .ToListAsync();
+            orderedIds.Insert(0, reserveIdA);
+            orderedIds.Insert(0, reserveIdB);
+
+            var result = await _reserveLobLogic.ReorderKeywordReservesAsync(orderedIds);
+
+            Assert.That(result.IsSuccess, Is.True);
+            Assert.That(result.Error, Is.Null);
+
+            var updated = await DbContext.ScheduleJob.FirstAsync(x => x.Id == scheduleJobId);
+            Assert.That(updated.KeywordReserveId, Is.EqualTo(reserveIdA));
+            Assert.That(updated.FilePath, Is.EqualTo(reserveA.FolderPath));
+            Assert.That(updated.StartDelay, Is.EqualTo(reserveA.StartDelay));
+            Assert.That(updated.EndDelay, Is.EqualTo(reserveA.EndDelay));
+        }
+
+        [Test]
         public async Task SetAllKeywordReserveScheduleAsync_既存予約より高優先ルールがあれば主ルールを昇格する()
         {
             var now = _appContextMock.Object.StandardDateTimeOffset;

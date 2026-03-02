@@ -87,7 +87,21 @@ public class ReserveRepository(RadioDbContext dbContext) : IReserveRepository
 
         try
         {
-            dbContext.ScheduleJob.Update(job);
+            var tracked = dbContext.ScheduleJob.Local.FirstOrDefault(x => x.Id == job.Id);
+            if (tracked != null && !ReferenceEquals(tracked, job))
+            {
+                dbContext.Entry(tracked).CurrentValues.SetValues(job);
+            }
+            else if (dbContext.Entry(job).State == EntityState.Detached)
+            {
+                dbContext.ScheduleJob.Attach(job);
+                dbContext.Entry(job).State = EntityState.Modified;
+            }
+            else
+            {
+                dbContext.Entry(job).State = EntityState.Modified;
+            }
+
             await dbContext.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
         }
