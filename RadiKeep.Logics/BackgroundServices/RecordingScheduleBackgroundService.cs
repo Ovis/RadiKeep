@@ -285,6 +285,23 @@ public class RecordingScheduleBackgroundService(
         {
             var startDelaySeconds = job.StartDelay?.TotalSeconds ?? appConfigurationService.RecordStartDuration.TotalSeconds;
             var endDelaySeconds = job.EndDelay?.TotalSeconds ?? appConfigurationService.RecordEndDuration.TotalSeconds;
+            string? outputDirectoryRelativePathOverride = null;
+            string? outputFileNameTemplateOverride = null;
+
+            if (job.ReserveType == ReserveType.Keyword && job.KeywordReserveId != null)
+            {
+                var keywordReserve = await dbContext.KeywordReserve
+                    .AsNoTracking()
+                    .Where(x => x.Id == job.KeywordReserveId.Value)
+                    .Select(x => new { x.FolderPath, x.FileName })
+                    .FirstOrDefaultAsync(cancellationToken);
+
+                if (keywordReserve != null)
+                {
+                    outputDirectoryRelativePathOverride = keywordReserve.FolderPath;
+                    outputFileNameTemplateOverride = keywordReserve.FileName;
+                }
+            }
 
             await notificationLobLogic.SetNotificationAsync(
                 logLevel: LogLevel.Information,
@@ -300,6 +317,8 @@ public class RecordingScheduleBackgroundService(
                 isOnDemand: job.RecordingType == RecordingType.OnDemand,
                 startDelay: startDelaySeconds,
                 endDelay: endDelaySeconds,
+                outputDirectoryRelativePathOverride: outputDirectoryRelativePathOverride,
+                outputFileNameTemplateOverride: outputFileNameTemplateOverride,
                 deleteScheduleOnFinish: false,
                 cancellationToken: recordCts.Token);
 

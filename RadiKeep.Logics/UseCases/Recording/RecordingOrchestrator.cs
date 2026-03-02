@@ -132,7 +132,7 @@ public class RecordingOrchestrator(
                 var sourceResult = await source.PrepareAsync(command, cancellationToken);
                 if (mediaPath == null)
                 {
-                    mediaPath = await storage.PrepareAsync(sourceResult.ProgramInfo, cancellationToken);
+                    mediaPath = await storage.PrepareAsync(sourceResult.ProgramInfo, sourceResult.Options, cancellationToken);
                 }
 
                 if (recordingId == null)

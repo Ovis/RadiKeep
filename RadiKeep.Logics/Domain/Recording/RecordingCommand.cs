@@ -21,4 +21,6 @@ public record RecordingCommand(
     double StartDelaySeconds,
     double EndDelaySeconds,
     string? ScheduleJobId = null,
-    bool IsOnDemand = false);
+    bool IsOnDemand = false,
+    string? OutputDirectoryRelativePathOverride = null,
+    string? OutputFileNameTemplateOverride = null);

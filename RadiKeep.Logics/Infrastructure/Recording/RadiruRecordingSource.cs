@@ -98,7 +98,9 @@ public class RadiruRecordingSource(
             IsTimeFree: false,
             IsOnDemand: isOnDemand,
             StartDelaySeconds: command.StartDelaySeconds,
-            EndDelaySeconds: command.EndDelaySeconds);
+            EndDelaySeconds: command.EndDelaySeconds,
+            OutputDirectoryRelativePathOverride: command.OutputDirectoryRelativePathOverride,
+            OutputFileNameTemplateOverride: command.OutputFileNameTemplateOverride);
 
         return new RecordingSourceResult(
             StreamUrl: streamUrl,

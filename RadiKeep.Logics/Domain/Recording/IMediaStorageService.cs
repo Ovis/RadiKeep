@@ -9,9 +9,10 @@ public interface IMediaStorageService
     /// 保存先パスを準備する
     /// </summary>
     /// <param name="programInfo">番組情報</param>
+    /// <param name="options">録音オプション</param>
     /// <param name="cancellationToken">キャンセル用トークン</param>
     /// <returns>パス情報</returns>
-    ValueTask<MediaPath> PrepareAsync(ProgramRecordingInfo programInfo, CancellationToken cancellationToken = default);
+    ValueTask<MediaPath> PrepareAsync(ProgramRecordingInfo programInfo, RecordingOptions options, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// 一時ファイルを最終保存先へ確定させる
