@@ -48,6 +48,8 @@ namespace RadiKeep.Logics.Logics.RecordingLogic
             double startDelay,
             double endDelay,
             bool isOnDemand = false,
+            string? outputDirectoryRelativePathOverride = null,
+            string? outputFileNameTemplateOverride = null,
             bool deleteScheduleOnFinish = true,
             CancellationToken cancellationToken = default
             )
@@ -63,7 +65,9 @@ namespace RadiKeep.Logics.Logics.RecordingLogic
                     StartDelaySeconds: startDelay,
                     EndDelaySeconds: endDelay,
                     ScheduleJobId: scheduleJobId,
-                    IsOnDemand: isOnDemand);
+                    IsOnDemand: isOnDemand,
+                    OutputDirectoryRelativePathOverride: outputDirectoryRelativePathOverride,
+                    OutputFileNameTemplateOverride: outputFileNameTemplateOverride);
 
                 var result = await orchestrator.RecordAsync(command, cancellationToken);
                 if (!result.IsSuccess)

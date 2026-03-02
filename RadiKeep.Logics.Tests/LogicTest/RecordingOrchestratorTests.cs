@@ -577,7 +577,7 @@ public class RecordingOrchestratorTests
     {
         public bool IsCleanupCalled { get; private set; }
 
-        public ValueTask<MediaPath> PrepareAsync(ProgramRecordingInfo programInfo, CancellationToken cancellationToken = default)
+        public ValueTask<MediaPath> PrepareAsync(ProgramRecordingInfo programInfo, RecordingOptions options, CancellationToken cancellationToken = default)
             => ValueTask.FromResult(new MediaPath("temp.m4a", "final.m4a", "rel\\final.m4a"));
 
         public ValueTask<MediaPath> CommitAsync(MediaPath path, CancellationToken cancellationToken = default)
@@ -604,7 +604,7 @@ public class RecordingOrchestratorTests
 
     private sealed class RenameOnCommitMediaStorageService(MediaPath prepared, MediaPath committed) : IMediaStorageService
     {
-        public ValueTask<MediaPath> PrepareAsync(ProgramRecordingInfo programInfo, CancellationToken cancellationToken = default)
+        public ValueTask<MediaPath> PrepareAsync(ProgramRecordingInfo programInfo, RecordingOptions options, CancellationToken cancellationToken = default)
             => ValueTask.FromResult(prepared);
 
         public ValueTask<MediaPath> CommitAsync(MediaPath path, CancellationToken cancellationToken = default)

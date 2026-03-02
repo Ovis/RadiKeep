@@ -1,23 +1,30 @@
 using System.Globalization;
+using Microsoft.Extensions.Logging;
 using RadiKeep.Logics.Errors;
 using RadiKeep.Logics.Domain.Recording;
 using RadiKeep.Logics.Extensions;
 using RadiKeep.Logics.Models;
 using RadiKeep.Logics.Services;
+using ZLogger;
 
 namespace RadiKeep.Logics.Infrastructure.Recording;
 
 /// <summary>
 /// 録音ファイルの保存先を解決し、移動・削除を行う実装
 /// </summary>
-public class MediaStorageService(IAppConfigurationService config) : IMediaStorageService
+public class MediaStorageService(
+    IAppConfigurationService config,
+    ILogger<MediaStorageService>? logger = null) : IMediaStorageService
 {
     /// <summary>
     /// 保存先パスを準備する
     /// </summary>
-    public ValueTask<MediaPath> PrepareAsync(ProgramRecordingInfo programInfo, CancellationToken cancellationToken = default)
+    public ValueTask<MediaPath> PrepareAsync(
+        ProgramRecordingInfo programInfo,
+        RecordingOptions options,
+        CancellationToken cancellationToken = default)
     {
-        var fileInfo = GenerateFileName(programInfo);
+        var fileInfo = GenerateFileName(programInfo, options);
 
         // 同一番組の同時録音でも衝突しないよう、一時ファイル名は必ずユニークにする
         var recordingsWorkDir = TemporaryStoragePaths.GetRecordingsWorkDirectory(config.TemporaryFileSaveDir);
@@ -86,24 +93,28 @@ public class MediaStorageService(IAppConfigurationService config) : IMediaStorag
     /// <summary>
     /// ファイル名をテンプレートから生成する
     /// </summary>
-    private RadioFileInfo GenerateFileName(ProgramRecordingInfo programInfo)
+    private RadioFileInfo GenerateFileName(ProgramRecordingInfo programInfo, RecordingOptions options)
     {
-        var (fullPath, relativePath) = GenerateSavePath(programInfo);
+        var (fullPath, relativePath) = GenerateSavePath(programInfo, options);
 
-        var template = config.RecordFileNameTemplate;
-        if (!string.IsNullOrEmpty(template))
+        if (TryResolveFileNameTemplate(
+                options.OutputFileNameTemplateOverride,
+                programInfo,
+                out var overriddenTemplate,
+                "自動予約ルール",
+                shouldLogInvalid: true))
         {
-            var replacements = ReplaceTemplate(programInfo);
+            return new RadioFileInfo(overriddenTemplate, fullPath, relativePath);
+        }
 
-            foreach (var placeholder in replacements)
-            {
-                template = template.Replace(placeholder.Key, placeholder.Value);
-            }
-
-            if (template.IsValidFileName())
-            {
-                return new RadioFileInfo(template, fullPath, relativePath);
-            }
+        if (TryResolveFileNameTemplate(
+                config.RecordFileNameTemplate,
+                programInfo,
+                out var configuredTemplate,
+                "アプリ全体設定",
+                shouldLogInvalid: false))
+        {
+            return new RadioFileInfo(configuredTemplate, fullPath, relativePath);
         }
 
         return new RadioFileInfo($"{programInfo.StartTime.ToJapanDateTime():yyyyMMddHHmmss}_{programInfo.Title.ToSafeName()}", fullPath, relativePath);
@@ -112,40 +123,35 @@ public class MediaStorageService(IAppConfigurationService config) : IMediaStorag
     /// <summary>
     /// 保存先ディレクトリをテンプレートから生成する
     /// </summary>
-    private (string FullPath, string RelativePath) GenerateSavePath(ProgramRecordingInfo programInfo)
+    private (string FullPath, string RelativePath) GenerateSavePath(ProgramRecordingInfo programInfo, RecordingOptions options)
     {
-        var template = config.RecordDirectoryRelativePath;
-
-        if (!string.IsNullOrEmpty(template))
+        if (!config.RecordFileSaveDir.IsValidAbsolutePath())
         {
-            template = NormalizePathSeparators(template);
+            throw new DomainException("録音フォルダの設定が不正です。");
+        }
 
-            var replacements = ReplaceTemplate(programInfo);
-
-            foreach (var placeholder in replacements)
+        if (TryResolveDirectoryTemplate(
+                options.OutputDirectoryRelativePathOverride,
+                programInfo,
+                out var overriddenTemplate,
+                "自動予約ルール",
+                shouldLogInvalid: true))
+        {
+            if (config.RecordFileSaveDir.TryCombinePaths(overriddenTemplate, out var path))
             {
-                template = template.Replace(placeholder.Key, placeholder.Value);
+                return (path, overriddenTemplate);
             }
+        }
 
-            if (Path.IsPathRooted(template))
-            {
-                template = template.TrimStart(Path.GetPathRoot(template)?.ToCharArray());
-            }
-
-            if (!config.RecordFileSaveDir.IsValidAbsolutePath())
-            {
-                throw new DomainException("録音フォルダの設定が不正です。");
-            }
-
-            if (!template.IsValidRelativePath())
-            {
-                return (config.RecordFileSaveDir, string.Empty);
-            }
-
-            if (config.RecordFileSaveDir.TryCombinePaths(template, out var path))
-            {
-                return (path, template);
-            }
+        if (TryResolveDirectoryTemplate(
+                config.RecordDirectoryRelativePath,
+                programInfo,
+                out var configuredTemplate,
+                "アプリ全体設定",
+                shouldLogInvalid: false) &&
+            config.RecordFileSaveDir.TryCombinePaths(configuredTemplate, out var configuredPath))
+        {
+            return (configuredPath, configuredTemplate);
         }
 
         return (config.RecordFileSaveDir, string.Empty);
@@ -203,5 +209,97 @@ public class MediaStorageService(IAppConfigurationService config) : IMediaStorag
 
         var suffix = $"_duplicate_{DateTimeOffset.UtcNow.ToUnixTimeSeconds()}_{Ulid.NewUlid()}";
         return Path.Combine(dir, name + suffix + ext);
+    }
+
+    private bool TryResolveFileNameTemplate(
+        string? template,
+        ProgramRecordingInfo programInfo,
+        out string resolvedTemplate,
+        string sourceLabel,
+        bool shouldLogInvalid)
+    {
+        resolvedTemplate = string.Empty;
+
+        if (string.IsNullOrWhiteSpace(template))
+        {
+            return false;
+        }
+
+        var candidate = ApplyTemplate(template, programInfo);
+        if (!candidate.IsValidFileName())
+        {
+            if (shouldLogInvalid)
+            {
+                logger?.ZLogWarning($"{sourceLabel}のファイル名テンプレートが不正なため、アプリ全体設定へフォールバックします。 template={template}");
+            }
+
+            return false;
+        }
+
+        resolvedTemplate = candidate;
+        return true;
+    }
+
+    private bool TryResolveDirectoryTemplate(
+        string? template,
+        ProgramRecordingInfo programInfo,
+        out string resolvedTemplate,
+        string sourceLabel,
+        bool shouldLogInvalid)
+    {
+        resolvedTemplate = string.Empty;
+
+        if (string.IsNullOrWhiteSpace(template))
+        {
+            return false;
+        }
+
+        var candidate = NormalizePathSeparators(ApplyTemplate(template, programInfo));
+
+        if (Path.IsPathRooted(candidate))
+        {
+            candidate = candidate.TrimStart(Path.GetPathRoot(candidate)?.ToCharArray() ?? []);
+        }
+
+        if (!IsValidRelativeDirectoryTemplate(candidate))
+        {
+            if (shouldLogInvalid)
+            {
+                logger?.ZLogWarning($"{sourceLabel}の保存先テンプレートが不正なため、アプリ全体設定へフォールバックします。 template={template}");
+            }
+
+            return false;
+        }
+
+        resolvedTemplate = candidate;
+        return true;
+    }
+
+    private string ApplyTemplate(string template, ProgramRecordingInfo programInfo)
+    {
+        var result = template;
+        var replacements = ReplaceTemplate(programInfo);
+
+        foreach (var placeholder in replacements)
+        {
+            result = result.Replace(placeholder.Key, placeholder.Value);
+        }
+
+        return result;
+    }
+
+    private static bool IsValidRelativeDirectoryTemplate(string path)
+    {
+        if (!path.IsValidRelativePath())
+        {
+            return false;
+        }
+
+        var invalidFileNameChars = Path.GetInvalidFileNameChars();
+        var segments = path
+            .Split([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar, '\\', '/'],
+                StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        return segments.All(segment => segment.IndexOfAny(invalidFileNameChars) < 0);
     }
 }

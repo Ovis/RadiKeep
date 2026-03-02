@@ -1025,7 +1025,8 @@ namespace RadiKeep.Logics.Tests.LogicTest
         [Test]
         public async ValueTask SetKeywordReserveAsync_らじるエリア優先テスト()
         {
-            var now = _appContextMock.Object.StandardDateTimeOffset;
+            var now = new DateTimeOffset(2026, 2, 10, 12, 0, 0, TimeSpan.FromHours(9));
+            _appContextMock.SetupGet(x => x.StandardDateTimeOffset).Returns(now);
             var dayOfWeek = (DaysOfWeek)now.DayOfWeek;
             var areaTokyo = RadiKeep.Logics.Models.NhkRadiru.RadiruAreaKind.東京.GetEnumCodeId();
             var areaSendai = RadiKeep.Logics.Models.NhkRadiru.RadiruAreaKind.仙台.GetEnumCodeId();

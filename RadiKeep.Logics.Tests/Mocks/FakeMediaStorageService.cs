@@ -22,7 +22,7 @@ public class FakeMediaStorageService : IMediaStorageService
     /// <summary>
     /// 事前に固定したパスを返す
     /// </summary>
-    public ValueTask<MediaPath> PrepareAsync(ProgramRecordingInfo metadata, CancellationToken cancellationToken = default)
+    public ValueTask<MediaPath> PrepareAsync(ProgramRecordingInfo metadata, RecordingOptions options, CancellationToken cancellationToken = default)
     {
         return ValueTask.FromResult(Prepared);
     }

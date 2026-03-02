@@ -15,4 +15,6 @@ public record RecordingOptions(
     bool IsTimeFree,
     double StartDelaySeconds,
     double EndDelaySeconds,
-    bool IsOnDemand = false);
+    bool IsOnDemand = false,
+    string? OutputDirectoryRelativePathOverride = null,
+    string? OutputFileNameTemplateOverride = null);

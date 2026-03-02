@@ -111,7 +111,9 @@ public class RadikoRecordingSource(
             IsTimeFree: command.IsTimeFree,
             IsOnDemand: false,
             StartDelaySeconds: command.StartDelaySeconds,
-            EndDelaySeconds: command.EndDelaySeconds);
+            EndDelaySeconds: command.EndDelaySeconds,
+            OutputDirectoryRelativePathOverride: command.OutputDirectoryRelativePathOverride,
+            OutputFileNameTemplateOverride: command.OutputFileNameTemplateOverride);
 
         return new RecordingSourceResult(
             StreamUrl: streamUrl,

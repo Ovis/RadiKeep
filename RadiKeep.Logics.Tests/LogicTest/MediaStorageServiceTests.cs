@@ -31,7 +31,7 @@ public class MediaStorageServiceTests
             var service = new MediaStorageService(configMock.Object);
             var program = CreateProgramInfo();
 
-            var result = await service.PrepareAsync(program);
+            var result = await service.PrepareAsync(program, CreateOptions());
 
             var expectedRelative = Path.Combine("TBS", "2026", "TestTitle.m4a");
             var expectedFull = Path.Combine(baseDir, expectedRelative);
@@ -64,8 +64,8 @@ public class MediaStorageServiceTests
             var service = new MediaStorageService(configMock.Object);
             var program = CreateProgramInfo();
 
-            var first = await service.PrepareAsync(program);
-            var second = await service.PrepareAsync(program);
+            var first = await service.PrepareAsync(program, CreateOptions());
+            var second = await service.PrepareAsync(program, CreateOptions());
 
             Assert.That(first.TempFilePath, Is.Not.EqualTo(second.TempFilePath));
             Assert.That(Path.GetFileName(first.TempFilePath), Does.StartWith("P1_"));
@@ -93,7 +93,7 @@ public class MediaStorageServiceTests
         var service = new MediaStorageService(configMock.Object);
         var program = CreateProgramInfo();
 
-        Assert.ThrowsAsync<DomainException>(async () => await service.PrepareAsync(program));
+        Assert.ThrowsAsync<DomainException>(async () => await service.PrepareAsync(program, CreateOptions()));
     }
 
     /// <summary>
@@ -115,7 +115,7 @@ public class MediaStorageServiceTests
 
             var service = new MediaStorageService(configMock.Object);
             var program = CreateProgramInfo();
-            var path = await service.PrepareAsync(program);
+            var path = await service.PrepareAsync(program, CreateOptions());
 
             // 既存ファイルを作成
             Directory.CreateDirectory(Path.GetDirectoryName(path.FinalFilePath)!);
@@ -153,7 +153,7 @@ public class MediaStorageServiceTests
             var configMock = CreateConfig(baseDir, tempDir, null, null);
             var service = new MediaStorageService(configMock.Object);
             var program = CreateProgramInfo();
-            var path = await service.PrepareAsync(program);
+            var path = await service.PrepareAsync(program, CreateOptions());
 
             File.WriteAllText(path.TempFilePath, "temp");
 
@@ -200,7 +200,7 @@ public class MediaStorageServiceTests
                 Description: "Desc",
                 ProgramUrl: "http://example");
 
-            var result = await service.PrepareAsync(program);
+            var result = await service.PrepareAsync(program, CreateOptions());
             var expectedFileName =
                 "ST：01_Title：／？A_2026_26_02_2_09_9_12_12_03_3_04_4_2026_26_12_12_31_31_23_23_45_45_56_56.m4a";
             var expectedRelative = Path.Combine("Station／Name", "2026", "12", "31", expectedFileName);
@@ -235,7 +235,7 @@ public class MediaStorageServiceTests
             var service = new MediaStorageService(configMock.Object);
             var program = CreateProgramInfo();
 
-            var result = await service.PrepareAsync(program);
+            var result = await service.PrepareAsync(program, CreateOptions());
             var expectedFileName = "20260209120000_TestTitle.m4a";
 
             Assert.That(Path.GetFileName(result.FinalFilePath), Is.EqualTo(expectedFileName));
@@ -268,7 +268,7 @@ public class MediaStorageServiceTests
             var service = new MediaStorageService(configMock.Object);
             var program = CreateProgramInfo();
 
-            var result = await service.PrepareAsync(program);
+            var result = await service.PrepareAsync(program, CreateOptions());
 
             Assert.That(result.RelativePath, Is.EqualTo("TestTitle.m4a"));
             Assert.That(result.FinalFilePath, Is.EqualTo(Path.Combine(baseDir, "TestTitle.m4a")));
@@ -301,8 +301,84 @@ public class MediaStorageServiceTests
             var service = new MediaStorageService(configMock.Object);
             var program = CreateProgramInfo();
 
-            var result = await service.PrepareAsync(program);
+            var result = await service.PrepareAsync(program, CreateOptions());
             var expectedRelative = Path.Combine("Music", "TBS", "TestTitle.m4a");
+
+            Assert.That(result.RelativePath, Is.EqualTo(expectedRelative));
+            Assert.That(result.FinalFilePath, Is.EqualTo(Path.Combine(baseDir, expectedRelative)));
+        }
+        finally
+        {
+            SafeDeleteDirectory(baseDir);
+            SafeDeleteDirectory(tempDir);
+        }
+    }
+
+    /// <summary>
+    /// ルール側の保存先・ファイル名がある場合はアプリ全体設定より優先する
+    /// </summary>
+    [Test]
+    public async Task PrepareAsync_ルールオーバーライドあり_ルール値を優先する()
+    {
+        var baseDir = CreateTempDirectory();
+        var tempDir = CreateTempDirectory();
+
+        try
+        {
+            var configMock = CreateConfig(
+                baseDir,
+                tempDir,
+                recordDirectoryRelativePath: "global\\$StationId$",
+                recordFileNameTemplate: "global_$Title$");
+
+            var service = new MediaStorageService(configMock.Object);
+            var program = CreateProgramInfo();
+
+            var result = await service.PrepareAsync(
+                program,
+                CreateOptions(
+                    outputDirectoryRelativePathOverride: "rule\\$StationId$",
+                    outputFileNameTemplateOverride: "rule_$Title$"));
+
+            var expectedRelative = Path.Combine("rule", "TBS", "rule_TestTitle.m4a");
+
+            Assert.That(result.RelativePath, Is.EqualTo(expectedRelative));
+            Assert.That(result.FinalFilePath, Is.EqualTo(Path.Combine(baseDir, expectedRelative)));
+        }
+        finally
+        {
+            SafeDeleteDirectory(baseDir);
+            SafeDeleteDirectory(tempDir);
+        }
+    }
+
+    /// <summary>
+    /// ルール側の保存先・ファイル名が不正な場合はアプリ全体設定へフォールバックする
+    /// </summary>
+    [Test]
+    public async Task PrepareAsync_不正なルールオーバーライド_アプリ設定へフォールバックする()
+    {
+        var baseDir = CreateTempDirectory();
+        var tempDir = CreateTempDirectory();
+
+        try
+        {
+            var configMock = CreateConfig(
+                baseDir,
+                tempDir,
+                recordDirectoryRelativePath: "global\\$StationId$",
+                recordFileNameTemplate: "global_$Title$");
+
+            var service = new MediaStorageService(configMock.Object);
+            var program = CreateProgramInfo();
+
+            var result = await service.PrepareAsync(
+                program,
+                CreateOptions(
+                    outputDirectoryRelativePathOverride: "..\\escape",
+                    outputFileNameTemplateOverride: "bad/$Title$"));
+
+            var expectedRelative = Path.Combine("global", "TBS", "global_TestTitle.m4a");
 
             Assert.That(result.RelativePath, Is.EqualTo(expectedRelative));
             Assert.That(result.FinalFilePath, Is.EqualTo(Path.Combine(baseDir, expectedRelative)));
@@ -330,6 +406,17 @@ public class MediaStorageServiceTests
             Performer: "Tester",
             Description: "Desc",
             ProgramUrl: "http://example");
+
+    private static RecordingOptions CreateOptions(
+        string? outputDirectoryRelativePathOverride = null,
+        string? outputFileNameTemplateOverride = null)
+        => new(
+            ServiceKind: RadiKeep.Logics.Models.Enums.RadioServiceKind.Radiko,
+            IsTimeFree: false,
+            StartDelaySeconds: 0,
+            EndDelaySeconds: 0,
+            OutputDirectoryRelativePathOverride: outputDirectoryRelativePathOverride,
+            OutputFileNameTemplateOverride: outputFileNameTemplateOverride);
 
     /// <summary>
     /// 設定モック生成
