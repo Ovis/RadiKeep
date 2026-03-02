@@ -409,6 +409,7 @@ FodyWeavers.xsd
 
 # RadiKeep
 output/
+.build-verify/
 RadiKeep/keys/
 RadiKeep/static/
 RadiKeep/Properties/PublishProfiles/

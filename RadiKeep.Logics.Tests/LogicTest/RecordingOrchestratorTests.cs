@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Moq;
+using RadiKeep.Logics.Domain.AppEvent;
 using RadiKeep.Logics.Domain.Recording;
 using RadiKeep.Logics.Errors;
 using RadiKeep.Logics.Models.Enums;
@@ -207,6 +208,75 @@ public class RecordingOrchestratorTests
 
         var id = result.RecordingId!.Value;
         Assert.That(repo.Store[id].State, Is.EqualTo(RecordingState.Failed));
+    }
+
+    /// <summary>
+    /// 異常系: 録音失敗時に失敗トーストが配信されること
+    /// </summary>
+    [Test]
+    public async Task RecordAsync_TranscodeFail_失敗トーストを配信()
+    {
+        var logger = new Mock<ILogger<RecordingOrchestrator>>().Object;
+
+        var metadata = new ProgramRecordingInfo(
+            ProgramId: "P2",
+            Title: "Test",
+            Subtitle: "",
+            StationId: "ST",
+            StationName: "Station",
+            AreaId: "AR",
+            StartTime: DateTimeOffset.UtcNow,
+            EndTime: DateTimeOffset.UtcNow.AddMinutes(30),
+            Performer: "P",
+            Description: "D",
+            ProgramUrl: "");
+
+        var options = new RecordingOptions(
+            ServiceKind: RadioServiceKind.Radiko,
+            IsTimeFree: false,
+            StartDelaySeconds: 0,
+            EndDelaySeconds: 0);
+
+        var sourceResult = new RecordingSourceResult(
+            StreamUrl: "http://example/stream.m3u8",
+            Headers: new Dictionary<string, string>(),
+            ProgramInfo: metadata,
+            Options: options);
+
+        var source = new FakeRecordingSource(RadioServiceKind.Radiko, sourceResult);
+        var storage = new FakeMediaStorageService();
+        var transcoder = new FakeMediaTranscodeService(false);
+        var repo = new InMemoryRecordingRepository();
+        var publisher = new Mock<IRecordingStateEventPublisher>().Object;
+        var appToastEventPublisher = new Mock<IAppToastEventPublisher>();
+
+        var orchestrator = new RecordingOrchestrator(
+            logger,
+            new[] { source },
+            storage,
+            transcoder,
+            repo,
+            publisher,
+            appToastEventPublisher.Object);
+
+        var command = new RecordingCommand(
+            ServiceKind: RadioServiceKind.Radiko,
+            ProgramId: "P2",
+            ProgramName: "Test",
+            IsTimeFree: false,
+            StartDelaySeconds: 0,
+            EndDelaySeconds: 0);
+
+        var result = await orchestrator.RecordAsync(command);
+
+        Assert.That(result.IsSuccess, Is.False);
+        appToastEventPublisher.Verify(
+            x => x.PublishAsync(
+                It.Is<AppToastEvent>(p =>
+                    p.Message == "Test の録音に失敗しました。理由: 録音処理に失敗しました。"
+                    && p.IsSuccess == false),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
     }
 
     /// <summary>

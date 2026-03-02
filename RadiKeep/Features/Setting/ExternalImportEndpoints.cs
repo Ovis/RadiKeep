@@ -52,7 +52,6 @@ public static class ExternalImportEndpoints
     private static async Task<Results<Ok<ApiResponse<List<ExternalImportCandidateEntry>>>, BadRequest<ApiResponse<EmptyData?>>>> HandleScanAsync(
         ILogger<ExternalImportEndpointsMarker> logger,
         ExternalRecordingImportLobLogic importLobLogic,
-        IAppToastEventPublisher appToastEventPublisher,
         IAppOperationEventPublisher appOperationEventPublisher,
         ExternalImportScanRequest? request,
         CancellationToken cancellationToken)
@@ -61,14 +60,12 @@ public static class ExternalImportEndpoints
         {
             var applyDefaultTag = request?.ApplyDefaultTag ?? true;
             var candidates = await importLobLogic.ScanCandidatesAsync(applyDefaultTag, cancellationToken);
-            await PublishGlobalToastSafeAsync(appToastEventPublisher, "外部取り込み候補のスキャンが完了しました。", true, cancellationToken);
             await PublishOperationSafeAsync(appOperationEventPublisher, "external-import", "scan", true, "外部取り込み候補のスキャンが完了しました。", cancellationToken);
             return TypedResults.Ok(ApiResponse.Ok(candidates, "スキャンが完了しました。"));
         }
         catch (Exception ex)
         {
             logger.ZLogError(ex, $"外部取込スキャンでエラーが発生しました。");
-            await PublishGlobalToastSafeAsync(appToastEventPublisher, "外部取り込み候補のスキャンに失敗しました。", false, cancellationToken);
             await PublishOperationSafeAsync(appOperationEventPublisher, "external-import", "scan", false, "外部取り込み候補のスキャンに失敗しました。", cancellationToken);
             return TypedResults.BadRequest(ApiResponse.Fail("スキャンに失敗しました。"));
         }
@@ -143,7 +140,6 @@ public static class ExternalImportEndpoints
                 result,
                 new ApiError("validation_error", "入力内容にエラーがあります。"),
                 "入力内容にエラーがあります。");
-            await PublishGlobalToastSafeAsync(appToastEventPublisher, "外部取り込みの保存に失敗しました。", false, cancellationToken);
             await PublishOperationSafeAsync(appOperationEventPublisher, "external-import", "save", false, "外部取り込みの保存に失敗しました。", cancellationToken);
             return TypedResults.BadRequest(response);
         }
@@ -166,19 +162,24 @@ public static class ExternalImportEndpoints
         RecordingFileMaintenanceLobLogic recordingFileMaintenanceLobLogic,
         IAppToastEventPublisher appToastEventPublisher,
         IAppOperationEventPublisher appOperationEventPublisher,
+        bool? silent,
         CancellationToken cancellationToken)
     {
+        var isSilent = silent ?? false;
+
         try
         {
             var result = await recordingFileMaintenanceLobLogic.ScanMissingRecordsAsync(cancellationToken);
-            await PublishGlobalToastSafeAsync(appToastEventPublisher, "メンテナンスの欠損レコード抽出が完了しました。", true, cancellationToken);
+            if (!isSilent)
+            {
+                await PublishGlobalToastSafeAsync(appToastEventPublisher, "メンテナンスの欠損レコード抽出が完了しました。", true, cancellationToken);
+            }
             await PublishOperationSafeAsync(appOperationEventPublisher, "maintenance", "scan-missing", true, "メンテナンスの欠損レコード抽出が完了しました。", cancellationToken);
             return TypedResults.Ok(ApiResponse.Ok(result, "欠損レコードのスキャンが完了しました。"));
         }
         catch (Exception ex)
         {
             logger.ZLogError(ex, $"欠損レコードスキャンでエラーが発生しました。");
-            await PublishGlobalToastSafeAsync(appToastEventPublisher, "メンテナンスの欠損レコード抽出に失敗しました。", false, cancellationToken);
             await PublishOperationSafeAsync(appOperationEventPublisher, "maintenance", "scan-missing", false, "メンテナンスの欠損レコード抽出に失敗しました。", cancellationToken);
             return TypedResults.BadRequest(ApiResponse.Fail("欠損レコードのスキャンに失敗しました。"));
         }
@@ -204,14 +205,14 @@ public static class ExternalImportEndpoints
                 .ToList();
 
             var result = await recordingFileMaintenanceLobLogic.RelinkMissingRecordsAsync(ids, cancellationToken);
-            await PublishGlobalToastSafeAsync(appToastEventPublisher, "メンテナンスの再紐付けが完了しました。", true, cancellationToken);
-            await PublishOperationSafeAsync(appOperationEventPublisher, "maintenance", "relink-missing", true, "メンテナンスの再紐付けが完了しました。", cancellationToken);
+            var message = BuildMaintenanceActionSummary("再紐付け処理が完了しました。", result);
+            await PublishGlobalToastSafeAsync(appToastEventPublisher, message, true, cancellationToken);
+            await PublishOperationSafeAsync(appOperationEventPublisher, "maintenance", "relink-missing", true, message, cancellationToken);
             return TypedResults.Ok(ApiResponse.Ok(result, "再紐付け処理が完了しました。"));
         }
         catch (Exception ex)
         {
             logger.ZLogError(ex, $"欠損レコード再紐付けでエラーが発生しました。");
-            await PublishGlobalToastSafeAsync(appToastEventPublisher, "メンテナンスの再紐付けに失敗しました。", false, cancellationToken);
             await PublishOperationSafeAsync(appOperationEventPublisher, "maintenance", "relink-missing", false, "メンテナンスの再紐付けに失敗しました。", cancellationToken);
             return TypedResults.BadRequest(ApiResponse.Fail("再紐付け処理に失敗しました。"));
         }
@@ -237,14 +238,14 @@ public static class ExternalImportEndpoints
                 .ToList();
 
             var result = await recordingFileMaintenanceLobLogic.DeleteMissingRecordsAsync(ids, cancellationToken);
-            await PublishGlobalToastSafeAsync(appToastEventPublisher, "メンテナンスの欠損レコード削除が完了しました。", true, cancellationToken);
-            await PublishOperationSafeAsync(appOperationEventPublisher, "maintenance", "delete-missing", true, "メンテナンスの欠損レコード削除が完了しました。", cancellationToken);
+            var message = BuildMaintenanceActionSummary("欠損レコード削除が完了しました。", result);
+            await PublishGlobalToastSafeAsync(appToastEventPublisher, message, true, cancellationToken);
+            await PublishOperationSafeAsync(appOperationEventPublisher, "maintenance", "delete-missing", true, message, cancellationToken);
             return TypedResults.Ok(ApiResponse.Ok(result, "欠損レコード削除が完了しました。"));
         }
         catch (Exception ex)
         {
             logger.ZLogError(ex, $"欠損レコード削除でエラーが発生しました。");
-            await PublishGlobalToastSafeAsync(appToastEventPublisher, "メンテナンスの欠損レコード削除に失敗しました。", false, cancellationToken);
             await PublishOperationSafeAsync(appOperationEventPublisher, "maintenance", "delete-missing", false, "メンテナンスの欠損レコード削除に失敗しました。", cancellationToken);
             return TypedResults.BadRequest(ApiResponse.Fail("欠損レコード削除に失敗しました。"));
         }
@@ -292,6 +293,13 @@ public static class ExternalImportEndpoints
         {
             // イベント配信失敗は本処理の結果に影響させない
         }
+    }
+
+    private static string BuildMaintenanceActionSummary(
+        string title,
+        RecordingFileMaintenanceActionResult result)
+    {
+        return $"{title} 成功:{result.SuccessCount} / スキップ:{result.SkipCount} / 失敗:{result.FailCount}";
     }
 
     /// <summary>
