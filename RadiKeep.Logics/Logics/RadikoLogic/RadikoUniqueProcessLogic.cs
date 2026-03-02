@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
@@ -14,15 +15,52 @@ namespace RadiKeep.Logics.Logics.RadikoLogic
         IAppConfigurationService config,
         IHttpClientFactory httpClientFactory)
     {
+        private sealed record CachedRadikoSession(
+            int ScopeId,
+            string Session,
+            bool IsPremiumUser,
+            bool IsAreaFree,
+            DateTimeOffset ExpiresAtUtc);
+
+        private sealed record CachedRadikoAuthorization(
+            int ScopeId,
+            string Session,
+            string Token,
+            string AreaId,
+            DateTimeOffset ExpiresAtUtc);
+
         private const string RadikoAreaCacheKey = "radiko_current_area";
+        private static readonly TimeSpan RadikoSessionCacheTtl = TimeSpan.FromMinutes(3);
+        private static readonly TimeSpan RadikoAuthorizationCacheTtl = TimeSpan.FromMinutes(1);
         private static readonly IMemoryCache AreaCache = new MemoryCache(
             new MemoryCacheOptions
             {
                 ExpirationScanFrequency = TimeSpan.FromMinutes(1)
             });
+        private static readonly SemaphoreSlim AuthenticationCacheLock = new(1, 1);
         private static readonly TimeSpan AreaCacheTtl = TimeSpan.FromHours(24);
+        private static CachedRadikoSession? _cachedSession;
+        private static CachedRadikoAuthorization? _cachedAuthorization;
 
+        private readonly int _authenticationCacheScopeId = RuntimeHelpers.GetHashCode(httpClientFactory);
         private HttpClient HttpClient => httpClientFactory.CreateClient(HttpClientNames.Radiko);
+
+        /// <summary>
+        /// radiko の認証キャッシュを破棄する
+        /// </summary>
+        public void InvalidateAuthenticationCache()
+        {
+            AuthenticationCacheLock.Wait();
+            try
+            {
+                _cachedSession = null;
+                _cachedAuthorization = null;
+            }
+            finally
+            {
+                AuthenticationCacheLock.Release();
+            }
+        }
 
         /// <summary>
         /// radikoのエリアを取得する

@@ -25,11 +25,13 @@ namespace RadiKeep.Logics.Tests.LogicTest
             var httpClient = new HttpClient(_httpHandler);
             var httpClientFactory = new FakeHttpClientFactory(httpClient);
             _radikoLogic = new RadikoUniqueProcessLogic(_loggerMock.Object, _configMock.Object, httpClientFactory);
+            _radikoLogic.InvalidateAuthenticationCache();
         }
 
         [TearDown]
         public void TearDown()
         {
+            _radikoLogic.InvalidateAuthenticationCache();
             _httpHandler.Dispose();
         }
 
@@ -139,6 +141,100 @@ namespace RadiKeep.Logics.Tests.LogicTest
             var result = await logic.AuthorizeRadikoAsync("session");
 
             Assert.That(result.IsSuccess, Is.False);
+        }
+
+        [Test]
+        public async Task LoginRadikoAsync_短時間キャッシュ_2回目はログインAPIを再利用しない()
+        {
+            var loginCount = 0;
+            _configMock.Setup(c => c.TryGetRadikoCredentialsAsync())
+                .Returns(ValueTask.FromResult((true, "user", "pass")));
+
+            _httpHandler.AddHandler(
+                req => req.RequestUri!.ToString().Contains("https://radiko.jp/ap/member/webapi/member/login"),
+                _ =>
+                {
+                    loginCount++;
+                    return new HttpResponseMessage(HttpStatusCode.OK)
+                    {
+                        Content = new StringContent("{\"radiko_session\":\"session-a\",\"paid_member\":\"1\",\"areafree\":\"1\"}")
+                    };
+                });
+
+            var first = await _radikoLogic.LoginRadikoAsync();
+            var second = await _radikoLogic.LoginRadikoAsync();
+
+            Assert.That(first.IsSuccess, Is.True);
+            Assert.That(second.IsSuccess, Is.True);
+            Assert.That(first.Session, Is.EqualTo("session-a"));
+            Assert.That(second.Session, Is.EqualTo("session-a"));
+            Assert.That(loginCount, Is.EqualTo(1));
+        }
+
+        [Test]
+        public async Task AuthorizeRadikoAsync_キャッシュ破棄後はログインと認証を再取得する()
+        {
+            var loginCount = 0;
+            var auth1Count = 0;
+            var auth2Count = 0;
+
+            _configMock.Setup(c => c.TryGetRadikoCredentialsAsync())
+                .Returns(ValueTask.FromResult((true, "user", "pass")));
+
+            _httpHandler.AddHandler(
+                req => req.RequestUri!.ToString().Contains("https://radiko.jp/ap/member/webapi/member/login"),
+                _ =>
+                {
+                    loginCount++;
+                    return new HttpResponseMessage(HttpStatusCode.OK)
+                    {
+                        Content = new StringContent($"{{\"radiko_session\":\"session-{loginCount}\",\"paid_member\":\"1\",\"areafree\":\"1\"}}")
+                    };
+                });
+
+            _httpHandler.AddHandler(
+                req => req.RequestUri!.ToString().Contains("playerCommon.js"),
+                _ => new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent("new RadikoJSPlayer('a','b','abcde',{")
+                });
+
+            _httpHandler.AddHandler(
+                req => req.RequestUri!.ToString().Contains("auth1"),
+                _ =>
+                {
+                    auth1Count++;
+                    var response = new HttpResponseMessage(HttpStatusCode.OK);
+                    response.Headers.Add("X-Radiko-AuthToken", $"token-{auth1Count}");
+                    response.Headers.Add("X-Radiko-KeyLength", "5");
+                    response.Headers.Add("X-Radiko-KeyOffset", "0");
+                    return response;
+                });
+
+            _httpHandler.AddHandler(
+                req => req.RequestUri!.ToString().Contains("auth2"),
+                _ =>
+                {
+                    auth2Count++;
+                    return new HttpResponseMessage(HttpStatusCode.OK)
+                    {
+                        Content = new StringContent($"JP13,0,{auth2Count}\n")
+                    };
+                });
+
+            var first = await _radikoLogic.AuthorizeRadikoAsync();
+            var second = await _radikoLogic.AuthorizeRadikoAsync();
+            _radikoLogic.InvalidateAuthenticationCache();
+            var third = await _radikoLogic.AuthorizeRadikoAsync();
+
+            Assert.That(first.IsSuccess, Is.True);
+            Assert.That(second.IsSuccess, Is.True);
+            Assert.That(third.IsSuccess, Is.True);
+            Assert.That(second.Token, Is.EqualTo(first.Token));
+            Assert.That(third.Token, Is.Not.EqualTo(first.Token));
+            Assert.That(loginCount, Is.EqualTo(2));
+            Assert.That(auth1Count, Is.EqualTo(2));
+            Assert.That(auth2Count, Is.EqualTo(2));
         }
     }
 }

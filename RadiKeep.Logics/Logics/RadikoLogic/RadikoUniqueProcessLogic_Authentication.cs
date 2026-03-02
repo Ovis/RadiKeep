@@ -67,123 +67,243 @@ namespace RadiKeep.Logics.Logics.RadikoLogic
         /// radikoにログイン
         /// </summary>
         /// <returns></returns>
-        public async ValueTask<(bool IsSuccess, string Session, bool IsPremiumUser, bool IsAreaFree)> LoginRadikoAsync()
+        public async ValueTask<(bool IsSuccess, string Session, bool IsPremiumUser, bool IsAreaFree)> LoginRadikoAsync(bool forceRefresh = false)
         {
-            var (hasCredentials, userId, password) = await config.TryGetRadikoCredentialsAsync();
-            if (!hasCredentials)
+            await AuthenticationCacheLock.WaitAsync();
+            try
             {
-                config.UpdateRadikoPremiumUser(false);
-                config.UpdateRadikoAreaFree(false);
-                return (false, string.Empty, false, false);
-            }
+                if (forceRefresh)
+                {
+                    _cachedSession = null;
+                    _cachedAuthorization = null;
+                }
 
-            var (isSuccess, session, isPremiumUser, isAreaFree) = await TryLoginWithCredentialsAsync(userId, password);
-            if (!isSuccess)
+                var nowUtc = DateTimeOffset.UtcNow;
+                if (_cachedSession is { } cachedSession &&
+                    cachedSession.ScopeId == _authenticationCacheScopeId &&
+                    cachedSession.ExpiresAtUtc > nowUtc &&
+                    !string.IsNullOrWhiteSpace(cachedSession.Session))
+                {
+                    config.UpdateRadikoPremiumUser(cachedSession.IsPremiumUser);
+                    config.UpdateRadikoAreaFree(cachedSession.IsAreaFree);
+                    return (true, cachedSession.Session, cachedSession.IsPremiumUser, cachedSession.IsAreaFree);
+                }
+
+                var (hasCredentials, userId, password) = await config.TryGetRadikoCredentialsAsync();
+                if (!hasCredentials)
+                {
+                    config.UpdateRadikoPremiumUser(false);
+                    config.UpdateRadikoAreaFree(false);
+                    return (false, string.Empty, false, false);
+                }
+
+                var (isSuccess, session, isPremiumUser, isAreaFree) = await TryLoginWithCredentialsAsync(userId, password);
+                if (!isSuccess)
+                {
+                    _cachedSession = null;
+                    _cachedAuthorization = null;
+                    config.UpdateRadikoPremiumUser(false);
+                    config.UpdateRadikoAreaFree(false);
+                    return (false, string.Empty, false, false);
+                }
+
+                _cachedSession = new CachedRadikoSession(
+                    _authenticationCacheScopeId,
+                    session,
+                    isPremiumUser,
+                    isAreaFree,
+                    nowUtc.Add(RadikoSessionCacheTtl));
+                config.UpdateRadikoPremiumUser(isPremiumUser);
+                config.UpdateRadikoAreaFree(isAreaFree);
+
+                return (true, session, isPremiumUser, isAreaFree);
+            }
+            finally
             {
-                config.UpdateRadikoPremiumUser(false);
-                config.UpdateRadikoAreaFree(false);
-                return (false, string.Empty, false, false);
+                AuthenticationCacheLock.Release();
             }
-
-            config.UpdateRadikoPremiumUser(isPremiumUser);
-            config.UpdateRadikoAreaFree(isAreaFree);
-
-            return (true, session, isPremiumUser, isAreaFree);
         }
 
 
 
-        public async ValueTask<(bool IsSuccess, string Token, string AreaId)> AuthorizeRadikoAsync(string session = "")
+        public async ValueTask<(bool IsSuccess, string Token, string AreaId)> AuthorizeRadikoAsync(string session = "", bool forceRefresh = false)
         {
-            if (string.IsNullOrEmpty(session))
-                (var _, session, _, _) = await LoginRadikoAsync();
-
-            string? token;
-            string partialKey;
+            await AuthenticationCacheLock.WaitAsync();
             {
-                using var response = await HttpClientExecutionHelper.SendWithRetryAsync(
-                    logger,
-                    HttpClient,
-                    "radiko auth1 API",
-                    () =>
+                try
+                {
+                    if (forceRefresh)
                     {
-                        var request = new HttpRequestMessage(HttpMethod.Get, "https://radiko.jp/v2/api/auth1");
-                        request.Headers.Add("pragma", "no-cache");
-                        request.Headers.Add("x-radiko-app", "pc_html5");
-                        request.Headers.Add("x-radiko-app-version", "0.0.1");
-                        request.Headers.Add("x-radiko-device", "pc");
-                        request.Headers.Add("x-radiko-user", "dummy_user");
-                        return request;
-                    },
-                    config.ExternalServiceUserAgent);
+                        _cachedAuthorization = null;
+                        if (string.IsNullOrEmpty(session))
+                        {
+                            _cachedSession = null;
+                        }
+                    }
 
-                if (!response.IsSuccessStatusCode)
-                {
-                    return (false, string.Empty, string.Empty);
-                }
-
-                token = GetHeaderValue(response.Headers, "X-Radiko-AuthToken");
-                int.TryParse(GetHeaderValue(response.Headers, "X-Radiko-KeyLength"), out var keyLength);
-                int.TryParse(GetHeaderValue(response.Headers, "X-Radiko-KeyOffset"), out var keyOffset);
-
-                if (string.IsNullOrEmpty(token))
-                    return (false, string.Empty, string.Empty);
-
-                var (isSuccess, key) = await GetPartialKeyString();
-
-                if (!isSuccess)
-                {
-                    return (false, string.Empty, string.Empty);
-                }
-
-                partialKey =
-                    Convert.ToBase64String(Encoding.UTF8.GetBytes(key.Substring(keyOffset, keyLength)));
-            }
-
-
-            try
-            {
-                // トークンを有効化
-                var queryString = HttpUtility.ParseQueryString("");
-                queryString.Add("radiko_session", $"{session}");
-                var uriBuilder = new UriBuilder("https://radiko.jp/v2/api/auth2") { Query = queryString.ToString() };
-
-                using var response = await HttpClientExecutionHelper.SendWithRetryAsync(
-                    logger,
-                    HttpClient,
-                    "radiko auth2 API",
-                    () =>
+                    var nowUtc = DateTimeOffset.UtcNow;
+                    if (string.IsNullOrEmpty(session))
                     {
-                        var request = new HttpRequestMessage(HttpMethod.Get, uriBuilder.Uri);
-                        request.Headers.Add("X-Radiko-AuthToken", token);
-                        request.Headers.Add("X-Radiko-Device", "pc");
-                        request.Headers.Add("X-Radiko-PartialKey", partialKey);
-                        request.Headers.Add("x-radiko-user", "dummy_user");
-                        return request;
-                    },
-                    config.ExternalServiceUserAgent);
-                var body = (await response.Content.ReadAsStringAsync()).Replace("\r", "").Trim();
+                        if (_cachedSession is { } cachedSession &&
+                            cachedSession.ScopeId == _authenticationCacheScopeId &&
+                            cachedSession.ExpiresAtUtc > nowUtc &&
+                            !string.IsNullOrWhiteSpace(cachedSession.Session))
+                        {
+                            session = cachedSession.Session;
+                            config.UpdateRadikoPremiumUser(cachedSession.IsPremiumUser);
+                            config.UpdateRadikoAreaFree(cachedSession.IsAreaFree);
+                        }
+                        else
+                        {
+                            var (hasCredentials, userId, password) = await config.TryGetRadikoCredentialsAsync();
+                            if (!hasCredentials)
+                            {
+                                config.UpdateRadikoPremiumUser(false);
+                                config.UpdateRadikoAreaFree(false);
+                                return (false, string.Empty, string.Empty);
+                            }
 
-                if (string.IsNullOrWhiteSpace(body) || body == "OUT")
-                {
-                    return (false, string.Empty, string.Empty);
+                            var loginResult = await TryLoginWithCredentialsAsync(userId, password);
+                            if (!loginResult.IsSuccess)
+                            {
+                                _cachedSession = null;
+                                _cachedAuthorization = null;
+                                config.UpdateRadikoPremiumUser(false);
+                                config.UpdateRadikoAreaFree(false);
+                                return (false, string.Empty, string.Empty);
+                            }
+
+                            session = loginResult.Session;
+                            _cachedSession = new CachedRadikoSession(
+                                _authenticationCacheScopeId,
+                                loginResult.Session,
+                                loginResult.IsPremiumUser,
+                                loginResult.IsAreaFree,
+                                nowUtc.Add(RadikoSessionCacheTtl));
+                            config.UpdateRadikoPremiumUser(loginResult.IsPremiumUser);
+                            config.UpdateRadikoAreaFree(loginResult.IsAreaFree);
+                        }
+                    }
+
+                    if (_cachedAuthorization is { } cachedAuthorization &&
+                        cachedAuthorization.ScopeId == _authenticationCacheScopeId &&
+                        cachedAuthorization.ExpiresAtUtc > nowUtc &&
+                        string.Equals(cachedAuthorization.Session, session, StringComparison.Ordinal) &&
+                        !string.IsNullOrWhiteSpace(cachedAuthorization.Token) &&
+                        !string.IsNullOrWhiteSpace(cachedAuthorization.AreaId))
+                    {
+                        return (true, cachedAuthorization.Token, cachedAuthorization.AreaId);
+                    }
+
+                    string? token;
+                    string partialKey;
+                    {
+                        using var response = await HttpClientExecutionHelper.SendWithRetryAsync(
+                            logger,
+                            HttpClient,
+                            "radiko auth1 API",
+                            () =>
+                            {
+                                var request = new HttpRequestMessage(HttpMethod.Get, "https://radiko.jp/v2/api/auth1");
+                                request.Headers.Add("pragma", "no-cache");
+                                request.Headers.Add("x-radiko-app", "pc_html5");
+                                request.Headers.Add("x-radiko-app-version", "0.0.1");
+                                request.Headers.Add("x-radiko-device", "pc");
+                                request.Headers.Add("x-radiko-user", "dummy_user");
+                                return request;
+                            },
+                            config.ExternalServiceUserAgent);
+
+                        if (!response.IsSuccessStatusCode)
+                        {
+                            if (response.StatusCode == System.Net.HttpStatusCode.Forbidden)
+                            {
+                                _cachedAuthorization = null;
+                            }
+
+                            return (false, string.Empty, string.Empty);
+                        }
+
+                        token = GetHeaderValue(response.Headers, "X-Radiko-AuthToken");
+                        int.TryParse(GetHeaderValue(response.Headers, "X-Radiko-KeyLength"), out var keyLength);
+                        int.TryParse(GetHeaderValue(response.Headers, "X-Radiko-KeyOffset"), out var keyOffset);
+
+                        if (string.IsNullOrEmpty(token))
+                            return (false, string.Empty, string.Empty);
+
+                        var (isSuccess, key) = await GetPartialKeyString();
+
+                        if (!isSuccess)
+                        {
+                            return (false, string.Empty, string.Empty);
+                        }
+
+                        partialKey =
+                            Convert.ToBase64String(Encoding.UTF8.GetBytes(key.Substring(keyOffset, keyLength)));
+                    }
+
+                    // トークンを有効化
+                    var queryString = HttpUtility.ParseQueryString("");
+                    queryString.Add("radiko_session", $"{session}");
+                    var uriBuilder = new UriBuilder("https://radiko.jp/v2/api/auth2") { Query = queryString.ToString() };
+
+                    using var auth2Response = await HttpClientExecutionHelper.SendWithRetryAsync(
+                        logger,
+                        HttpClient,
+                        "radiko auth2 API",
+                        () =>
+                        {
+                            var request = new HttpRequestMessage(HttpMethod.Get, uriBuilder.Uri);
+                            request.Headers.Add("X-Radiko-AuthToken", token);
+                            request.Headers.Add("X-Radiko-Device", "pc");
+                            request.Headers.Add("X-Radiko-PartialKey", partialKey);
+                            request.Headers.Add("x-radiko-user", "dummy_user");
+                            return request;
+                        },
+                        config.ExternalServiceUserAgent);
+                    if (auth2Response.StatusCode == System.Net.HttpStatusCode.Forbidden)
+                    {
+                        _cachedAuthorization = null;
+                        _cachedSession = null;
+                        return (false, string.Empty, string.Empty);
+                    }
+
+                    var body = (await auth2Response.Content.ReadAsStringAsync()).Replace("\r", "").Trim();
+
+                    if (string.IsNullOrWhiteSpace(body) || body == "OUT")
+                    {
+                        _cachedAuthorization = null;
+                        return (false, string.Empty, string.Empty);
+                    }
+
+                    var areaId = body.Split('\n', StringSplitOptions.RemoveEmptyEntries)[0]
+                        .Split(',')[0]
+                        .Trim();
+
+                    if (string.IsNullOrWhiteSpace(areaId))
+                    {
+                        _cachedAuthorization = null;
+                        return (false, string.Empty, string.Empty);
+                    }
+
+                    _cachedAuthorization = new CachedRadikoAuthorization(
+                        _authenticationCacheScopeId,
+                        session,
+                        token!,
+                        areaId,
+                        nowUtc.Add(RadikoAuthorizationCacheTtl));
+
+                    return (true, token!, areaId);
                 }
-
-                var areaId = body.Split('\n', StringSplitOptions.RemoveEmptyEntries)[0]
-                    .Split(',')[0]
-                    .Trim();
-
-                if (string.IsNullOrWhiteSpace(areaId))
+                catch (Exception e)
                 {
-                    return (false, string.Empty, string.Empty);
+                    logger.ZLogError(e, $"radiko認証2でエラー");
+                    throw new DomainException("radiko認証処理に失敗しました。", e);
                 }
-
-                return (true, token!, areaId);
-            }
-            catch (Exception e)
-            {
-                logger.ZLogError(e, $"radiko認証2でエラー");
-                throw new DomainException("radiko認証処理に失敗しました。", e);
+                finally
+                {
+                    AuthenticationCacheLock.Release();
+                }
             }
         }
 

@@ -505,6 +505,74 @@ public class RecordingOrchestratorTests
         Assert.That(result.RecordingId, Is.Not.Null);
     }
 
+    /// <summary>
+    /// 正常系: タイムフリー録音失敗時は認証キャッシュ破棄後に1回だけ再試行する
+    /// </summary>
+    [Test]
+    public async Task RecordAsync_TimeFreeFailThenRetry_再試行で成功する()
+    {
+        var logger = new Mock<ILogger<RecordingOrchestrator>>().Object;
+
+        var metadata = new ProgramRecordingInfo(
+            ProgramId: "P7",
+            Title: "Test",
+            Subtitle: "",
+            StationId: "ST",
+            StationName: "Station",
+            AreaId: "AR",
+            StartTime: DateTimeOffset.UtcNow,
+            EndTime: DateTimeOffset.UtcNow.AddMinutes(30),
+            Performer: "P",
+            Description: "D",
+            ProgramUrl: "");
+
+        var options = new RecordingOptions(
+            ServiceKind: RadioServiceKind.Radiko,
+            IsTimeFree: true,
+            StartDelaySeconds: 0,
+            EndDelaySeconds: 0);
+
+        var sourceResult = new RecordingSourceResult(
+            StreamUrl: "http://example/stream.m3u8",
+            Headers: new Dictionary<string, string>(),
+            ProgramInfo: metadata,
+            Options: options);
+
+        var source = new RetryAwareRecordingSource(RadioServiceKind.Radiko, sourceResult);
+        var storage = new FakeMediaStorageService();
+        var transcoder = new Mock<IMediaTranscodeService>();
+        transcoder.SetupSequence(x => x.RecordAsync(It.IsAny<RecordingSourceResult>(), It.IsAny<MediaPath>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false)
+            .ReturnsAsync(true);
+
+        var repo = new InMemoryRecordingRepository();
+        var publisher = new Mock<IRecordingStateEventPublisher>().Object;
+
+        var orchestrator = new RecordingOrchestrator(
+            logger,
+            new IRecordingSource[] { source },
+            storage,
+            transcoder.Object,
+            repo,
+            publisher);
+
+        var command = new RecordingCommand(
+            ServiceKind: RadioServiceKind.Radiko,
+            ProgramId: "P7",
+            ProgramName: "Test",
+            IsTimeFree: true,
+            StartDelaySeconds: 0,
+            EndDelaySeconds: 0);
+
+        var result = await orchestrator.RecordAsync(command);
+
+        Assert.That(result.IsSuccess, Is.True);
+        Assert.That(source.PrepareCallCount, Is.EqualTo(2));
+        Assert.That(source.RetryPreparationCount, Is.EqualTo(1));
+        Assert.That(storage.IsCleanupCalled, Is.True);
+        transcoder.Verify(x => x.RecordAsync(It.IsAny<RecordingSourceResult>(), It.IsAny<MediaPath>(), It.IsAny<CancellationToken>()), Times.Exactly(2));
+    }
+
     private sealed class ThrowingMediaStorageService : IMediaStorageService
     {
         public bool IsCleanupCalled { get; private set; }
@@ -544,5 +612,26 @@ public class RecordingOrchestratorTests
 
         public ValueTask CleanupTempAsync(MediaPath path, CancellationToken cancellationToken = default)
             => ValueTask.CompletedTask;
+    }
+
+    private sealed class RetryAwareRecordingSource(RadioServiceKind kind, RecordingSourceResult result)
+        : IRecordingSource, IRecordingSourceRetryHandler
+    {
+        public int PrepareCallCount { get; private set; }
+        public int RetryPreparationCount { get; private set; }
+
+        public bool CanHandle(RadioServiceKind serviceKind) => serviceKind == kind;
+
+        public ValueTask<RecordingSourceResult> PrepareAsync(RecordingCommand command, CancellationToken cancellationToken = default)
+        {
+            PrepareCallCount++;
+            return ValueTask.FromResult(result);
+        }
+
+        public ValueTask PrepareForRetryAsync(RecordingCommand command, CancellationToken cancellationToken = default)
+        {
+            RetryPreparationCount++;
+            return ValueTask.CompletedTask;
+        }
     }
 }

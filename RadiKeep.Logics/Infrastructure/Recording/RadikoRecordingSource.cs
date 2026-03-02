@@ -20,7 +20,7 @@ public class RadikoRecordingSource(
     StationLobLogic stationLobLogic,
     RadikoUniqueProcessLogic radikoUniqueProcessLogic,
     IRadikoApiClient radikoApiClient,
-    RadioDbContext dbContext) : IRecordingSource
+    RadioDbContext dbContext) : IRecordingSource, IRecordingSourceRetryHandler
 {
     /// <summary>
     /// radikoを処理可能か判定する
@@ -118,5 +118,20 @@ public class RadikoRecordingSource(
             Headers: headers,
             ProgramInfo: programInfo,
             Options: options);
+    }
+
+    /// <summary>
+    /// タイムフリー録音の再試行前に認証キャッシュを破棄する。
+    /// </summary>
+    public ValueTask PrepareForRetryAsync(RecordingCommand command, CancellationToken cancellationToken = default)
+    {
+        if (!command.IsTimeFree)
+        {
+            return ValueTask.CompletedTask;
+        }
+
+        logger.ZLogWarning($"タイムフリー録音の再試行前に radiko 認証キャッシュを破棄します。 programId={command.ProgramId}");
+        radikoUniqueProcessLogic.InvalidateAuthenticationCache();
+        return ValueTask.CompletedTask;
     }
 }
