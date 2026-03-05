@@ -13,6 +13,7 @@ using RadiKeep.Logics.Models;
 using RadiKeep.Logics.Models.Enums;
 using RadiKeep.Logics.Models.NhkRadiru;
 using RadiKeep.Logics.Primitives.DataAnnotations;
+using RadiKeep.Logics.RdbContext;
 using RadiKeep.Logics.Services;
 using ZLogger;
 
@@ -287,7 +288,8 @@ public static class ProgramEndpoints
         IEntryMapper entryMapper,
         ProgramSearchEntity entity)
     {
-        var result = new List<ProgramForApiEntry>();
+        var radikoResults = new List<RadikoProgram>();
+        var radiruResults = new List<NhkRadiruProgram>();
 
         if (entity.SelectedRadikoStationIds.Any())
         {
@@ -302,29 +304,74 @@ public static class ProgramEndpoints
 
             if (entity.SelectedRadikoStationIds.Any())
             {
-                var list = await programScheduleLobLogic.SearchRadikoProgramAsync(entity);
-                result.AddRange(list.Select(entryMapper.ToRadikoProgramForApiEntry));
+                radikoResults = await programScheduleLobLogic.SearchRadikoProgramAsync(entity);
             }
         }
 
         if (entity.SelectedRadiruStationIds.Any())
         {
-            var list = await programScheduleLobLogic.SearchRadiruProgramAsync(entity);
-            result.AddRange(list.Select(entryMapper.ToRadiruProgramForApiEntry));
+            radiruResults = await programScheduleLobLogic.SearchRadiruProgramAsync(entity);
         }
 
-        result = entity.OrderKind switch
+        var sortedRadiko = SortSearchResults(
+            radikoResults,
+            entity.OrderKind,
+            x => x.StartTime,
+            x => x.EndTime,
+            x => x.Title);
+        var sortedRadiru = SortSearchResults(
+            radiruResults,
+            entity.OrderKind,
+            x => x.StartTime,
+            x => x.EndTime,
+            x => x.Title);
+
+        var result = entity.OrderKind switch
         {
-            KeywordReserveOrderKind.ProgramStartDateTimeAsc => result.OrderBy(x => x.StartTime).ToList(),
-            KeywordReserveOrderKind.ProgramStartDateTimeDesc => result.OrderByDescending(x => x.StartTime).ToList(),
-            KeywordReserveOrderKind.ProgramEndDateTimeAsc => result.OrderBy(x => x.EndTime).ToList(),
-            KeywordReserveOrderKind.ProgramEndDateTimeDesc => result.OrderByDescending(x => x.EndTime).ToList(),
-            KeywordReserveOrderKind.ProgramNameAsc => result.OrderBy(x => x.Title).ToList(),
-            KeywordReserveOrderKind.ProgramNameDesc => result.OrderByDescending(x => x.Title).ToList(),
-            _ => result
+            KeywordReserveOrderKind.ProgramStartDateTimeAsc => MergeSortedSearchResults(
+                sortedRadiko,
+                sortedRadiru,
+                (left, right) => left.StartTime.CompareTo(right.StartTime),
+                left => entryMapper.ToRadikoProgramForApiEntry(left),
+                right => entryMapper.ToRadiruProgramForApiEntry(right)),
+            KeywordReserveOrderKind.ProgramStartDateTimeDesc => MergeSortedSearchResults(
+                sortedRadiko,
+                sortedRadiru,
+                (left, right) => right.StartTime.CompareTo(left.StartTime),
+                left => entryMapper.ToRadikoProgramForApiEntry(left),
+                right => entryMapper.ToRadiruProgramForApiEntry(right)),
+            KeywordReserveOrderKind.ProgramEndDateTimeAsc => MergeSortedSearchResults(
+                sortedRadiko,
+                sortedRadiru,
+                (left, right) => left.EndTime.CompareTo(right.EndTime),
+                left => entryMapper.ToRadikoProgramForApiEntry(left),
+                right => entryMapper.ToRadiruProgramForApiEntry(right)),
+            KeywordReserveOrderKind.ProgramEndDateTimeDesc => MergeSortedSearchResults(
+                sortedRadiko,
+                sortedRadiru,
+                (left, right) => right.EndTime.CompareTo(left.EndTime),
+                left => entryMapper.ToRadikoProgramForApiEntry(left),
+                right => entryMapper.ToRadiruProgramForApiEntry(right)),
+            KeywordReserveOrderKind.ProgramNameAsc => MergeSortedSearchResults(
+                sortedRadiko,
+                sortedRadiru,
+                (left, right) => StringComparer.Ordinal.Compare(left.Title, right.Title),
+                left => entryMapper.ToRadikoProgramForApiEntry(left),
+                right => entryMapper.ToRadiruProgramForApiEntry(right)),
+            KeywordReserveOrderKind.ProgramNameDesc => MergeSortedSearchResults(
+                sortedRadiko,
+                sortedRadiru,
+                (left, right) => StringComparer.Ordinal.Compare(right.Title, left.Title),
+                left => entryMapper.ToRadikoProgramForApiEntry(left),
+                right => entryMapper.ToRadiruProgramForApiEntry(right)),
+            _ => TakeConcatenatedSearchResults(
+                radikoResults,
+                radiruResults,
+                left => entryMapper.ToRadikoProgramForApiEntry(left),
+                right => entryMapper.ToRadiruProgramForApiEntry(right))
         };
 
-        return TypedResults.Ok(ApiResponse.Ok(result.Take(100)));
+        return TypedResults.Ok(ApiResponse.Ok<IEnumerable<ProgramForApiEntry>>(result));
     }
 
     /// <summary>
@@ -478,6 +525,96 @@ public static class ProgramEndpoints
     /// エリア一覧表示用の内部モデル。
     /// </summary>
     private sealed record ProgramAreaEntry(string AreaId, string AreaName, int AreaOrder, int ServiceOrder);
+
+    private static List<T> SortSearchResults<T>(
+        IEnumerable<T> source,
+        KeywordReserveOrderKind orderKind,
+        Func<T, DateTimeOffset> startSelector,
+        Func<T, DateTimeOffset> endSelector,
+        Func<T, string?> titleSelector)
+    {
+        return orderKind switch
+        {
+            KeywordReserveOrderKind.ProgramStartDateTimeAsc => source.OrderBy(startSelector).ToList(),
+            KeywordReserveOrderKind.ProgramStartDateTimeDesc => source.OrderByDescending(startSelector).ToList(),
+            KeywordReserveOrderKind.ProgramEndDateTimeAsc => source.OrderBy(endSelector).ToList(),
+            KeywordReserveOrderKind.ProgramEndDateTimeDesc => source.OrderByDescending(endSelector).ToList(),
+            KeywordReserveOrderKind.ProgramNameAsc => source.OrderBy(x => titleSelector(x) ?? string.Empty, StringComparer.Ordinal).ToList(),
+            KeywordReserveOrderKind.ProgramNameDesc => source.OrderByDescending(x => titleSelector(x) ?? string.Empty, StringComparer.Ordinal).ToList(),
+            _ => source.OrderBy(startSelector).ToList()
+        };
+    }
+
+    private static List<ProgramForApiEntry> MergeSortedSearchResults<TLeft, TRight>(
+        IReadOnlyList<TLeft> left,
+        IReadOnlyList<TRight> right,
+        Func<TLeft, TRight, int> compare,
+        Func<TLeft, ProgramForApiEntry> leftMapper,
+        Func<TRight, ProgramForApiEntry> rightMapper,
+        int take = 100)
+    {
+        var result = new List<ProgramForApiEntry>(Math.Min(take, left.Count + right.Count));
+        var leftIndex = 0;
+        var rightIndex = 0;
+
+        while (result.Count < take && (leftIndex < left.Count || rightIndex < right.Count))
+        {
+            if (leftIndex >= left.Count)
+            {
+                result.Add(rightMapper(right[rightIndex++]));
+                continue;
+            }
+
+            if (rightIndex >= right.Count)
+            {
+                result.Add(leftMapper(left[leftIndex++]));
+                continue;
+            }
+
+            if (compare(left[leftIndex], right[rightIndex]) <= 0)
+            {
+                result.Add(leftMapper(left[leftIndex++]));
+            }
+            else
+            {
+                result.Add(rightMapper(right[rightIndex++]));
+            }
+        }
+
+        return result;
+    }
+
+    private static List<ProgramForApiEntry> TakeConcatenatedSearchResults<TLeft, TRight>(
+        IReadOnlyList<TLeft> left,
+        IReadOnlyList<TRight> right,
+        Func<TLeft, ProgramForApiEntry> leftMapper,
+        Func<TRight, ProgramForApiEntry> rightMapper,
+        int take = 100)
+    {
+        var result = new List<ProgramForApiEntry>(Math.Min(take, left.Count + right.Count));
+
+        foreach (var item in left)
+        {
+            if (result.Count >= take)
+            {
+                return result;
+            }
+
+            result.Add(leftMapper(item));
+        }
+
+        foreach (var item in right)
+        {
+            if (result.Count >= take)
+            {
+                return result;
+            }
+
+            result.Add(rightMapper(item));
+        }
+
+        return result;
+    }
 
     /// <summary>
     /// 現在放送中番組一覧レスポンス。

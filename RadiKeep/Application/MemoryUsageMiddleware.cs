@@ -7,19 +7,36 @@ namespace RadiKeep.Application
     {
         public async Task InvokeAsync(HttpContext context)
         {
-            // 現在のメモリー使用量を取得
             var process = Process.GetCurrentProcess();
             var memoryUsageBefore = process.WorkingSet64;
+            var privateMemoryBefore = process.PrivateMemorySize64;
+            var managedMemoryBefore = GC.GetTotalMemory(false);
+            var totalAllocatedBefore = GC.GetTotalAllocatedBytes(false);
+            var gcMemoryInfoBefore = GC.GetGCMemoryInfo();
 
-            // 次のミドルウェアまたはコントローラアクションを呼び出す
             await next(context);
 
-            // 現在のメモリー使用量を取得
             var memoryUsageAfter = process.WorkingSet64;
+            var privateMemoryAfter = process.PrivateMemorySize64;
+            var managedMemoryAfter = GC.GetTotalMemory(false);
+            var totalAllocatedAfter = GC.GetTotalAllocatedBytes(false);
+            var gcMemoryInfoAfter = GC.GetGCMemoryInfo();
 
-            // メモリー使用量をコンソールに出力
             logger.ZLogDebug($"Memory Usage Before: {memoryUsageBefore / 1024 / 1024} MB");
             logger.ZLogDebug($"Memory Usage After: {memoryUsageAfter / 1024 / 1024} MB");
+            logger.ZLogDebug($"Private Memory Before: {privateMemoryBefore / 1024 / 1024} MB");
+            logger.ZLogDebug($"Private Memory After: {privateMemoryAfter / 1024 / 1024} MB");
+            logger.ZLogDebug($"Managed Memory Before: {managedMemoryBefore / 1024 / 1024} MB");
+            logger.ZLogDebug($"Managed Memory After: {managedMemoryAfter / 1024 / 1024} MB");
+            logger.ZLogDebug($"Managed Allocated Before: {totalAllocatedBefore / 1024 / 1024} MB");
+            logger.ZLogDebug($"Managed Allocated After: {totalAllocatedAfter / 1024 / 1024} MB");
+            logger.ZLogDebug($"Managed Allocated Delta: {(totalAllocatedAfter - totalAllocatedBefore) / 1024 / 1024} MB");
+            logger.ZLogDebug($"GC Heap Size Before: {gcMemoryInfoBefore.HeapSizeBytes / 1024 / 1024} MB");
+            logger.ZLogDebug($"GC Heap Size After: {gcMemoryInfoAfter.HeapSizeBytes / 1024 / 1024} MB");
+            logger.ZLogDebug($"GC Total Committed Before: {gcMemoryInfoBefore.TotalCommittedBytes / 1024 / 1024} MB");
+            logger.ZLogDebug($"GC Total Committed After: {gcMemoryInfoAfter.TotalCommittedBytes / 1024 / 1024} MB");
+            logger.ZLogDebug($"GC Fragmented Before: {gcMemoryInfoBefore.FragmentedBytes / 1024 / 1024} MB");
+            logger.ZLogDebug($"GC Fragmented After: {gcMemoryInfoAfter.FragmentedBytes / 1024 / 1024} MB");
         }
     }
 

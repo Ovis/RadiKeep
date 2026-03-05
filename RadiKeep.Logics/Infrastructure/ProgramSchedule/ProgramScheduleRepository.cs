@@ -96,39 +96,61 @@ public class ProgramScheduleRepository(RadioDbContext dbContext) : IProgramSched
     /// </summary>
     public async ValueTask AddRadikoProgramsIfMissingAsync(IEnumerable<RadikoProgram> programs, CancellationToken cancellationToken = default)
     {
+        var programList = programs
+            .GroupBy(x => x.ProgramId)
+            .Select(g => g.Last())
+            .ToList();
+        if (programList.Count == 0)
+        {
+            return;
+        }
+
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
 
         try
         {
-            foreach (var program in programs)
-            {
-                var existingProgram = await dbContext.RadikoPrograms.FindAsync([program.ProgramId], cancellationToken);
+            var programIds = programList
+                .Select(x => x.ProgramId)
+                .Distinct()
+                .ToList();
+            var trackedProgramsById = dbContext.RadikoPrograms.Local
+                .ToDictionary(x => x.ProgramId, StringComparer.Ordinal);
 
-                if (existingProgram == null)
+            var existingProgramIds = await dbContext.RadikoPrograms
+                .AsNoTracking()
+                .Where(r => programIds.Contains(r.ProgramId))
+                .Select(r => r.ProgramId)
+                .ToHashSetAsync(cancellationToken);
+
+            foreach (var program in programList)
+            {
+                if (existingProgramIds.Contains(program.ProgramId))
                 {
-                    await dbContext.RadikoPrograms.AddAsync(program, cancellationToken);
+                    if (trackedProgramsById.TryGetValue(program.ProgramId, out var trackedProgram))
+                    {
+                        dbContext.Entry(trackedProgram).CurrentValues.SetValues(program);
+                    }
+                    else
+                    {
+                        dbContext.RadikoPrograms.Attach(program);
+                        dbContext.Entry(program).State = EntityState.Modified;
+                        trackedProgramsById[program.ProgramId] = program;
+                    }
                 }
                 else
                 {
-                    // 番組表の再取得時に画像URLなどが更新される可能性があるため、上書きする。
-                    existingProgram.StartTime = program.StartTime;
-                    existingProgram.EndTime = program.EndTime;
-                    existingProgram.Title = program.Title;
-                    existingProgram.Performer = program.Performer;
-                    existingProgram.Description = program.Description;
-                    existingProgram.RadioDate = program.RadioDate;
-                    existingProgram.DaysOfWeek = program.DaysOfWeek;
-                    existingProgram.AvailabilityTimeFree = program.AvailabilityTimeFree;
-                    existingProgram.ProgramUrl = program.ProgramUrl;
-                    existingProgram.ImageUrl = program.ImageUrl;
+                    await dbContext.RadikoPrograms.AddAsync(program, cancellationToken);
+                    trackedProgramsById[program.ProgramId] = program;
                 }
             }
 
             await dbContext.SaveChangesAsync(cancellationToken);
+            DetachTrackedEntities<RadikoProgram>();
             await transaction.CommitAsync(cancellationToken);
         }
         catch
         {
+            DetachTrackedEntities<RadikoProgram>();
             await transaction.RollbackAsync(cancellationToken);
             throw;
         }
@@ -186,7 +208,9 @@ public class ProgramScheduleRepository(RadioDbContext dbContext) : IProgramSched
         DateTimeOffset standardDateTimeOffset,
         CancellationToken cancellationToken = default)
     {
-        var query = dbContext.RadikoPrograms.AsQueryable();
+        var query = dbContext.RadikoPrograms
+            .AsNoTracking()
+            .AsQueryable();
 
         if (searchEntity.SelectedRadikoStationIds.Count != 0)
         {
@@ -319,33 +343,75 @@ public class ProgramScheduleRepository(RadioDbContext dbContext) : IProgramSched
     /// </summary>
     public async ValueTask UpsertRadiruProgramsAsync(IEnumerable<NhkRadiruProgram> programs, CancellationToken cancellationToken = default)
     {
+        var programList = programs
+            .GroupBy(x => CreateRadiruProgramKey(x.AreaId, x.StationId, x.ProgramId))
+            .Select(g => g.Last())
+            .ToList();
+        if (programList.Count == 0)
+        {
+            return;
+        }
+
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
 
         try
         {
-            foreach (var program in programs)
-            {
-                var existingProgram = await dbContext.NhkRadiruPrograms
-                    .Where(r => r.AreaId == program.AreaId)
-                    .Where(r => r.StationId == program.StationId)
-                    .Where(r => r.ProgramId == program.ProgramId)
-                    .SingleOrDefaultAsync(cancellationToken);
+            var existingPrograms = new HashSet<string>(StringComparer.Ordinal);
+            var trackedProgramsByKey = dbContext.NhkRadiruPrograms.Local
+                .ToDictionary(
+                    x => CreateRadiruProgramKey(x.AreaId, x.StationId, x.ProgramId),
+                    StringComparer.Ordinal);
 
-                if (existingProgram == null)
+            foreach (var group in programList.GroupBy(x => new { x.AreaId, x.StationId }))
+            {
+                var areaId = group.Key.AreaId;
+                var stationId = group.Key.StationId;
+                var programIds = group.Select(x => x.ProgramId).Distinct().ToList();
+
+                var matchedProgramIds = await dbContext.NhkRadiruPrograms
+                    .AsNoTracking()
+                    .Where(r => r.AreaId == areaId)
+                    .Where(r => r.StationId == stationId)
+                    .Where(r => programIds.Contains(r.ProgramId))
+                    .Select(r => r.ProgramId)
+                    .ToListAsync(cancellationToken);
+
+                foreach (var matchedProgramId in matchedProgramIds)
                 {
-                    await dbContext.NhkRadiruPrograms.AddAsync(program, cancellationToken);
-                }
-                else
-                {
-                    dbContext.Entry(existingProgram).CurrentValues.SetValues(program);
+                    existingPrograms.Add(CreateRadiruProgramKey(areaId, stationId, matchedProgramId));
                 }
             }
 
+            foreach (var program in programList)
+            {
+                var programKey = CreateRadiruProgramKey(program.AreaId, program.StationId, program.ProgramId);
+
+                if (existingPrograms.Contains(programKey))
+                {
+                    if (trackedProgramsByKey.TryGetValue(programKey, out var trackedProgram))
+                    {
+                        dbContext.Entry(trackedProgram).CurrentValues.SetValues(program);
+                    }
+                    else
+                    {
+                        dbContext.NhkRadiruPrograms.Attach(program);
+                        dbContext.Entry(program).State = EntityState.Modified;
+                        trackedProgramsByKey[programKey] = program;
+                    }
+                    continue;
+                }
+
+                await dbContext.NhkRadiruPrograms.AddAsync(program, cancellationToken);
+                trackedProgramsByKey[programKey] = program;
+            }
+
             await dbContext.SaveChangesAsync(cancellationToken);
+            DetachTrackedEntities<NhkRadiruProgram>();
             await transaction.CommitAsync(cancellationToken);
         }
         catch
         {
+            DetachTrackedEntities<NhkRadiruProgram>();
             await transaction.RollbackAsync(cancellationToken);
             throw;
         }
@@ -359,7 +425,9 @@ public class ProgramScheduleRepository(RadioDbContext dbContext) : IProgramSched
         DateTimeOffset standardDateTimeOffset,
         CancellationToken cancellationToken = default)
     {
-        var query = dbContext.NhkRadiruPrograms.AsQueryable();
+        var query = dbContext.NhkRadiruPrograms
+            .AsNoTracking()
+            .AsQueryable();
 
         if (searchEntity.SelectedRadiruStationIds.Count != 0)
         {
@@ -597,5 +665,23 @@ public class ProgramScheduleRepository(RadioDbContext dbContext) : IProgramSched
             searchRanges.Any(searchRange =>
                 programRange.Start >= searchRange.Start &&
                 programRange.End <= searchRange.End));
+    }
+
+    private void DetachTrackedEntities<TEntity>()
+        where TEntity : class
+    {
+        var entries = dbContext.ChangeTracker
+            .Entries<TEntity>()
+            .ToList();
+
+        foreach (var entry in entries)
+        {
+            entry.State = EntityState.Detached;
+        }
+    }
+
+    private static string CreateRadiruProgramKey(string areaId, string stationId, string programId)
+    {
+        return $"{areaId}\t{stationId}\t{programId}";
     }
 }
