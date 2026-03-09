@@ -82,6 +82,8 @@ namespace RadiKeep.Logics.Logics.StationLogic
         public async ValueTask<bool> UpdateRadiruStationInformationAsync()
         {
             List<NhkRadiruStation> stationList;
+            List<NhkRadiruArea> areaDefinitions;
+            List<NhkRadiruAreaService> serviceDefinitions;
             try
             {
                 using var client = httpClientFactory.CreateClient(HttpClientNames.Radiru);
@@ -100,26 +102,89 @@ namespace RadiKeep.Logics.Logics.StationLogic
                 await using var responseStream = await response.Content.ReadAsStreamAsync();
                 var doc = await XDocument.LoadAsync(responseStream, LoadOptions.None, CancellationToken.None);
 
-                var programNowOnAirUrlTemplate = doc.Descendants("url_program_noa").First().Value;
-                var programDetailApiUrlTemplate = doc.Descendants("url_program_detail").First().Value;
-                var dailyProgramApiUrlTemplate = doc.Descendants("url_program_day").First().Value;
+                var programNowOnAirUrlTemplate = GetDescendantValue(doc, "url_program_noa");
+                var programDetailApiUrlTemplate = GetDescendantValue(doc, "url_program_detail");
+                var dailyProgramApiUrlTemplate = GetDescendantValue(doc, "url_program_day");
+                var syncedAtUtc = DateTimeOffset.UtcNow;
 
-                stationList = doc.Descendants("stream_url")
-                    .Descendants("data")
-                    .Select(data => new NhkRadiruStation
+                stationList = [];
+                areaDefinitions = [];
+                serviceDefinitions = [];
+
+                foreach (var data in doc.Descendants("stream_url").Descendants("data"))
+                {
+                    var areaId = GetDescendantValue(data, "areakey");
+                    if (string.IsNullOrWhiteSpace(areaId))
                     {
-                        AreaJpName = data.Descendants("areajp").First().Value,
-                        AreaId = data.Descendants("areakey").First().Value,
-                        ApiKey = data.Descendants("apikey").First().Value,
-                        R1Hls = data.Descendants("r1hls").First().Value,
-                        R2Hls = data.Descendants("r2hls").First().Value,
-                        FmHls = data.Descendants("fmhls").First().Value,
-                        ProgramNowOnAirApiUrl = programNowOnAirUrlTemplate.Replace("{area}", data.Descendants("areakey").First().Value).ToHttpsUrl(),
-                        ProgramDetailApiUrlTemplate = programDetailApiUrlTemplate.Replace("{area}", data.Descendants("areakey").First().Value.ToHttpsUrl()),
-                        DailyProgramApiUrlTemplate = dailyProgramApiUrlTemplate.Replace("{area}", data.Descendants("areakey").First().Value.ToHttpsUrl())
+                        logger.ZLogWarning($"らじる★らじる設定XMLで areakey が空のためスキップしました。");
+                        continue;
+                    }
 
-                    })
-                    .ToList();
+                    var areaName = GetDescendantValue(data, "areajp");
+                    var apiKey = GetDescendantValue(data, "apikey");
+                    var areaNoaUrl = programNowOnAirUrlTemplate.Replace("{area}", areaId).ToHttpsUrl();
+                    var areaDetailUrl = programDetailApiUrlTemplate.Replace("{area}", areaId).ToHttpsUrl();
+                    var areaDailyUrl = dailyProgramApiUrlTemplate.Replace("{area}", areaId).ToHttpsUrl();
+
+                    var serviceMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                    foreach (var element in data.Elements())
+                    {
+                        var tagName = element.Name.LocalName;
+                        if (!tagName.EndsWith("hls", StringComparison.OrdinalIgnoreCase))
+                        {
+                            continue;
+                        }
+
+                        var serviceId = ConvertHlsTagNameToServiceId(tagName);
+                        var hlsUrl = (element.Value ?? string.Empty).Trim().ToHttpsUrl();
+                        if (string.IsNullOrWhiteSpace(serviceId) || string.IsNullOrWhiteSpace(hlsUrl))
+                        {
+                            continue;
+                        }
+
+                        serviceMap[serviceId] = hlsUrl;
+
+                        serviceDefinitions.Add(new NhkRadiruAreaService
+                        {
+                            AreaId = areaId,
+                            ServiceId = serviceId,
+                            ServiceName = ResolveRadiruStationName(serviceId),
+                            HlsUrl = hlsUrl,
+                            IsActive = true,
+                            SourceTag = tagName.ToLowerInvariant(),
+                            LastSyncedAtUtc = syncedAtUtc
+                        });
+                    }
+
+                    if (serviceMap.Count == 0)
+                    {
+                        logger.ZLogWarning($"らじる★らじる設定XMLでHLSサービスが取得できませんでした。 areaId={areaId}");
+                    }
+
+                    areaDefinitions.Add(new NhkRadiruArea
+                    {
+                        AreaId = areaId,
+                        AreaJpName = areaName,
+                        ApiKey = apiKey,
+                        ProgramNowOnAirApiUrl = areaNoaUrl,
+                        ProgramDetailApiUrlTemplate = areaDetailUrl,
+                        DailyProgramApiUrlTemplate = areaDailyUrl,
+                        LastSyncedAtUtc = syncedAtUtc
+                    });
+
+                    stationList.Add(new NhkRadiruStation
+                    {
+                        AreaJpName = areaName,
+                        AreaId = areaId,
+                        ApiKey = apiKey,
+                        R1Hls = serviceMap.TryGetValue("r1", out var r1Hls) ? r1Hls : string.Empty,
+                        R2Hls = serviceMap.TryGetValue("r2", out var r2Hls) ? r2Hls : string.Empty,
+                        FmHls = serviceMap.TryGetValue("r3", out var r3Hls) ? r3Hls : string.Empty,
+                        ProgramNowOnAirApiUrl = areaNoaUrl,
+                        ProgramDetailApiUrlTemplate = areaDetailUrl,
+                        DailyProgramApiUrlTemplate = areaDailyUrl
+                    });
+                }
             }
             catch (Exception e)
             {
@@ -130,24 +195,6 @@ namespace RadiKeep.Logics.Logics.StationLogic
 
             try
             {
-                var syncedAtUtc = DateTimeOffset.UtcNow;
-                var areaDefinitions = stationList
-                    .Select(x => new NhkRadiruArea
-                    {
-                        AreaId = x.AreaId,
-                        AreaJpName = x.AreaJpName,
-                        ApiKey = x.ApiKey,
-                        ProgramNowOnAirApiUrl = x.ProgramNowOnAirApiUrl,
-                        ProgramDetailApiUrlTemplate = x.ProgramDetailApiUrlTemplate,
-                        DailyProgramApiUrlTemplate = x.DailyProgramApiUrlTemplate,
-                        LastSyncedAtUtc = syncedAtUtc
-                    })
-                    .ToList();
-
-                var serviceDefinitions = stationList
-                    .SelectMany(x => EnumerateLegacyServices(x, syncedAtUtc))
-                    .ToList();
-
                 await stationRepository.UpsertRadiruAreasAndServicesAsync(areaDefinitions, serviceDefinitions);
                 await stationRepository.UpsertRadiruStationsAsync(stationList);
             }
@@ -213,49 +260,31 @@ namespace RadiKeep.Logics.Logics.StationLogic
             return station?.Name ?? $"不明局({stationId})";
         }
 
-        private static IEnumerable<NhkRadiruAreaService> EnumerateLegacyServices(NhkRadiruStation station, DateTimeOffset syncedAtUtc)
+        private static string GetDescendantValue(XContainer element, string descendantName)
         {
-            if (!string.IsNullOrWhiteSpace(station.R1Hls))
+            return element.Descendants(descendantName).FirstOrDefault()?.Value?.Trim() ?? string.Empty;
+        }
+
+        private static string ConvertHlsTagNameToServiceId(string tagName)
+        {
+            if (string.IsNullOrWhiteSpace(tagName))
             {
-                yield return new NhkRadiruAreaService
-                {
-                    AreaId = station.AreaId,
-                    ServiceId = "r1",
-                    ServiceName = ResolveRadiruStationName("r1"),
-                    HlsUrl = station.R1Hls,
-                    IsActive = true,
-                    SourceTag = "r1hls",
-                    LastSyncedAtUtc = syncedAtUtc
-                };
+                return string.Empty;
             }
 
-            if (!string.IsNullOrWhiteSpace(station.R2Hls))
+            var normalized = tagName.Trim().ToLowerInvariant();
+            if (!normalized.EndsWith("hls", StringComparison.Ordinal) || normalized.Length <= 3)
             {
-                yield return new NhkRadiruAreaService
-                {
-                    AreaId = station.AreaId,
-                    ServiceId = "r2",
-                    ServiceName = ResolveRadiruStationName("r2"),
-                    HlsUrl = station.R2Hls,
-                    IsActive = true,
-                    SourceTag = "r2hls",
-                    LastSyncedAtUtc = syncedAtUtc
-                };
+                return string.Empty;
             }
 
-            if (!string.IsNullOrWhiteSpace(station.FmHls))
+            var baseId = normalized[..^3];
+            if (baseId == "fm")
             {
-                yield return new NhkRadiruAreaService
-                {
-                    AreaId = station.AreaId,
-                    ServiceId = "r3",
-                    ServiceName = ResolveRadiruStationName("r3"),
-                    HlsUrl = station.FmHls,
-                    IsActive = true,
-                    SourceTag = "fmhls",
-                    LastSyncedAtUtc = syncedAtUtc
-                };
+                return "r3";
             }
+
+            return baseId;
         }
 
     }

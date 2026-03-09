@@ -250,6 +250,67 @@ namespace RadiKeep.Logics.Tests.LogicTest
             Assert.That(station.AreaJpName, Is.EqualTo("東京"));
         }
 
+        [Test]
+        public async Task UpdateRadiruStationInformationAsync_未知サービスIDを保持して新テーブルへ保存()
+        {
+            await _dbContext.Database.ExecuteSqlRawAsync("DELETE FROM NhkRadiruAreaServices");
+            await _dbContext.Database.ExecuteSqlRawAsync("DELETE FROM NhkRadiruAreas");
+            await _dbContext.Database.ExecuteSqlRawAsync("DELETE FROM NhkRadiruStations");
+
+            var xml = """
+                      <root>
+                        <url_program_noa>https://example/noa/{area}</url_program_noa>
+                        <url_program_detail>https://example/detail/{area}</url_program_detail>
+                        <url_program_day>https://example/day/{area}</url_program_day>
+                        <stream_url>
+                          <data>
+                            <areajp>東京</areajp>
+                            <areakey>130</areakey>
+                            <apikey>130</apikey>
+                            <r1hls>https://example/r1.m3u8</r1hls>
+                            <amhls>https://example/am.m3u8</amhls>
+                          </data>
+                        </stream_url>
+                      </root>
+                      """;
+
+            var handler = new FakeHttpMessageHandler();
+            handler.AddHandler(
+                _ => true,
+                _ => new HttpResponseMessage(System.Net.HttpStatusCode.OK) { Content = new StringContent(xml) });
+
+            var httpClientFactoryMock = new Mock<IHttpClientFactory>();
+            httpClientFactoryMock
+                .Setup(x => x.CreateClient(It.IsAny<string>()))
+                .Returns(new HttpClient(handler));
+
+            var localStationLogic = new StationLobLogic(
+                _loggerMock.Object,
+                _configServiceMock.Object,
+                _radikoApiClientMock.Object,
+                _stationRepository,
+                _radikoUniqueProcessLogicMock.Object,
+                httpClientFactoryMock.Object,
+                _entryMapper
+            );
+
+            var result = await localStationLogic.UpdateRadiruStationInformationAsync();
+
+            var area = await _dbContext.NhkRadiruAreas.SingleAsync(x => x.AreaId == "130");
+            var services = await _dbContext.NhkRadiruAreaServices
+                .Where(x => x.AreaId == "130")
+                .OrderBy(x => x.ServiceId)
+                .ToListAsync();
+            var legacy = await _dbContext.NhkRadiruStations.SingleAsync(x => x.AreaId == "130");
+
+            Assert.That(result, Is.True);
+            Assert.That(area.AreaJpName, Is.EqualTo("東京"));
+            Assert.That(services.Select(x => x.ServiceId).ToArray(), Is.EqualTo(new[] { "am", "r1" }));
+            Assert.That(legacy.R1Hls, Is.EqualTo("https://example/r1.m3u8"));
+            Assert.That(legacy.R2Hls, Is.Empty);
+            Assert.That(legacy.FmHls, Is.Empty);
+        }
+
         [TearDown]
         public async Task TearDown()
         {
