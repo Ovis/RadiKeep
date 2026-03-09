@@ -238,6 +238,76 @@ public class ProgramScheduleRepositoryTests : UnitTestBase
     }
 
     /// <summary>
+    /// radiko番組検索の日跨ぎ時刻指定を判定できる
+    /// </summary>
+    [Test]
+    public async Task SearchRadikoProgramsAsync_日跨ぎ時刻指定を判定()
+    {
+        var now = new DateTimeOffset(2026, 2, 11, 12, 0, 0, TimeSpan.FromHours(9));
+        await AddRadikoProgramAsync(
+            "P1",
+            "TBS",
+            new DateTimeOffset(2026, 2, 11, 23, 30, 0, TimeSpan.FromHours(9)),
+            new DateTimeOffset(2026, 2, 12, 0, 30, 0, TimeSpan.FromHours(9)),
+            title: "Midnight1");
+        await AddRadikoProgramAsync(
+            "P2",
+            "TBS",
+            new DateTimeOffset(2026, 2, 11, 23, 30, 0, TimeSpan.FromHours(9)),
+            new DateTimeOffset(2026, 2, 12, 0, 0, 0, TimeSpan.FromHours(9)),
+            title: "Midnight2");
+        await AddRadikoProgramAsync(
+            "P3",
+            "TBS",
+            new DateTimeOffset(2026, 2, 11, 22, 30, 0, TimeSpan.FromHours(9)),
+            new DateTimeOffset(2026, 2, 11, 23, 30, 0, TimeSpan.FromHours(9)),
+            title: "OutsideStart");
+        await AddRadikoProgramAsync(
+            "P4",
+            "TBS",
+            new DateTimeOffset(2026, 2, 12, 0, 30, 0, TimeSpan.FromHours(9)),
+            new DateTimeOffset(2026, 2, 12, 1, 30, 0, TimeSpan.FromHours(9)),
+            title: "OutsideEnd");
+
+        var entity = new ProgramSearchEntity
+        {
+            StartTime = new TimeOnly(23, 0),
+            EndTime = new TimeOnly(1, 0),
+            IncludeHistoricalPrograms = true
+        };
+
+        var list = await _repository.SearchRadikoProgramsAsync(entity, now);
+
+        Assert.That(list.Select(x => x.ProgramId), Is.EquivalentTo(new[] { "P1", "P2" }));
+    }
+
+    /// <summary>
+    /// radiko番組検索で全日指定(00:00-23:59)は日跨ぎ番組を含める
+    /// </summary>
+    [Test]
+    public async Task SearchRadikoProgramsAsync_全日指定は日跨ぎ番組を含める()
+    {
+        var now = new DateTimeOffset(2026, 2, 11, 12, 0, 0, TimeSpan.FromHours(9));
+        await AddRadikoProgramAsync(
+            "P1",
+            "TBS",
+            new DateTimeOffset(2026, 2, 10, 23, 30, 0, TimeSpan.FromHours(9)),
+            new DateTimeOffset(2026, 2, 11, 0, 30, 0, TimeSpan.FromHours(9)),
+            title: "Overnight");
+
+        var entity = new ProgramSearchEntity
+        {
+            StartTime = new TimeOnly(0, 0),
+            EndTime = new TimeOnly(23, 59),
+            IncludeHistoricalPrograms = true
+        };
+
+        var list = await _repository.SearchRadikoProgramsAsync(entity, now);
+
+        Assert.That(list.Select(x => x.ProgramId), Is.EquivalentTo(new[] { "P1" }));
+    }
+
+    /// <summary>
     /// 古いradiko番組を削除できる
     /// </summary>
     [Test]
@@ -395,26 +465,68 @@ public class ProgramScheduleRepositoryTests : UnitTestBase
             "r1",
             new DateTimeOffset(2026, 2, 11, 23, 30, 0, TimeSpan.FromHours(9)),
             new DateTimeOffset(2026, 2, 12, 0, 30, 0, TimeSpan.FromHours(9)),
-            title: "Midnight");
+            title: "Midnight1");
         await AddRadiruProgramAsync(
             "R1_2",
             "JP13",
             "r1",
-            new DateTimeOffset(2026, 2, 11, 22, 0, 0, TimeSpan.FromHours(9)),
+            new DateTimeOffset(2026, 2, 11, 23, 30, 0, TimeSpan.FromHours(9)),
+            new DateTimeOffset(2026, 2, 12, 0, 0, 0, TimeSpan.FromHours(9)),
+            title: "Midnight2");
+        await AddRadiruProgramAsync(
+            "R1_3",
+            "JP13",
+            "r1",
             new DateTimeOffset(2026, 2, 11, 22, 30, 0, TimeSpan.FromHours(9)),
-            title: "Late");
+            new DateTimeOffset(2026, 2, 11, 23, 30, 0, TimeSpan.FromHours(9)),
+            title: "OutsideStart");
+        await AddRadiruProgramAsync(
+            "R1_4",
+            "JP13",
+            "r1",
+            new DateTimeOffset(2026, 2, 12, 0, 30, 0, TimeSpan.FromHours(9)),
+            new DateTimeOffset(2026, 2, 12, 1, 30, 0, TimeSpan.FromHours(9)),
+            title: "OutsideEnd");
 
         var entity = new ProgramSearchEntity
         {
             SelectedRadiruStationIds = ["JP13:r1"],
             StartTime = new TimeOnly(23, 0),
             EndTime = new TimeOnly(1, 0),
-            IncludeHistoricalPrograms = false
+            IncludeHistoricalPrograms = true
         };
 
         var list = await _repository.SearchRadiruProgramsAsync(entity, now);
 
-        Assert.That(list.Select(x => x.ProgramId), Is.EqualTo(new[] { "R1_1" }));
+        Assert.That(list.Select(x => x.ProgramId), Is.EquivalentTo(new[] { "R1_1", "R1_2" }));
+    }
+
+    /// <summary>
+    /// らじる★らじる番組検索で全日指定(00:00-23:59)は日跨ぎ番組を含める
+    /// </summary>
+    [Test]
+    public async Task SearchRadiruProgramsAsync_全日指定は日跨ぎ番組を含める()
+    {
+        var now = new DateTimeOffset(2026, 2, 11, 12, 0, 0, TimeSpan.FromHours(9));
+        await AddRadiruProgramAsync(
+            "R1_1",
+            "JP13",
+            "r1",
+            new DateTimeOffset(2026, 2, 10, 23, 30, 0, TimeSpan.FromHours(9)),
+            new DateTimeOffset(2026, 2, 11, 0, 30, 0, TimeSpan.FromHours(9)),
+            title: "Overnight");
+
+        var entity = new ProgramSearchEntity
+        {
+            SelectedRadiruStationIds = ["JP13:r1"],
+            StartTime = new TimeOnly(0, 0),
+            EndTime = new TimeOnly(23, 59),
+            IncludeHistoricalPrograms = true
+        };
+
+        var list = await _repository.SearchRadiruProgramsAsync(entity, now);
+
+        Assert.That(list.Select(x => x.ProgramId), Is.EquivalentTo(new[] { "R1_1" }));
     }
 
     /// <summary>

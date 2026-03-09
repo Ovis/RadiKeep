@@ -635,6 +635,12 @@ public class ProgramScheduleRepository(RadioDbContext dbContext) : IProgramSched
         TimeOnly searchStart,
         TimeOnly searchEnd)
     {
+        // 1日全体を対象にする既定条件では、日跨ぎ番組も含めて常に一致とする。
+        if (searchStart == TimeOnly.MinValue && searchEnd == new TimeOnly(23, 59))
+        {
+            return true;
+        }
+
         var day = TimeSpan.FromDays(1);
         var localStart = TimeZoneInfo.ConvertTime(startUtc, JapanStandardTimeZone).TimeOfDay;
         var localEnd = TimeZoneInfo.ConvertTime(endUtc, JapanStandardTimeZone).TimeOfDay;
