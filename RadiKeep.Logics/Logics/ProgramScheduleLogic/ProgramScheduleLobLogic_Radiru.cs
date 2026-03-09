@@ -110,10 +110,10 @@ namespace RadiKeep.Logics.Logics.ProgramScheduleLogic
 
                 foreach (var programJsonEntity in programList)
                 {
-                    if (!TryCreateRadiruProgramEntry(area, stationKind, programJsonEntity, out var entry, out var missingFields))
+                    if (!TryCreateRadiruProgramEntry(area, stationKind, programJsonEntity, out var entry))
                     {
                         logger.ZLogWarning(
-                            $"らじる★らじる番組を必須項目不足でスキップ areaId={area.GetEnumCodeId()} stationId={stationKind.ServiceId} programId={programJsonEntity.Id} missing=[{string.Join(", ", missingFields)}]");
+                            $"らじる★らじる番組を必須項目不足でスキップ areaId={area.GetEnumCodeId()} stationId={stationKind.ServiceId} programId={programJsonEntity.Id}");
                         continue;
                     }
 
@@ -141,40 +141,39 @@ namespace RadiKeep.Logics.Logics.ProgramScheduleLogic
             RadiruAreaKind area,
             RadiruStationKind stationKind,
             RadiruProgramJsonEntity programJsonEntity,
-            out NhkRadiruProgram entry,
-            out List<string> missingFields)
+            out NhkRadiruProgram entry)
         {
-            missingFields = [];
+            var hasRequiredFieldError = false;
             var title = programJsonEntity.GetTitle();
 
             if (string.IsNullOrWhiteSpace(programJsonEntity.Id))
             {
-                missingFields.Add("id");
+                hasRequiredFieldError = true;
             }
 
             if (programJsonEntity.StartDate == default)
             {
-                missingFields.Add("startDate");
+                hasRequiredFieldError = true;
             }
 
             if (programJsonEntity.EndDate == default)
             {
-                missingFields.Add("endDate");
+                hasRequiredFieldError = true;
             }
 
             if (programJsonEntity.StartDate != default &&
                 programJsonEntity.EndDate != default &&
                 programJsonEntity.EndDate <= programJsonEntity.StartDate)
             {
-                missingFields.Add("timeRange");
+                hasRequiredFieldError = true;
             }
 
             if (string.IsNullOrWhiteSpace(title))
             {
-                missingFields.Add("title");
+                hasRequiredFieldError = true;
             }
 
-            if (missingFields.Count > 0)
+            if (hasRequiredFieldError)
             {
                 entry = new NhkRadiruProgram();
                 return false;

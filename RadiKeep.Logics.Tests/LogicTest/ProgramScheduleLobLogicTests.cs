@@ -164,6 +164,34 @@ public class ProgramScheduleLobLogicTests
     }
 
     [Test]
+    public async Task GetRadiruProgramAsync_未知AreaIdでもフォールバック名で取得できる()
+    {
+        var (logic, repoMock, _) = CreateTarget();
+
+        repoMock.Setup(r => r.GetRadiruProgramByIdAsync("R1_2", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new NhkRadiruProgram
+            {
+                ProgramId = "R1_2",
+                StationId = "r1",
+                AreaId = "999",
+                Title = "NHK",
+                Subtitle = "Test",
+                RadioDate = DateOnly.FromDateTime(DateTime.UtcNow),
+                DaysOfWeek = DaysOfWeek.Monday,
+                StartTime = DateTimeOffset.UtcNow,
+                EndTime = DateTimeOffset.UtcNow.AddMinutes(30),
+                EventId = "EV",
+                SiteId = "site",
+                ProgramUrl = "http://example"
+            });
+
+        var result = await logic.GetRadiruProgramAsync("R1_2");
+
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result!.AreaName, Is.EqualTo("不明エリア(999)"));
+    }
+
+    [Test]
     public async Task SearchRadikoProgramAsync_例外時は空配列()
     {
         var (logic, repoMock, context) = CreateTarget();

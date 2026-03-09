@@ -110,7 +110,7 @@ public class EntryMapper(IAppConfigurationService config) : IEntryMapper
             ProgramId = source.ProgramId,
             ServiceKind = RadioServiceKind.Radiru,
             AreaId = source.AreaId,
-            AreaName = Enum.GetValues<RadiruAreaKind>().Single(r => r.GetEnumCodeId() == source.AreaId).ToString(),
+            AreaName = ResolveRadiruAreaName(source.AreaId),
             StationId = source.StationId,
             StationName = ResolveRadiruStationName(source.StationId),
             Title = source.Title,
@@ -164,7 +164,7 @@ public class EntryMapper(IAppConfigurationService config) : IEntryMapper
             ProgramId = source.ProgramId,
             ServiceKind = RadioServiceKind.Radiru,
             AreaId = source.AreaId,
-            AreaName = Enum.GetValues<RadiruAreaKind>().Single(r => r.GetEnumCodeId() == source.AreaId).ToString(),
+            AreaName = ResolveRadiruAreaName(source.AreaId),
             StationId = source.StationId,
             StationName = ResolveRadiruStationName(source.StationId),
             Title = source.Title,
@@ -277,5 +277,16 @@ public class EntryMapper(IAppConfigurationService config) : IEntryMapper
             .FirstOrDefault(r => r.ServiceId == stationId);
 
         return station?.Name ?? $"不明局({stationId})";
+    }
+
+    private static string ResolveRadiruAreaName(string areaId)
+    {
+        var area = Enum.GetValues<RadiruAreaKind>()
+            .Cast<RadiruAreaKind?>()
+            .FirstOrDefault(r => r!.Value.GetEnumCodeId() == areaId);
+
+        return area.HasValue
+            ? area.Value.ToString()
+            : $"不明エリア({areaId})";
     }
 }
