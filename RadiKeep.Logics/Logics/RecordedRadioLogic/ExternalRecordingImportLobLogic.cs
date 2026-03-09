@@ -81,15 +81,41 @@ public class ExternalRecordingImportLobLogic(
         }
 
         var candidates = new List<ExternalImportCandidateEntry>();
-        foreach (var filePath in Directory.EnumerateFiles(rootPath, "*.*", SearchOption.AllDirectories))
+        var enumerationOptions = new EnumerationOptions
         {
-            var ext = Path.GetExtension(filePath);
-            if (!AllowedExtensions.Contains(ext))
+            RecurseSubdirectories = true,
+            IgnoreInaccessible = true,
+            ReturnSpecialDirectories = false
+        };
+
+        foreach (var filePath in Directory.EnumerateFiles(rootPath, "*.*", enumerationOptions))
+        {
+            string ext;
+            try
             {
+                ext = Path.GetExtension(filePath);
+                if (!AllowedExtensions.Contains(ext))
+                {
+                    continue;
+                }
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                logger.ZLogDebug(ex, $"外部取込スキャン中に拡張子取得に失敗したためスキップ: path={filePath}");
                 continue;
             }
 
-            var relativePath = Path.GetRelativePath(rootPath, filePath);
+            string relativePath;
+            try
+            {
+                relativePath = Path.GetRelativePath(rootPath, filePath);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                logger.ZLogDebug(ex, $"外部取込スキャン中に相対パス計算に失敗したためスキップ: path={filePath}");
+                continue;
+            }
+
             if (!TryResolveManagedFilePath(relativePath, rootPath, out var normalizedPath, out var normalizedRelativePath))
             {
                 continue;
@@ -100,9 +126,21 @@ public class ExternalRecordingImportLobLogic(
                 continue;
             }
 
-            var title = ReadTitleMetadata(filePath);
-            var fileName = Path.GetFileNameWithoutExtension(filePath);
-            var lastWriteAt = File.GetLastWriteTimeUtc(filePath);
+            string title;
+            string fileName;
+            DateTime lastWriteAt;
+            try
+            {
+                title = ReadTitleMetadata(filePath);
+                fileName = Path.GetFileNameWithoutExtension(filePath);
+                lastWriteAt = File.GetLastWriteTimeUtc(filePath);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                logger.ZLogDebug(ex, $"外部取込スキャン中にファイル情報取得に失敗したためスキップ: path={filePath}");
+                continue;
+            }
+
             if (lastWriteAt == DateTime.MinValue)
             {
                 lastWriteAt = DateTime.UtcNow;
