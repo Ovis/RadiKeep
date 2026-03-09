@@ -6,7 +6,6 @@ using RadiKeep.Logics.Interfaces;
 using RadiKeep.Logics.Logics.StationLogic;
 using RadiKeep.Logics.Models.NhkRadiru;
 using RadiKeep.Logics.Models.NhkRadiru.JsonEntity;
-using RadiKeep.Logics.Primitives.DataAnnotations;
 using RadiKeep.Logics.Services;
 using ZLogger;
 
@@ -29,27 +28,6 @@ public class RadiruApiClient(
     /// </summary>
     public ValueTask<List<(string AreaId, string ServiceId)>> GetAvailableAreaServicesAsync(CancellationToken cancellationToken = default)
         => stationLobLogic.GetActiveRadiruAreaServiceKeysAsync(cancellationToken);
-
-    /// <summary>
-    ///  指定されたエリア、放送局、日付の番組表を取得する
-    /// </summary>
-    /// <param name="area"></param>
-    /// <param name="stationKind"></param>
-    /// <param name="date"></param>
-    /// <param name="cancellationToken">キャンセル用トークン</param>
-    /// <returns></returns>
-    public async Task<List<RadiruProgramJsonEntity>> GetDailyProgramsAsync(
-        RadiruAreaKind area,
-        RadiruStationKind stationKind,
-        DateTimeOffset date,
-        CancellationToken cancellationToken = default)
-    {
-        return await GetDailyProgramsAsync(
-            area.GetEnumCodeId(),
-            stationKind.ServiceId,
-            date,
-            cancellationToken);
-    }
 
     /// <summary>
     ///  指定されたエリアID、サービスID、日付の番組表を取得する

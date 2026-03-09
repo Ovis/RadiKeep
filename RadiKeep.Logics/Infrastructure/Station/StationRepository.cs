@@ -81,71 +81,14 @@ public class StationRepository(RadioDbContext dbContext) : IStationRepository
 
         try
         {
-            var hasStationData = await dbContext.NhkRadiruStations
+            var hasStationData = await dbContext.NhkRadiruAreaServices
+                .AsNoTracking()
+                .Where(x => x.IsActive)
                 .AnyAsync(cancellationToken);
 
             await transaction.CommitAsync(cancellationToken);
 
             return hasStationData;
-        }
-        catch
-        {
-            await transaction.RollbackAsync(cancellationToken);
-            throw;
-        }
-    }
-
-    /// <summary>
-    /// らじる★らじる放送局を追加または更新する
-    /// </summary>
-    public async ValueTask UpsertRadiruStationsAsync(IEnumerable<NhkRadiruStation> stations, CancellationToken cancellationToken = default)
-    {
-        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
-
-        try
-        {
-            foreach (var station in stations)
-            {
-                var stationEntry =
-                    await dbContext.NhkRadiruStations
-                        .Where(r => r.AreaId == station.AreaId)
-                        .SingleOrDefaultAsync(cancellationToken);
-
-                if (stationEntry == null)
-                {
-                    await dbContext.NhkRadiruStations.AddAsync(station, cancellationToken);
-                }
-                else
-                {
-                    dbContext.Entry(stationEntry).CurrentValues.SetValues(station);
-                }
-            }
-
-            await dbContext.SaveChangesAsync(cancellationToken);
-            await transaction.CommitAsync(cancellationToken);
-        }
-        catch
-        {
-            await transaction.RollbackAsync(cancellationToken);
-            throw;
-        }
-    }
-
-    /// <summary>
-    /// 指定エリアのらじる★らじる放送局情報を取得する
-    /// </summary>
-    public async ValueTask<NhkRadiruStation> GetRadiruStationByAreaAsync(string areaId, CancellationToken cancellationToken = default)
-    {
-        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
-
-        try
-        {
-            var station = await dbContext.NhkRadiruStations
-                .Where(r => r.AreaId == areaId)
-                .SingleAsync(cancellationToken);
-
-            await transaction.CommitAsync(cancellationToken);
-            return station;
         }
         catch
         {
@@ -179,23 +122,8 @@ public class StationRepository(RadioDbContext dbContext) : IStationRepository
                 .Select(s => s.HlsUrl)
                 .FirstOrDefaultAsync(cancellationToken);
 
-            if (!string.IsNullOrWhiteSpace(serviceUrl))
-            {
-                await transaction.CommitAsync(cancellationToken);
-                return serviceUrl;
-            }
-
-            var legacyStation = await dbContext.NhkRadiruStations
-                .AsNoTracking()
-                .Where(r => r.AreaId == areaId)
-                .SingleOrDefaultAsync(cancellationToken);
-
-            var legacyUrl = legacyStation is null
-                ? null
-                : ResolveLegacyRadiruHlsUrl(legacyStation, normalizedServiceId);
-
             await transaction.CommitAsync(cancellationToken);
-            return string.IsNullOrWhiteSpace(legacyUrl) ? null : legacyUrl;
+            return string.IsNullOrWhiteSpace(serviceUrl) ? null : serviceUrl;
         }
         catch
         {
@@ -204,19 +132,8 @@ public class StationRepository(RadioDbContext dbContext) : IStationRepository
         }
     }
 
-    private static string? ResolveLegacyRadiruHlsUrl(NhkRadiruStation station, string normalizedServiceId)
-    {
-        return normalizedServiceId switch
-        {
-            "r1" => station.R1Hls,
-            "r2" => station.R2Hls,
-            "r3" => station.FmHls,
-            _ => null
-        };
-    }
-
     /// <summary>
-    /// 新テーブルかららじる★らじる局一覧を取得する
+    /// らじる★らじる局一覧を取得する
     /// </summary>
     public async ValueTask<List<RadiruStationEntry>> GetRadiruStationsFromAreaServicesAsync(CancellationToken cancellationToken = default)
     {
@@ -346,7 +263,7 @@ public class StationRepository(RadioDbContext dbContext) : IStationRepository
     }
 
     /// <summary>
-    /// 指定エリアIDの新テーブル定義を取得する
+    /// 指定エリアIDの定義を取得する
     /// </summary>
     public async ValueTask<NhkRadiruArea?> GetRadiruAreaByAreaIdAsync(string areaId, CancellationToken cancellationToken = default)
     {

@@ -16,7 +16,6 @@ public class RadioDbContext : DbContext
     public virtual DbSet<Notification> Notification { get; set; }
     public virtual DbSet<RadikoStation> RadikoStations { get; set; }
     public virtual DbSet<RadikoProgram> RadikoPrograms { get; set; }
-    public virtual DbSet<NhkRadiruStation> NhkRadiruStations { get; set; }
     public virtual DbSet<NhkRadiruArea> NhkRadiruAreas { get; set; }
     public virtual DbSet<NhkRadiruAreaService> NhkRadiruAreaServices { get; set; }
     public virtual DbSet<NhkRadiruProgram> NhkRadiruPrograms { get; set; }
@@ -199,42 +198,6 @@ public class RadioDbContext : DbContext
 
             entity.Property(e => e.ImageUrl)
                 .HasColumnOrder(12);
-        });
-
-        modelBuilder.Entity<NhkRadiruStation>(entity =>
-        {
-            entity.HasIndex(b => new { Id = b.AreaId, b.ApiKey })
-                .IsUnique();
-
-            entity.Property(e => e.Id)
-                .HasColumnOrder(1);
-
-            entity.Property(e => e.AreaId)
-                .HasColumnOrder(2);
-
-            entity.Property(e => e.AreaJpName)
-                .HasColumnOrder(3);
-
-            entity.Property(e => e.ApiKey)
-                .HasColumnOrder(4);
-
-            entity.Property(e => e.R1Hls)
-                .HasColumnOrder(5);
-
-            entity.Property(e => e.R2Hls)
-                .HasColumnOrder(6);
-
-            entity.Property(e => e.FmHls)
-                .HasColumnOrder(7);
-
-            entity.Property(e => e.ProgramNowOnAirApiUrl)
-                .HasColumnOrder(8);
-
-            entity.Property(e => e.ProgramDetailApiUrlTemplate)
-                .HasColumnOrder(9);
-
-            entity.Property(e => e.DailyProgramApiUrlTemplate)
-                .HasColumnOrder(10);
         });
 
         modelBuilder.Entity<NhkRadiruArea>(entity =>

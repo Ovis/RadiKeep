@@ -261,7 +261,7 @@ public class PlayProgramLobLogicTests
     }
 
     [Test]
-    public async Task PlayRadiruProgramAsync_新テーブルのURLで再生できる()
+    public async Task PlayRadiruProgramAsync_エリアサービス定義のURLで再生できる()
     {
         _dbContext.NhkRadiruPrograms.Add(new NhkRadiruProgram
         {
@@ -312,7 +312,7 @@ public class PlayProgramLobLogicTests
     }
 
     [Test]
-    public async Task PlayRadiruProgramAsync_新テーブル未登録時は旧テーブルにフォールバック()
+    public async Task PlayRadiruProgramAsync_エリアサービス未登録時は失敗()
     {
         _dbContext.NhkRadiruPrograms.Add(new NhkRadiruProgram
         {
@@ -328,13 +328,6 @@ public class PlayProgramLobLogicTests
             EventId = "ev",
             SiteId = "site"
         });
-        _dbContext.NhkRadiruStations.Add(new NhkRadiruStation
-        {
-            AreaId = "JP13",
-            ApiKey = "JP13",
-            AreaJpName = "東京",
-            R1Hls = "https://legacy.example/r1.m3u8"
-        });
         await _dbContext.SaveChangesAsync();
 
         var logic = CreateTarget(
@@ -346,10 +339,10 @@ public class PlayProgramLobLogicTests
 
         var (isSuccess, token, url, error) = await logic.PlayRadiruProgramAsync("R1_2");
 
-        Assert.That(isSuccess, Is.True);
-        Assert.That(error, Is.Null);
+        Assert.That(isSuccess, Is.False);
+        Assert.That(error, Is.TypeOf<DomainException>());
         Assert.That(token, Is.Null);
-        Assert.That(url, Is.EqualTo("https://legacy.example/r1.m3u8"));
+        Assert.That(url, Is.Null);
     }
 }
 

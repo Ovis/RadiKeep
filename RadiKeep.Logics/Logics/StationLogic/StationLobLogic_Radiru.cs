@@ -25,7 +25,7 @@ namespace RadiKeep.Logics.Logics.StationLogic
             }
             catch (Exception e)
             {
-                logger.ZLogError(e, $"Failed to check if NhkRadiruStation is initialized.");
+                logger.ZLogError(e, $"Failed to check if radiru station definitions are initialized.");
                 throw;
             }
         }
@@ -36,42 +36,20 @@ namespace RadiKeep.Logics.Logics.StationLogic
         /// <returns></returns>
         public async ValueTask<IEnumerable<RadiruStationEntry>> GetRadiruStationAsync(CancellationToken cancellationToken = default)
         {
-            try
-            {
-                var stationEntries = await stationRepository.GetRadiruStationsFromAreaServicesAsync(cancellationToken);
-                if (stationEntries.Count > 0)
+            var stationEntries = await stationRepository.GetRadiruStationsFromAreaServicesAsync(cancellationToken);
+            return stationEntries
+                .Select(entry => new RadiruStationEntry
                 {
-                    return stationEntries
-                        .Select(entry => new RadiruStationEntry
-                        {
-                            AreaId = entry.AreaId,
-                            AreaName = entry.AreaName,
-                            StationId = entry.StationId,
-                            StationName = string.IsNullOrWhiteSpace(entry.StationName)
-                                ? ResolveRadiruStationName(entry.StationId)
-                                : entry.StationName
-                        })
-                        .GroupBy(x => $"{x.AreaId}:{x.StationId}", StringComparer.OrdinalIgnoreCase)
-                        .Select(x => x.First())
-                        .ToList();
-                }
-            }
-            catch (Exception e)
-            {
-                logger.ZLogError(e, $"らじる★らじる局一覧の新テーブル読込に失敗したため固定定義にフォールバックします。");
-            }
-
-            var list = new List<RadiruStationEntry>();
-            {
-                foreach (var areaKind in Enum.GetValues<RadiruAreaKind>())
-                {
-                    list.AddRange(Enumeration.GetAll<RadiruStationKind>()
-                        .Select(
-                            radiruStationKind => entryMapper.ToRadiruStationEntry(areaKind, radiruStationKind)));
-                }
-            }
-
-            return list;
+                    AreaId = entry.AreaId,
+                    AreaName = entry.AreaName,
+                    StationId = entry.StationId,
+                    StationName = string.IsNullOrWhiteSpace(entry.StationName)
+                        ? ResolveRadiruStationName(entry.StationId)
+                        : entry.StationName
+                })
+                .GroupBy(x => $"{x.AreaId}:{x.StationId}", StringComparer.OrdinalIgnoreCase)
+                .Select(x => x.First())
+                .ToList();
         }
 
 
@@ -81,7 +59,6 @@ namespace RadiKeep.Logics.Logics.StationLogic
         /// <returns></returns>
         public async ValueTask<bool> UpdateRadiruStationInformationAsync()
         {
-            List<NhkRadiruStation> stationList;
             List<NhkRadiruArea> areaDefinitions;
             List<NhkRadiruAreaService> serviceDefinitions;
             try
@@ -107,7 +84,6 @@ namespace RadiKeep.Logics.Logics.StationLogic
                 var dailyProgramApiUrlTemplate = GetDescendantValue(doc, "url_program_day");
                 var syncedAtUtc = DateTimeOffset.UtcNow;
 
-                stationList = [];
                 areaDefinitions = [];
                 serviceDefinitions = [];
 
@@ -171,19 +147,6 @@ namespace RadiKeep.Logics.Logics.StationLogic
                         DailyProgramApiUrlTemplate = areaDailyUrl,
                         LastSyncedAtUtc = syncedAtUtc
                     });
-
-                    stationList.Add(new NhkRadiruStation
-                    {
-                        AreaJpName = areaName,
-                        AreaId = areaId,
-                        ApiKey = apiKey,
-                        R1Hls = serviceMap.TryGetValue("r1", out var r1Hls) ? r1Hls : string.Empty,
-                        R2Hls = serviceMap.TryGetValue("r2", out var r2Hls) ? r2Hls : string.Empty,
-                        FmHls = serviceMap.TryGetValue("r3", out var r3Hls) ? r3Hls : string.Empty,
-                        ProgramNowOnAirApiUrl = areaNoaUrl,
-                        ProgramDetailApiUrlTemplate = areaDetailUrl,
-                        DailyProgramApiUrlTemplate = areaDailyUrl
-                    });
                 }
             }
             catch (Exception e)
@@ -196,7 +159,6 @@ namespace RadiKeep.Logics.Logics.StationLogic
             try
             {
                 await stationRepository.UpsertRadiruAreasAndServicesAsync(areaDefinitions, serviceDefinitions);
-                await stationRepository.UpsertRadiruStationsAsync(stationList);
             }
             catch (Exception e)
             {
@@ -205,28 +167,6 @@ namespace RadiKeep.Logics.Logics.StationLogic
             }
 
             return true;
-        }
-
-
-        /// <summary>
-        /// らじる★らじるで指定された地域の放送局情報を取得
-        /// </summary>
-        /// <param name="areaKind"></param>
-        /// <returns></returns>
-        public async ValueTask<NhkRadiruStation> GetNhkRadiruStationInformationByAreaAsync(RadiruAreaKind areaKind)
-        {
-            NhkRadiruStation station;
-            try
-            {
-                station = await stationRepository.GetRadiruStationByAreaAsync(areaKind.GetEnumCodeId());
-            }
-            catch (Exception e)
-            {
-                logger.ZLogError(e, $"らじる★らじるの放送局情報取得に失敗");
-                throw;
-            }
-
-            return station;
         }
 
         /// <summary>
@@ -259,21 +199,13 @@ namespace RadiKeep.Logics.Logics.StationLogic
         {
             try
             {
-                var keys = await stationRepository.GetActiveRadiruAreaServiceKeysAsync(cancellationToken);
-                if (keys.Count > 0)
-                {
-                    return keys;
-                }
+                return await stationRepository.GetActiveRadiruAreaServiceKeysAsync(cancellationToken);
             }
             catch (Exception e)
             {
-                logger.ZLogError(e, $"らじる★らじるサービス定義の取得に失敗したため固定定義にフォールバックします。");
+                logger.ZLogError(e, $"らじる★らじるサービス定義の取得に失敗しました。");
+                throw;
             }
-
-            return Enum.GetValues<RadiruAreaKind>()
-                .SelectMany(area => Enumeration.GetAll<RadiruStationKind>()
-                    .Select(station => (AreaId: area.GetEnumCodeId(), ServiceId: station.ServiceId)))
-                .ToList();
         }
 
         /// <summary>
@@ -292,18 +224,9 @@ namespace RadiKeep.Logics.Logics.StationLogic
             catch (Exception e)
             {
                 logger.ZLogError(e, $"らじる★らじるエリア定義取得に失敗 areaId={areaId}");
+                throw;
             }
-
-            var legacyArea = Enum.GetValues<RadiruAreaKind>()
-                .FirstOrDefault(x => x.GetEnumCodeId() == areaId);
-
-            if (legacyArea.GetEnumCodeId() != areaId)
-            {
-                return null;
-            }
-
-            var legacy = await GetNhkRadiruStationInformationByAreaAsync(legacyArea);
-            return legacy.DailyProgramApiUrlTemplate;
+            return null;
         }
 
         private static string ResolveRadiruStationName(string stationId)

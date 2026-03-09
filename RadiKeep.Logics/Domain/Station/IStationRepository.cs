@@ -37,23 +37,8 @@ public interface IStationRepository
     ValueTask<bool> HasAnyRadiruStationAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// らじる★らじる放送局を追加または更新する
-    /// </summary>
-    /// <param name="stations">放送局一覧</param>
-    /// <param name="cancellationToken">キャンセル用トークン</param>
-    ValueTask UpsertRadiruStationsAsync(IEnumerable<NhkRadiruStation> stations, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// 指定エリアのらじる★らじる放送局情報を取得する
-    /// </summary>
-    /// <param name="areaId">エリアID</param>
-    /// <param name="cancellationToken">キャンセル用トークン</param>
-    /// <returns>放送局情報</returns>
-    ValueTask<NhkRadiruStation> GetRadiruStationByAreaAsync(string areaId, CancellationToken cancellationToken = default);
-
-    /// <summary>
     /// 指定エリアとサービスIDに対応するらじる★らじるHLS URLを取得する。
-    /// 新テーブルを優先し、未存在時は旧テーブルにフォールバックする。
+    /// 現行のエリア/サービス定義から取得する。
     /// </summary>
     /// <param name="areaId">エリアID</param>
     /// <param name="serviceId">サービスID</param>
@@ -91,7 +76,7 @@ public interface IStationRepository
     ValueTask<List<(string AreaId, string ServiceId)>> GetActiveRadiruAreaServiceKeysAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// 指定エリアIDの新テーブル定義を取得する。
+    /// 指定エリアIDの定義を取得する。
     /// </summary>
     /// <param name="areaId">エリアID</param>
     /// <param name="cancellationToken">キャンセル用トークン</param>

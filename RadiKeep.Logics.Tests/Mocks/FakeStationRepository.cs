@@ -10,7 +10,6 @@ namespace RadiKeep.Logics.Tests.Mocks;
 public class FakeStationRepository : IStationRepository
 {
     public List<RadikoStation> RadikoStations { get; set; } = [];
-    public NhkRadiruStation RadiruStation { get; set; } = new();
     public NhkRadiruArea? RadiruArea { get; set; }
     public List<RadiruStationEntry> RadiruStationsFromAreaServices { get; set; } = [];
     public List<(string AreaId, string ServiceId)> ActiveRadiruAreaServiceKeys { get; set; } = [];
@@ -31,15 +30,6 @@ public class FakeStationRepository : IStationRepository
     public ValueTask<bool> HasAnyRadiruStationAsync(CancellationToken cancellationToken = default)
         => ValueTask.FromResult(false);
 
-    public ValueTask UpsertRadiruStationsAsync(IEnumerable<NhkRadiruStation> stations, CancellationToken cancellationToken = default)
-        => ValueTask.CompletedTask;
-
-    public ValueTask<NhkRadiruStation> GetRadiruStationByAreaAsync(string areaId, CancellationToken cancellationToken = default)
-    {
-        RadiruStation.AreaId = areaId;
-        return ValueTask.FromResult(RadiruStation);
-    }
-
     public ValueTask<string?> GetRadiruHlsUrlByAreaAndServiceAsync(
         string areaId,
         string serviceId,
@@ -50,16 +40,7 @@ public class FakeStationRepository : IStationRepository
         {
             return ValueTask.FromResult<string?>(url);
         }
-
-        var fallback = serviceId.ToLowerInvariant() switch
-        {
-            "r1" => RadiruStation.R1Hls,
-            "r2" => RadiruStation.R2Hls,
-            "r3" => RadiruStation.FmHls,
-            _ => null
-        };
-
-        return ValueTask.FromResult<string?>(fallback);
+        return ValueTask.FromResult<string?>(null);
     }
 
     public ValueTask<List<RadiruStationEntry>> GetRadiruStationsFromAreaServicesAsync(CancellationToken cancellationToken = default)
