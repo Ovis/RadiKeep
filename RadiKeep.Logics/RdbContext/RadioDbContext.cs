@@ -17,6 +17,8 @@ public class RadioDbContext : DbContext
     public virtual DbSet<RadikoStation> RadikoStations { get; set; }
     public virtual DbSet<RadikoProgram> RadikoPrograms { get; set; }
     public virtual DbSet<NhkRadiruStation> NhkRadiruStations { get; set; }
+    public virtual DbSet<NhkRadiruArea> NhkRadiruAreas { get; set; }
+    public virtual DbSet<NhkRadiruAreaService> NhkRadiruAreaServices { get; set; }
     public virtual DbSet<NhkRadiruProgram> NhkRadiruPrograms { get; set; }
     public virtual DbSet<ProgramReserve> ProgramReserve { get; set; }
     public virtual DbSet<KeywordReserve> KeywordReserve { get; set; }
@@ -233,6 +235,75 @@ public class RadioDbContext : DbContext
 
             entity.Property(e => e.DailyProgramApiUrlTemplate)
                 .HasColumnOrder(10);
+        });
+
+        modelBuilder.Entity<NhkRadiruArea>(entity =>
+        {
+            entity.HasIndex(b => b.AreaId)
+                .IsUnique();
+
+            entity.Property(e => e.Id)
+                .HasColumnOrder(1);
+
+            entity.Property(e => e.AreaId)
+                .HasColumnOrder(2);
+
+            entity.Property(e => e.AreaJpName)
+                .HasColumnOrder(3);
+
+            entity.Property(e => e.ApiKey)
+                .HasColumnOrder(4);
+
+            entity.Property(e => e.ProgramNowOnAirApiUrl)
+                .HasColumnOrder(5);
+
+            entity.Property(e => e.ProgramDetailApiUrlTemplate)
+                .HasColumnOrder(6);
+
+            entity.Property(e => e.DailyProgramApiUrlTemplate)
+                .HasColumnOrder(7);
+
+            entity.Property(e => e.LastSyncedAtUtc)
+                .HasColumnOrder(8);
+        });
+
+        modelBuilder.Entity<NhkRadiruAreaService>(entity =>
+        {
+            entity.HasIndex(b => new { b.AreaId, b.ServiceId })
+                .IsUnique();
+
+            entity.HasIndex(b => b.AreaId);
+            entity.HasIndex(b => b.ServiceId);
+
+            entity.Property(e => e.Id)
+                .HasColumnOrder(1);
+
+            entity.Property(e => e.AreaId)
+                .HasColumnOrder(2);
+
+            entity.Property(e => e.ServiceId)
+                .HasColumnOrder(3);
+
+            entity.Property(e => e.ServiceName)
+                .HasColumnOrder(4);
+
+            entity.Property(e => e.HlsUrl)
+                .HasColumnOrder(5);
+
+            entity.Property(e => e.IsActive)
+                .HasColumnOrder(6);
+
+            entity.Property(e => e.SourceTag)
+                .HasColumnOrder(7);
+
+            entity.Property(e => e.LastSyncedAtUtc)
+                .HasColumnOrder(8);
+
+            entity.HasOne<NhkRadiruArea>()
+                .WithMany()
+                .HasForeignKey(x => x.AreaId)
+                .HasPrincipalKey(x => x.AreaId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<NhkRadiruProgram>(entity =>
