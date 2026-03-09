@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using RadiKeep.Logics.Domain.Station;
+using RadiKeep.Logics.Models.NhkRadiru;
 using RadiKeep.Logics.RdbContext;
 
 namespace RadiKeep.Logics.Infrastructure.Station;
@@ -212,5 +213,39 @@ public class StationRepository(RadioDbContext dbContext) : IStationRepository
             "r3" => station.FmHls,
             _ => null
         };
+    }
+
+    /// <summary>
+    /// 新テーブルかららじる★らじる局一覧を取得する
+    /// </summary>
+    public async ValueTask<List<RadiruStationEntry>> GetRadiruStationsFromAreaServicesAsync(CancellationToken cancellationToken = default)
+    {
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+
+        try
+        {
+            var list = await (
+                    from area in dbContext.NhkRadiruAreas.AsNoTracking()
+                    join service in dbContext.NhkRadiruAreaServices.AsNoTracking()
+                        on area.AreaId equals service.AreaId
+                    where service.IsActive
+                    orderby area.AreaId, service.ServiceId
+                    select new RadiruStationEntry
+                    {
+                        AreaId = area.AreaId,
+                        AreaName = area.AreaJpName,
+                        StationId = service.ServiceId,
+                        StationName = service.ServiceName
+                    })
+                .ToListAsync(cancellationToken);
+
+            await transaction.CommitAsync(cancellationToken);
+            return list;
+        }
+        catch
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            throw;
+        }
     }
 }

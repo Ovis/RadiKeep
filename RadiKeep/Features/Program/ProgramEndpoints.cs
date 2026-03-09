@@ -103,10 +103,10 @@ public static class ProgramEndpoints
     /// <summary>
     /// らじる放送局一覧を取得する。
     /// </summary>
-    private static Ok<ApiResponse<Dictionary<string, List<RadiruStationEntry>>>> HandleGetRadiruStationsAsync(
+    private static async Task<Ok<ApiResponse<Dictionary<string, List<RadiruStationEntry>>>>> HandleGetRadiruStationsAsync(
         StationLobLogic stationLobLogic)
     {
-        var stations = stationLobLogic.GetRadiruStationAsync()
+        var stations = (await stationLobLogic.GetRadiruStationAsync())
             .GroupBy(r => r.AreaName)
             .ToDictionary(group => group.Key, group => group.ToList());
         return TypedResults.Ok(ApiResponse.Ok(stations));

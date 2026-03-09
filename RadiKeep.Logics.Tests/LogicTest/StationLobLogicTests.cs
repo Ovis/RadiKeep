@@ -41,6 +41,8 @@ namespace RadiKeep.Logics.Tests.LogicTest
             _dbContext = DbContext;
             _dbContext.ChangeTracker.Clear();
             await _dbContext.Database.ExecuteSqlRawAsync("DELETE FROM RadikoStations");
+            await _dbContext.Database.ExecuteSqlRawAsync("DELETE FROM NhkRadiruAreaServices");
+            await _dbContext.Database.ExecuteSqlRawAsync("DELETE FROM NhkRadiruAreas");
             await _dbContext.Database.ExecuteSqlRawAsync("DELETE FROM NhkRadiruStations");
             _entryMapper = new EntryMapper(_configServiceMock.Object);
             _stationRepository = new StationRepository(_dbContext);
@@ -181,15 +183,45 @@ namespace RadiKeep.Logics.Tests.LogicTest
         }
 
         [Test]
-        public void GetRadiruStationAsync_一覧取得()
+        public async Task GetRadiruStationAsync_一覧取得()
         {
-            var list = _stationLogic.GetRadiruStationAsync().ToList();
+            var list = (await _stationLogic.GetRadiruStationAsync()).ToList();
 
             var areaCount = Enum.GetValues<RadiruAreaKind>().Length;
             var stationCount = Enumeration.GetAll<RadiruStationKind>().Count();
 
             Assert.That(list.Count, Is.EqualTo(areaCount * stationCount));
             Assert.That(list.Any(x => x.AreaId == RadiruAreaKind.東京.GetEnumCodeId()), Is.True);
+        }
+
+        [Test]
+        public async Task GetRadiruStationAsync_新テーブル優先で取得()
+        {
+            _dbContext.NhkRadiruAreas.Add(new NhkRadiruArea
+            {
+                AreaId = "130",
+                AreaJpName = "東京",
+                ApiKey = "130",
+                ProgramNowOnAirApiUrl = "https://example/noa",
+                ProgramDetailApiUrlTemplate = "https://example/detail/{area}",
+                DailyProgramApiUrlTemplate = "https://example/day/{area}"
+            });
+            _dbContext.NhkRadiruAreaServices.Add(new NhkRadiruAreaService
+            {
+                AreaId = "130",
+                ServiceId = "am",
+                ServiceName = "NHK AM",
+                HlsUrl = "https://example/am.m3u8",
+                IsActive = true
+            });
+            await _dbContext.SaveChangesAsync();
+
+            var list = (await _stationLogic.GetRadiruStationAsync()).ToList();
+
+            Assert.That(list.Count, Is.EqualTo(1));
+            Assert.That(list[0].AreaId, Is.EqualTo("130"));
+            Assert.That(list[0].StationId, Is.EqualTo("am"));
+            Assert.That(list[0].StationName, Is.EqualTo("NHK AM"));
         }
 
         [Test]
@@ -223,6 +255,8 @@ namespace RadiKeep.Logics.Tests.LogicTest
         {
             _dbContext.ChangeTracker.Clear();
             await _dbContext.Database.ExecuteSqlRawAsync("DELETE FROM RadikoStations");
+            await _dbContext.Database.ExecuteSqlRawAsync("DELETE FROM NhkRadiruAreaServices");
+            await _dbContext.Database.ExecuteSqlRawAsync("DELETE FROM NhkRadiruAreas");
             await _dbContext.Database.ExecuteSqlRawAsync("DELETE FROM NhkRadiruStations");
         }
     }

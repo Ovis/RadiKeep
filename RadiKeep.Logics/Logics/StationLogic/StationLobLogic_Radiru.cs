@@ -34,8 +34,33 @@ namespace RadiKeep.Logics.Logics.StationLogic
         /// らじる★らじるの放送局情報取得
         /// </summary>
         /// <returns></returns>
-        public IEnumerable<RadiruStationEntry> GetRadiruStationAsync()
+        public async ValueTask<IEnumerable<RadiruStationEntry>> GetRadiruStationAsync(CancellationToken cancellationToken = default)
         {
+            try
+            {
+                var stationEntries = await stationRepository.GetRadiruStationsFromAreaServicesAsync(cancellationToken);
+                if (stationEntries.Count > 0)
+                {
+                    return stationEntries
+                        .Select(entry => new RadiruStationEntry
+                        {
+                            AreaId = entry.AreaId,
+                            AreaName = entry.AreaName,
+                            StationId = entry.StationId,
+                            StationName = string.IsNullOrWhiteSpace(entry.StationName)
+                                ? ResolveRadiruStationName(entry.StationId)
+                                : entry.StationName
+                        })
+                        .GroupBy(x => $"{x.AreaId}:{x.StationId}", StringComparer.OrdinalIgnoreCase)
+                        .Select(x => x.First())
+                        .ToList();
+                }
+            }
+            catch (Exception e)
+            {
+                logger.ZLogError(e, $"らじる★らじる局一覧の新テーブル読込に失敗したため固定定義にフォールバックします。");
+            }
+
             var list = new List<RadiruStationEntry>();
             {
                 foreach (var areaKind in Enum.GetValues<RadiruAreaKind>())
@@ -159,6 +184,14 @@ namespace RadiKeep.Logics.Logics.StationLogic
                 logger.ZLogError(e, $"らじる★らじるのHLS URL取得に失敗 areaId={areaId} serviceId={serviceId}");
                 throw;
             }
+        }
+
+        private static string ResolveRadiruStationName(string stationId)
+        {
+            var station = Enumeration.GetAll<RadiruStationKind>()
+                .FirstOrDefault(r => r.ServiceId == stationId);
+
+            return station?.Name ?? $"不明局({stationId})";
         }
 
     }

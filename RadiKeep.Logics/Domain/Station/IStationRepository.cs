@@ -1,4 +1,5 @@
 using RadiKeep.Logics.RdbContext;
+using RadiKeep.Logics.Models.NhkRadiru;
 
 namespace RadiKeep.Logics.Domain.Station;
 
@@ -62,4 +63,11 @@ public interface IStationRepository
         string areaId,
         string serviceId,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// 新しいエリア/サービス定義テーブルから、らじる★らじる局一覧を取得する。
+    /// </summary>
+    /// <param name="cancellationToken">キャンセル用トークン</param>
+    /// <returns>局一覧。定義が未登録の場合は空配列</returns>
+    ValueTask<List<RadiruStationEntry>> GetRadiruStationsFromAreaServicesAsync(CancellationToken cancellationToken = default);
 }
