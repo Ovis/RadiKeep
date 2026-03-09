@@ -68,7 +68,12 @@ public class RadiruRecordingSource(
         {
             var radiruAreaKind = Enum.GetValues<RadiruAreaKind>().First(r => r.GetEnumCodeId() == program.AreaId);
             var stationInformation = await stationLobLogic.GetNhkRadiruStationInformationByAreaAsync(radiruAreaKind);
-            var radiruStationKind = Enumeration.GetAll<RadiruStationKind>().First(r => r.ServiceId == program.StationId);
+            var radiruStationKind = Enumeration.GetAll<RadiruStationKind>().FirstOrDefault(r => r.ServiceId == program.StationId);
+            if (radiruStationKind == null)
+            {
+                logger.ZLogWarning($"らじる★らじるの放送局IDが未知のため録音できません。 stationId={program.StationId} programId={program.ProgramId}");
+                throw new DomainException("放送局の判定ができませんでした。");
+            }
 
             streamUrl = radiruStationKind switch
             {

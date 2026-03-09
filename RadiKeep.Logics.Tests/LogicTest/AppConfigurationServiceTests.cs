@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
+using RadiKeep.Logics.Models.Enums;
 using RadiKeep.Logics.Options;
 using RadiKeep.Logics.RdbContext;
 using RadiKeep.Logics.Services;
@@ -197,5 +198,15 @@ public class AppConfigurationServiceTests
         Assert.That(service.DiscordWebhookUrl, Is.EqualTo("https://example.com/webhook"));
         Assert.That(service.NoticeCategories.Count, Is.EqualTo(2));
         Assert.That(service.UnreadBadgeNoticeCategories, Is.EqualTo([RadiKeep.Logics.Logics.NotificationLogic.NoticeCategory.SystemError]));
+    }
+
+    [Test]
+    public void ChooseStationName_Radiru未知StationIdはフォールバック名を返す()
+    {
+        var service = CreateService();
+
+        var stationName = service.ChooseStationName(RadioServiceKind.Radiru, "am");
+
+        Assert.That(stationName, Is.EqualTo("不明局(am)"));
     }
 }
