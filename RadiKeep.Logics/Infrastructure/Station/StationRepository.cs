@@ -327,4 +327,31 @@ public class StationRepository(RadioDbContext dbContext) : IStationRepository
             throw;
         }
     }
+
+    /// <summary>
+    /// らじる★らじるの有効なエリアID/サービスID組を取得する
+    /// </summary>
+    public async ValueTask<List<(string AreaId, string ServiceId)>> GetActiveRadiruAreaServiceKeysAsync(CancellationToken cancellationToken = default)
+    {
+        var keys = await dbContext.NhkRadiruAreaServices
+            .AsNoTracking()
+            .Where(x => x.IsActive)
+            .Select(x => new { x.AreaId, x.ServiceId })
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        return keys
+            .Select(x => (x.AreaId, x.ServiceId))
+            .ToList();
+    }
+
+    /// <summary>
+    /// 指定エリアIDの新テーブル定義を取得する
+    /// </summary>
+    public async ValueTask<NhkRadiruArea?> GetRadiruAreaByAreaIdAsync(string areaId, CancellationToken cancellationToken = default)
+    {
+        return await dbContext.NhkRadiruAreas
+            .AsNoTracking()
+            .SingleOrDefaultAsync(x => x.AreaId == areaId, cancellationToken);
+    }
 }

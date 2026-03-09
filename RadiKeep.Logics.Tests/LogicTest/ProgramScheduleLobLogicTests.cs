@@ -420,9 +420,12 @@ public class ProgramScheduleLobLogicTests
         var radikoApiClient = new FakeRadikoApiClient();
         var radiruApiClientMock = new Mock<IRadiruApiClient>();
 
+        radiruApiClientMock.Setup(x => x.GetAvailableAreaServicesAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync([("130", "r1")]);
+
         radiruApiClientMock.Setup(x => x.GetDailyProgramsAsync(
-                It.IsAny<RadiruAreaKind>(),
-                It.IsAny<RadiruStationKind>(),
+                It.IsAny<string>(),
+                It.IsAny<string>(),
                 It.IsAny<DateTimeOffset>(),
                 It.IsAny<CancellationToken>()))
             .ThrowsAsync(new Exception("api error"));
@@ -635,7 +638,7 @@ public class ProgramScheduleLobLogicTests
 
         var invoked = method!.Invoke(
             logic,
-            [RadiruAreaKind.東京, RadiruStationKind.R1, now]);
+            ["130", "r1", now]);
 
         var result = await (ValueTask<bool>)invoked!;
 
@@ -643,6 +646,43 @@ public class ProgramScheduleLobLogicTests
         Assert.That(saved, Is.Not.Null);
         Assert.That(saved!.Count(), Is.EqualTo(1));
         Assert.That(saved.Single().ProgramId, Is.EqualTo("ok-1"));
+    }
+
+    [Test]
+    public async Task UpdateRadiruProgramDataAsync_AreaService定義に従って更新する()
+    {
+        var (logic, repoMock, _, _, radiruApiClient) = CreateTargetWithClients();
+        var now = DateTimeOffset.Now;
+
+        radiruApiClient.AreaServices =
+        [
+            ("130", "r1"),
+            ("130", "am")
+        ];
+        radiruApiClient.Programs =
+        [
+            new RadiruProgramJsonEntity
+            {
+                Id = "p1",
+                Name = "Program",
+                StartDate = now,
+                EndDate = now.AddMinutes(30),
+                IdentifierGroup = new IdentifierGroup { RadioSeriesName = "Program" },
+                About = new About { Audio = new Audio() }
+            }
+        ];
+
+        var savedEntries = new List<NhkRadiruProgram>();
+        repoMock.Setup(r => r.UpsertRadiruProgramsAsync(It.IsAny<IEnumerable<NhkRadiruProgram>>(), It.IsAny<CancellationToken>()))
+            .Callback<IEnumerable<NhkRadiruProgram>, CancellationToken>((entries, _) => savedEntries.AddRange(entries))
+            .Returns(ValueTask.CompletedTask);
+
+        await logic.UpdateRadiruProgramDataAsync();
+
+        Assert.That(radiruApiClient.Requests.Any(x => x.AreaId == "130" && x.ServiceId == "r1"), Is.True);
+        Assert.That(radiruApiClient.Requests.Any(x => x.AreaId == "130" && x.ServiceId == "am"), Is.True);
+        Assert.That(savedEntries.Any(x => x.AreaId == "130" && x.StationId == "r1"), Is.True);
+        Assert.That(savedEntries.Any(x => x.AreaId == "130" && x.StationId == "am"), Is.True);
     }
 
     /// <summary>

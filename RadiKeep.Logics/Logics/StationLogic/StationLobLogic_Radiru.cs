@@ -252,6 +252,60 @@ namespace RadiKeep.Logics.Logics.StationLogic
             }
         }
 
+        /// <summary>
+        /// らじる★らじるの有効なエリアID/サービスID組を取得
+        /// </summary>
+        public async ValueTask<List<(string AreaId, string ServiceId)>> GetActiveRadiruAreaServiceKeysAsync(CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                var keys = await stationRepository.GetActiveRadiruAreaServiceKeysAsync(cancellationToken);
+                if (keys.Count > 0)
+                {
+                    return keys;
+                }
+            }
+            catch (Exception e)
+            {
+                logger.ZLogError(e, $"らじる★らじるサービス定義の取得に失敗したため固定定義にフォールバックします。");
+            }
+
+            return Enum.GetValues<RadiruAreaKind>()
+                .SelectMany(area => Enumeration.GetAll<RadiruStationKind>()
+                    .Select(station => (AreaId: area.GetEnumCodeId(), ServiceId: station.ServiceId)))
+                .ToList();
+        }
+
+        /// <summary>
+        /// 指定エリアの番組表API URLテンプレートを取得
+        /// </summary>
+        public async ValueTask<string?> GetRadiruDailyProgramApiUrlTemplateAsync(string areaId, CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                var area = await stationRepository.GetRadiruAreaByAreaIdAsync(areaId, cancellationToken);
+                if (area != null && !string.IsNullOrWhiteSpace(area.DailyProgramApiUrlTemplate))
+                {
+                    return area.DailyProgramApiUrlTemplate;
+                }
+            }
+            catch (Exception e)
+            {
+                logger.ZLogError(e, $"らじる★らじるエリア定義取得に失敗 areaId={areaId}");
+            }
+
+            var legacyArea = Enum.GetValues<RadiruAreaKind>()
+                .FirstOrDefault(x => x.GetEnumCodeId() == areaId);
+
+            if (legacyArea.GetEnumCodeId() != areaId)
+            {
+                return null;
+            }
+
+            var legacy = await GetNhkRadiruStationInformationByAreaAsync(legacyArea);
+            return legacy.DailyProgramApiUrlTemplate;
+        }
+
         private static string ResolveRadiruStationName(string stationId)
         {
             var station = Enumeration.GetAll<RadiruStationKind>()

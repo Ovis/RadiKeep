@@ -82,4 +82,19 @@ public interface IStationRepository
         IEnumerable<NhkRadiruArea> areas,
         IEnumerable<NhkRadiruAreaService> services,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// らじる★らじるの有効なエリアID/サービスID組を取得する。
+    /// </summary>
+    /// <param name="cancellationToken">キャンセル用トークン</param>
+    /// <returns>エリアID/サービスIDの組一覧</returns>
+    ValueTask<List<(string AreaId, string ServiceId)>> GetActiveRadiruAreaServiceKeysAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// 指定エリアIDの新テーブル定義を取得する。
+    /// </summary>
+    /// <param name="areaId">エリアID</param>
+    /// <param name="cancellationToken">キャンセル用トークン</param>
+    /// <returns>エリア定義。存在しない場合はnull</returns>
+    ValueTask<NhkRadiruArea?> GetRadiruAreaByAreaIdAsync(string areaId, CancellationToken cancellationToken = default);
 }

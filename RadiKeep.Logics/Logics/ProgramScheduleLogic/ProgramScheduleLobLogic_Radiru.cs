@@ -54,22 +54,24 @@ namespace RadiKeep.Logics.Logics.ProgramScheduleLogic
 
         public async ValueTask UpdateRadiruProgramDataAsync()
         {
-            var radiruStationKindList = Enumeration.GetAll<RadiruStationKind>().ToList();
+            var areaServices = await radiruApiClient.GetAvailableAreaServicesAsync();
             var dateList = Enumerable.Range(-7, 15)
                 .Select(i => appContext.StandardDateTimeOffset.AddDays(-i))
                 .ToList();
 
-            // RadiruAreaKind を foreachで回して、それぞれのエリアの放送局情報を取得
+            if (areaServices.Count == 0)
+            {
+                logger.ZLogWarning($"らじる★らじるの取得対象サービスが存在しないため番組表更新をスキップしました。");
+                return;
+            }
+
             try
             {
-                foreach (var recArea in Enum.GetValues<RadiruAreaKind>())
+                foreach (var (areaId, serviceId) in areaServices.Distinct())
                 {
-                    foreach (var radiruStationKind in radiruStationKindList)
+                    foreach (var dateTimeOffset in dateList)
                     {
-                        foreach (var dateTimeOffset in dateList)
-                        {
-                            await UpsertDailyProgramDataAsync(recArea, radiruStationKind, dateTimeOffset);
-                        }
+                        await UpsertDailyProgramDataAsync(areaId, serviceId, dateTimeOffset);
                     }
                 }
             }
@@ -95,9 +97,9 @@ namespace RadiKeep.Logics.Logics.ProgramScheduleLogic
         }
 
 
-        private async ValueTask<bool> UpsertDailyProgramDataAsync(RadiruAreaKind area, RadiruStationKind stationKind, DateTimeOffset dt)
+        private async ValueTask<bool> UpsertDailyProgramDataAsync(string areaId, string serviceId, DateTimeOffset dt)
         {
-            var programList = await radiruApiClient.GetDailyProgramsAsync(area, stationKind, dt);
+            var programList = await radiruApiClient.GetDailyProgramsAsync(areaId, serviceId, dt);
 
             if (!programList.Any())
             {
@@ -110,10 +112,10 @@ namespace RadiKeep.Logics.Logics.ProgramScheduleLogic
 
                 foreach (var programJsonEntity in programList)
                 {
-                    if (!TryCreateRadiruProgramEntry(area, stationKind, programJsonEntity, out var entry))
+                    if (!TryCreateRadiruProgramEntry(areaId, serviceId, programJsonEntity, out var entry))
                     {
                         logger.ZLogWarning(
-                            $"らじる★らじる番組を必須項目不足でスキップ areaId={area.GetEnumCodeId()} stationId={stationKind.ServiceId} programId={programJsonEntity.Id}");
+                            $"らじる★らじる番組を必須項目不足でスキップ areaId={areaId} stationId={serviceId} programId={programJsonEntity.Id}");
                         continue;
                     }
 
@@ -122,7 +124,7 @@ namespace RadiKeep.Logics.Logics.ProgramScheduleLogic
 
                 if (entries.Count == 0)
                 {
-                    logger.ZLogWarning($"らじる★らじる番組で保存可能なエントリがありませんでした areaId={area.GetEnumCodeId()} stationId={stationKind.ServiceId} date={dt:yyyy-MM-dd}");
+                    logger.ZLogWarning($"らじる★らじる番組で保存可能なエントリがありませんでした areaId={areaId} stationId={serviceId} date={dt:yyyy-MM-dd}");
                     return false;
                 }
 
@@ -138,8 +140,8 @@ namespace RadiKeep.Logics.Logics.ProgramScheduleLogic
         }
 
         private static bool TryCreateRadiruProgramEntry(
-            RadiruAreaKind area,
-            RadiruStationKind stationKind,
+            string areaId,
+            string serviceId,
             RadiruProgramJsonEntity programJsonEntity,
             out NhkRadiruProgram entry)
         {
@@ -187,8 +189,8 @@ namespace RadiKeep.Logics.Logics.ProgramScheduleLogic
             entry = new NhkRadiruProgram
             {
                 ProgramId = $"{programJsonEntity.Id}",
-                StationId = stationKind.ServiceId,
-                AreaId = $"{area.GetEnumCodeId()}",
+                StationId = serviceId,
+                AreaId = areaId,
                 RadioDate = programJsonEntity.StartDate.ToRadioDate(),
                 DaysOfWeek = programJsonEntity.StartDate.ToRadioDayOfWeek().ToDaysOfWeek(),
                 EventId = programJsonEntity.About.Id,
