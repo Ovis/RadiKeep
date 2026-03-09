@@ -4,9 +4,7 @@ using RadiKeep.Logics.Domain.Recording;
 using RadiKeep.Logics.Logics.ProgramScheduleLogic;
 using RadiKeep.Logics.Logics.StationLogic;
 using RadiKeep.Logics.Models.Enums;
-using RadiKeep.Logics.Models.NhkRadiru;
 using RadiKeep.Logics.Primitives;
-using RadiKeep.Logics.Primitives.DataAnnotations;
 using ZLogger;
 
 namespace RadiKeep.Logics.Infrastructure.Recording;
@@ -66,17 +64,16 @@ public class RadiruRecordingSource(
         }
         else
         {
-            var radiruAreaKind = Enum.GetValues<RadiruAreaKind>().First(r => r.GetEnumCodeId() == program.AreaId);
-            var stationInformation = await stationLobLogic.GetNhkRadiruStationInformationByAreaAsync(radiruAreaKind);
-            var radiruStationKind = Enumeration.GetAll<RadiruStationKind>().First(r => r.ServiceId == program.StationId);
+            streamUrl = await stationLobLogic.GetRadiruHlsUrlByAreaAndServiceAsync(
+                program.AreaId,
+                program.StationId,
+                cancellationToken) ?? string.Empty;
 
-            streamUrl = radiruStationKind switch
+            if (string.IsNullOrWhiteSpace(streamUrl))
             {
-                not null when radiruStationKind == RadiruStationKind.R1 => stationInformation.R1Hls,
-                not null when radiruStationKind == RadiruStationKind.R2 => stationInformation.R2Hls,
-                not null when radiruStationKind == RadiruStationKind.FM => stationInformation.FmHls,
-                _ => throw new DomainException("放送局の判定ができませんでした。"),
-            };
+                logger.ZLogWarning($"らじる★らじるの放送局URLが解決できないため録音できません。 areaId={program.AreaId} stationId={program.StationId} programId={program.ProgramId}");
+                throw new DomainException("放送局の判定ができませんでした。");
+            }
         }
 
         var programInfo = new ProgramRecordingInfo(

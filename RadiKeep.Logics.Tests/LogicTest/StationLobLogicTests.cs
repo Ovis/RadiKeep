@@ -41,7 +41,8 @@ namespace RadiKeep.Logics.Tests.LogicTest
             _dbContext = DbContext;
             _dbContext.ChangeTracker.Clear();
             await _dbContext.Database.ExecuteSqlRawAsync("DELETE FROM RadikoStations");
-            await _dbContext.Database.ExecuteSqlRawAsync("DELETE FROM NhkRadiruStations");
+            await _dbContext.Database.ExecuteSqlRawAsync("DELETE FROM NhkRadiruAreaServices");
+            await _dbContext.Database.ExecuteSqlRawAsync("DELETE FROM NhkRadiruAreas");
             _entryMapper = new EntryMapper(_configServiceMock.Object);
             _stationRepository = new StationRepository(_dbContext);
 
@@ -181,41 +182,128 @@ namespace RadiKeep.Logics.Tests.LogicTest
         }
 
         [Test]
-        public void GetRadiruStationAsync_一覧取得()
-        {
-            var list = _stationLogic.GetRadiruStationAsync().ToList();
+    public async Task GetRadiruStationAsync_一覧取得()
+    {
+            _dbContext.NhkRadiruAreas.Add(new NhkRadiruArea
+            {
+                AreaId = "130",
+                AreaJpName = "東京",
+                ApiKey = "130",
+                ProgramNowOnAirApiUrl = "https://example/noa",
+                ProgramDetailApiUrlTemplate = "https://example/detail/{area}",
+                DailyProgramApiUrlTemplate = "https://example/day/{area}"
+            });
+            _dbContext.NhkRadiruAreaServices.AddRange(
+                new NhkRadiruAreaService
+                {
+                    AreaId = "130",
+                    ServiceId = "r1",
+                    ServiceName = "R1",
+                    HlsUrl = "https://example/r1.m3u8",
+                    IsActive = true
+                },
+                new NhkRadiruAreaService
+                {
+                    AreaId = "130",
+                    ServiceId = "r2",
+                    ServiceName = "R2",
+                    HlsUrl = "https://example/r2.m3u8",
+                    IsActive = true
+                });
+            await _dbContext.SaveChangesAsync();
 
-            var areaCount = Enum.GetValues<RadiruAreaKind>().Length;
-            var stationCount = Enumeration.GetAll<RadiruStationKind>().Count();
+            var list = (await _stationLogic.GetRadiruStationAsync()).ToList();
 
-            Assert.That(list.Count, Is.EqualTo(areaCount * stationCount));
-            Assert.That(list.Any(x => x.AreaId == RadiruAreaKind.東京.GetEnumCodeId()), Is.True);
+            Assert.That(list.Count, Is.EqualTo(2));
+            Assert.That(list.Any(x => x.AreaId == "130"), Is.True);
+            Assert.That(list.Any(x => x.StationId == "r1"), Is.True);
+            Assert.That(list.Any(x => x.StationId == "r2"), Is.True);
         }
 
         [Test]
-        public async Task GetNhkRadiruStationInformationByAreaAsync_取得できる()
+        public async Task GetRadiruStationAsync_エリアサービス定義から取得()
         {
-            await _dbContext.Database.ExecuteSqlRawAsync("DELETE FROM NhkRadiruStations");
-
-            var areaId = RadiruAreaKind.東京.GetEnumCodeId();
-            _dbContext.NhkRadiruStations.Add(new NhkRadiruStation
+            _dbContext.NhkRadiruAreas.Add(new NhkRadiruArea
             {
-                AreaId = areaId,
+                AreaId = "130",
                 AreaJpName = "東京",
-                ApiKey = areaId,
-                R1Hls = "r1",
-                R2Hls = "r2",
-                FmHls = "fm",
-                ProgramNowOnAirApiUrl = "http://example",
-                ProgramDetailApiUrlTemplate = "http://example/detail",
-                DailyProgramApiUrlTemplate = "http://example/daily"
+                ApiKey = "130",
+                ProgramNowOnAirApiUrl = "https://example/noa",
+                ProgramDetailApiUrlTemplate = "https://example/detail/{area}",
+                DailyProgramApiUrlTemplate = "https://example/day/{area}"
+            });
+            _dbContext.NhkRadiruAreaServices.Add(new NhkRadiruAreaService
+            {
+                AreaId = "130",
+                ServiceId = "am",
+                ServiceName = "NHK AM",
+                HlsUrl = "https://example/am.m3u8",
+                IsActive = true
             });
             await _dbContext.SaveChangesAsync();
 
-            var station = await _stationLogic.GetNhkRadiruStationInformationByAreaAsync(RadiruAreaKind.東京);
+            var list = (await _stationLogic.GetRadiruStationAsync()).ToList();
 
-            Assert.That(station.AreaId, Is.EqualTo(areaId));
-            Assert.That(station.AreaJpName, Is.EqualTo("東京"));
+            Assert.That(list.Count, Is.EqualTo(1));
+            Assert.That(list[0].AreaId, Is.EqualTo("130"));
+            Assert.That(list[0].StationId, Is.EqualTo("am"));
+            Assert.That(list[0].StationName, Is.EqualTo("NHK AM"));
+        }
+
+        [Test]
+        public async Task UpdateRadiruStationInformationAsync_未知サービスIDを保持して保存()
+        {
+            await _dbContext.Database.ExecuteSqlRawAsync("DELETE FROM NhkRadiruAreaServices");
+            await _dbContext.Database.ExecuteSqlRawAsync("DELETE FROM NhkRadiruAreas");
+
+            var xml = """
+                      <root>
+                        <url_program_noa>https://example/noa/{area}</url_program_noa>
+                        <url_program_detail>https://example/detail/{area}</url_program_detail>
+                        <url_program_day>https://example/day/{area}</url_program_day>
+                        <stream_url>
+                          <data>
+                            <areajp>東京</areajp>
+                            <areakey>130</areakey>
+                            <apikey>130</apikey>
+                            <r1hls>https://example/r1.m3u8</r1hls>
+                            <amhls>https://example/am.m3u8</amhls>
+                          </data>
+                        </stream_url>
+                      </root>
+                      """;
+
+            var handler = new FakeHttpMessageHandler();
+            handler.AddHandler(
+                _ => true,
+                _ => new HttpResponseMessage(System.Net.HttpStatusCode.OK) { Content = new StringContent(xml) });
+
+            var httpClientFactoryMock = new Mock<IHttpClientFactory>();
+            httpClientFactoryMock
+                .Setup(x => x.CreateClient(It.IsAny<string>()))
+                .Returns(new HttpClient(handler));
+
+            var localStationLogic = new StationLobLogic(
+                _loggerMock.Object,
+                _configServiceMock.Object,
+                _radikoApiClientMock.Object,
+                _stationRepository,
+                _radikoUniqueProcessLogicMock.Object,
+                httpClientFactoryMock.Object,
+                _entryMapper
+            );
+
+            var result = await localStationLogic.UpdateRadiruStationInformationAsync();
+
+            var area = await _dbContext.NhkRadiruAreas.SingleAsync(x => x.AreaId == "130");
+            var services = await _dbContext.NhkRadiruAreaServices
+                .Where(x => x.AreaId == "130")
+                .OrderBy(x => x.ServiceId)
+                .ToListAsync();
+
+            Assert.That(result, Is.True);
+            Assert.That(area.AreaJpName, Is.EqualTo("東京"));
+            Assert.That(services.Select(x => x.ServiceId).ToArray(), Is.EqualTo(new[] { "am", "r1" }));
         }
 
         [TearDown]
@@ -223,7 +311,8 @@ namespace RadiKeep.Logics.Tests.LogicTest
         {
             _dbContext.ChangeTracker.Clear();
             await _dbContext.Database.ExecuteSqlRawAsync("DELETE FROM RadikoStations");
-            await _dbContext.Database.ExecuteSqlRawAsync("DELETE FROM NhkRadiruStations");
+            await _dbContext.Database.ExecuteSqlRawAsync("DELETE FROM NhkRadiruAreaServices");
+            await _dbContext.Database.ExecuteSqlRawAsync("DELETE FROM NhkRadiruAreas");
         }
     }
 }

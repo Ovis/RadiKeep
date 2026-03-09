@@ -110,9 +110,9 @@ public class EntryMapper(IAppConfigurationService config) : IEntryMapper
             ProgramId = source.ProgramId,
             ServiceKind = RadioServiceKind.Radiru,
             AreaId = source.AreaId,
-            AreaName = Enum.GetValues<RadiruAreaKind>().Single(r => r.GetEnumCodeId() == source.AreaId).ToString(),
+            AreaName = ResolveRadiruAreaName(source.AreaId),
             StationId = source.StationId,
-            StationName = Enumeration.GetAll<RadiruStationKind>().Single(r => r.ServiceId == source.StationId).Name,
+            StationName = ResolveRadiruStationName(source.StationId),
             Title = source.Title,
             Subtitle = source.Subtitle,
             Performer = source.Performer,
@@ -164,9 +164,9 @@ public class EntryMapper(IAppConfigurationService config) : IEntryMapper
             ProgramId = source.ProgramId,
             ServiceKind = RadioServiceKind.Radiru,
             AreaId = source.AreaId,
-            AreaName = Enum.GetValues<RadiruAreaKind>().Single(r => r.GetEnumCodeId() == source.AreaId).ToString(),
+            AreaName = ResolveRadiruAreaName(source.AreaId),
             StationId = source.StationId,
-            StationName = Enumeration.GetAll<RadiruStationKind>().Single(r => r.ServiceId == source.StationId).Name,
+            StationName = ResolveRadiruStationName(source.StationId),
             Title = source.Title,
             RadioDate = source.RadioDate,
             DaysOfWeek = source.DaysOfWeek,
@@ -266,8 +266,27 @@ public class EntryMapper(IAppConfigurationService config) : IEntryMapper
         return kind switch
         {
             RadioServiceKind.Radiko => config.RadikoStationDic.TryGetValue(stationId, out var stationName) ? stationName : fallbackStationName,
-            RadioServiceKind.Radiru => Enumeration.GetAll<RadiruStationKind>().Single(r => r.ServiceId == stationId).Name,
+            RadioServiceKind.Radiru => ResolveRadiruStationName(stationId),
             _ => string.IsNullOrWhiteSpace(fallbackStationName) ? "不明" : fallbackStationName
         };
+    }
+
+    private static string ResolveRadiruStationName(string stationId)
+    {
+        var station = Enumeration.GetAll<RadiruStationKind>()
+            .FirstOrDefault(r => r.ServiceId == stationId);
+
+        return station?.Name ?? $"不明局({stationId})";
+    }
+
+    private static string ResolveRadiruAreaName(string areaId)
+    {
+        var area = Enum.GetValues<RadiruAreaKind>()
+            .Cast<RadiruAreaKind?>()
+            .FirstOrDefault(r => r!.Value.GetEnumCodeId() == areaId);
+
+        return area.HasValue
+            ? area.Value.ToString()
+            : $"不明エリア({areaId})";
     }
 }

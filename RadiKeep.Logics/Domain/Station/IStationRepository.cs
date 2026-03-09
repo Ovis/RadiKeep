@@ -1,4 +1,5 @@
 using RadiKeep.Logics.RdbContext;
+using RadiKeep.Logics.Models.NhkRadiru;
 
 namespace RadiKeep.Logics.Domain.Station;
 
@@ -36,17 +37,49 @@ public interface IStationRepository
     ValueTask<bool> HasAnyRadiruStationAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// らじる★らじる放送局を追加または更新する
+    /// 指定エリアとサービスIDに対応するらじる★らじるHLS URLを取得する。
+    /// 現行のエリア/サービス定義から取得する。
     /// </summary>
-    /// <param name="stations">放送局一覧</param>
+    /// <param name="areaId">エリアID</param>
+    /// <param name="serviceId">サービスID</param>
     /// <param name="cancellationToken">キャンセル用トークン</param>
-    ValueTask UpsertRadiruStationsAsync(IEnumerable<NhkRadiruStation> stations, CancellationToken cancellationToken = default);
+    /// <returns>HLS URL。見つからない場合はnull</returns>
+    ValueTask<string?> GetRadiruHlsUrlByAreaAndServiceAsync(
+        string areaId,
+        string serviceId,
+        CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// 指定エリアのらじる★らじる放送局情報を取得する
+    /// 新しいエリア/サービス定義テーブルから、らじる★らじる局一覧を取得する。
+    /// </summary>
+    /// <param name="cancellationToken">キャンセル用トークン</param>
+    /// <returns>局一覧。定義が未登録の場合は空配列</returns>
+    ValueTask<List<RadiruStationEntry>> GetRadiruStationsFromAreaServicesAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// らじる★らじるのエリア定義とサービス定義を追加または更新する。
+    /// 対象エリアのサービス定義は新しい入力で置換される。
+    /// </summary>
+    /// <param name="areas">エリア定義</param>
+    /// <param name="services">サービス定義</param>
+    /// <param name="cancellationToken">キャンセル用トークン</param>
+    ValueTask UpsertRadiruAreasAndServicesAsync(
+        IEnumerable<NhkRadiruArea> areas,
+        IEnumerable<NhkRadiruAreaService> services,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// らじる★らじるの有効なエリアID/サービスID組を取得する。
+    /// </summary>
+    /// <param name="cancellationToken">キャンセル用トークン</param>
+    /// <returns>エリアID/サービスIDの組一覧</returns>
+    ValueTask<List<(string AreaId, string ServiceId)>> GetActiveRadiruAreaServiceKeysAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// 指定エリアIDの定義を取得する。
     /// </summary>
     /// <param name="areaId">エリアID</param>
     /// <param name="cancellationToken">キャンセル用トークン</param>
-    /// <returns>放送局情報</returns>
-    ValueTask<NhkRadiruStation> GetRadiruStationByAreaAsync(string areaId, CancellationToken cancellationToken = default);
+    /// <returns>エリア定義。存在しない場合はnull</returns>
+    ValueTask<NhkRadiruArea?> GetRadiruAreaByAreaIdAsync(string areaId, CancellationToken cancellationToken = default);
 }

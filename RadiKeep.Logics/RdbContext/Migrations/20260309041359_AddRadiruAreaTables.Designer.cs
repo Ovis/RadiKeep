@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using RadiKeep.Logics.RdbContext;
 
@@ -10,9 +11,11 @@ using RadiKeep.Logics.RdbContext;
 namespace RadiKeep.Logics.RdbContext.Migrations
 {
     [DbContext(typeof(RadioDbContext))]
-    partial class RadioDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260309041359_AddRadiruAreaTables")]
+    partial class AddRadiruAreaTables
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.2");
@@ -376,6 +379,75 @@ namespace RadiKeep.Logics.RdbContext.Migrations
                         .IsUnique();
 
                     b.ToTable("NhkRadiruPrograms");
+                });
+
+            modelBuilder.Entity("RadiKeep.Logics.RdbContext.NhkRadiruStation", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasColumnOrder(1);
+
+                    b.Property<string>("ApiKey")
+                        .IsRequired()
+                        .HasMaxLength(5)
+                        .HasColumnType("TEXT")
+                        .HasColumnOrder(4);
+
+                    b.Property<string>("AreaId")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("TEXT")
+                        .HasColumnOrder(2);
+
+                    b.Property<string>("AreaJpName")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("TEXT")
+                        .HasColumnOrder(3);
+
+                    b.Property<string>("DailyProgramApiUrlTemplate")
+                        .IsRequired()
+                        .HasMaxLength(250)
+                        .HasColumnType("TEXT")
+                        .HasColumnOrder(10);
+
+                    b.Property<string>("FmHls")
+                        .IsRequired()
+                        .HasMaxLength(250)
+                        .HasColumnType("TEXT")
+                        .HasColumnOrder(7);
+
+                    b.Property<string>("ProgramDetailApiUrlTemplate")
+                        .IsRequired()
+                        .HasMaxLength(250)
+                        .HasColumnType("TEXT")
+                        .HasColumnOrder(9);
+
+                    b.Property<string>("ProgramNowOnAirApiUrl")
+                        .IsRequired()
+                        .HasMaxLength(250)
+                        .HasColumnType("TEXT")
+                        .HasColumnOrder(8);
+
+                    b.Property<string>("R1Hls")
+                        .IsRequired()
+                        .HasMaxLength(250)
+                        .HasColumnType("TEXT")
+                        .HasColumnOrder(5);
+
+                    b.Property<string>("R2Hls")
+                        .IsRequired()
+                        .HasMaxLength(250)
+                        .HasColumnType("TEXT")
+                        .HasColumnOrder(6);
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AreaId", "ApiKey")
+                        .IsUnique();
+
+                    b.ToTable("NhkRadiruStations");
                 });
 
             modelBuilder.Entity("RadiKeep.Logics.RdbContext.Notification", b =>

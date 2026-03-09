@@ -3,8 +3,10 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Moq;
 using RadiKeep.Logics.Context;
+using RadiKeep.Logics.Domain.Station;
 using RadiKeep.Logics.Domain.ProgramSchedule;
 using RadiKeep.Logics.Errors;
+using RadiKeep.Logics.Infrastructure.Station;
 using RadiKeep.Logics.Logics.PlayProgramLogic;
 using RadiKeep.Logics.Logics.ProgramScheduleLogic;
 using RadiKeep.Logics.Logics.RadikoLogic;
@@ -108,7 +110,8 @@ public class PlayProgramLobLogicTests
         string stationId,
         bool isPremium,
         List<string> currentAreaStations,
-        IProgramScheduleRepository repository)
+        IProgramScheduleRepository repository,
+        IStationRepository? stationRepository = null)
     {
         var configMock = new Mock<IAppConfigurationService>();
         configMock.SetupGet(c => c.RadikoOptions).Returns(new Options.RadikoOptions
@@ -134,7 +137,6 @@ public class PlayProgramLobLogicTests
             httpClientFactory);
 
         var radikoApiClient = new FakeRadikoApiClient { StationsByArea = currentAreaStations };
-        var stationRepository = new FakeStationRepository();
         var httpClientFactoryMock = new Mock<IHttpClientFactory>();
         httpClientFactoryMock
             .Setup(x => x.CreateClient(It.IsAny<string>()))
@@ -143,7 +145,7 @@ public class PlayProgramLobLogicTests
             new Mock<ILogger<StationLobLogic>>().Object,
             configMock.Object,
             radikoApiClient,
-            stationRepository,
+            stationRepository ?? new FakeStationRepository(),
             radikoLogic,
             httpClientFactoryMock.Object,
             entryMapper);
@@ -256,6 +258,91 @@ public class PlayProgramLobLogicTests
         Assert.That(error, Is.Null);
         Assert.That(token, Is.EqualTo("token"));
         Assert.That(url, Is.EqualTo("https://f-radiko.smartstream.ne.jp/TBS/_definst_/simul-stream.stream/playlist.m3u8"));
+    }
+
+    [Test]
+    public async Task PlayRadiruProgramAsync_エリアサービス定義のURLで再生できる()
+    {
+        _dbContext.NhkRadiruPrograms.Add(new NhkRadiruProgram
+        {
+            ProgramId = "R1_1",
+            AreaId = "JP13",
+            StationId = "am",
+            Title = "NHK AM",
+            Subtitle = "Test",
+            RadioDate = DateOnly.FromDateTime(DateTime.UtcNow),
+            DaysOfWeek = DaysOfWeek.Monday,
+            StartTime = DateTimeOffset.UtcNow.AddMinutes(-5),
+            EndTime = DateTimeOffset.UtcNow.AddMinutes(30),
+            EventId = "ev",
+            SiteId = "site"
+        });
+        _dbContext.NhkRadiruAreas.Add(new NhkRadiruArea
+        {
+            AreaId = "JP13",
+            ApiKey = "JP13",
+            AreaJpName = "東京",
+            ProgramNowOnAirApiUrl = "https://example/noa",
+            ProgramDetailApiUrlTemplate = "https://example/detail/{area}",
+            DailyProgramApiUrlTemplate = "https://example/day/{area}"
+        });
+        _dbContext.NhkRadiruAreaServices.Add(new NhkRadiruAreaService
+        {
+            AreaId = "JP13",
+            ServiceId = "am",
+            ServiceName = "NHK AM",
+            HlsUrl = "https://new.example/am.m3u8",
+            IsActive = true
+        });
+        await _dbContext.SaveChangesAsync();
+
+        var logic = CreateTarget(
+            stationId: "TBS",
+            isPremium: true,
+            currentAreaStations: ["TBS"],
+            repository: new FakeProgramScheduleRepository(),
+            stationRepository: new StationRepository(_dbContext));
+
+        var (isSuccess, token, url, error) = await logic.PlayRadiruProgramAsync("R1_1");
+
+        Assert.That(isSuccess, Is.True);
+        Assert.That(error, Is.Null);
+        Assert.That(token, Is.Null);
+        Assert.That(url, Is.EqualTo("https://new.example/am.m3u8"));
+    }
+
+    [Test]
+    public async Task PlayRadiruProgramAsync_エリアサービス未登録時は失敗()
+    {
+        _dbContext.NhkRadiruPrograms.Add(new NhkRadiruProgram
+        {
+            ProgramId = "R1_2",
+            AreaId = "JP13",
+            StationId = "r1",
+            Title = "NHK R1",
+            Subtitle = "Test",
+            RadioDate = DateOnly.FromDateTime(DateTime.UtcNow),
+            DaysOfWeek = DaysOfWeek.Monday,
+            StartTime = DateTimeOffset.UtcNow.AddMinutes(-5),
+            EndTime = DateTimeOffset.UtcNow.AddMinutes(30),
+            EventId = "ev",
+            SiteId = "site"
+        });
+        await _dbContext.SaveChangesAsync();
+
+        var logic = CreateTarget(
+            stationId: "TBS",
+            isPremium: true,
+            currentAreaStations: ["TBS"],
+            repository: new FakeProgramScheduleRepository(),
+            stationRepository: new StationRepository(_dbContext));
+
+        var (isSuccess, token, url, error) = await logic.PlayRadiruProgramAsync("R1_2");
+
+        Assert.That(isSuccess, Is.False);
+        Assert.That(error, Is.TypeOf<DomainException>());
+        Assert.That(token, Is.Null);
+        Assert.That(url, Is.Null);
     }
 }
 

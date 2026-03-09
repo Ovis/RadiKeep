@@ -18,7 +18,8 @@ public class StationRepositoryTests : UnitTestBase
         _dbContext = DbContext;
         _dbContext.ChangeTracker.Clear();
         await _dbContext.Database.ExecuteSqlRawAsync("DELETE FROM RadikoStations");
-        await _dbContext.Database.ExecuteSqlRawAsync("DELETE FROM NhkRadiruStations");
+        await _dbContext.Database.ExecuteSqlRawAsync("DELETE FROM NhkRadiruAreaServices");
+        await _dbContext.Database.ExecuteSqlRawAsync("DELETE FROM NhkRadiruAreas");
         _repository = new StationRepository(_dbContext);
     }
 
@@ -51,15 +52,138 @@ public class StationRepositoryTests : UnitTestBase
         var hasAnyBefore = await _repository.HasAnyRadiruStationAsync();
         Assert.That(hasAnyBefore, Is.False);
 
-        await _repository.UpsertRadiruStationsAsync([
-            new NhkRadiruStation { AreaId = "JP13", ApiKey = "JP13", AreaJpName = "東京", R1Hls = "r1" }
+        await _repository.UpsertRadiruAreasAndServicesAsync(
+        [
+            new NhkRadiruArea
+            {
+                AreaId = "JP13",
+                ApiKey = "JP13",
+                AreaJpName = "東京",
+                ProgramNowOnAirApiUrl = "https://example/noa",
+                ProgramDetailApiUrlTemplate = "https://example/detail/{area}",
+                DailyProgramApiUrlTemplate = "https://example/day/{area}"
+            }
+        ],
+        [
+            new NhkRadiruAreaService
+            {
+                AreaId = "JP13",
+                ServiceId = "r1",
+                ServiceName = "R1",
+                HlsUrl = "https://example/r1.m3u8",
+                IsActive = true
+            }
         ]);
 
         var hasAnyAfter = await _repository.HasAnyRadiruStationAsync();
         Assert.That(hasAnyAfter, Is.True);
 
-        var station = await _repository.GetRadiruStationByAreaAsync("JP13");
-        Assert.That(station.AreaId, Is.EqualTo("JP13"));
+        var stations = await _repository.GetRadiruStationsFromAreaServicesAsync();
+        Assert.That(stations.Count, Is.EqualTo(1));
+        Assert.That(stations[0].AreaId, Is.EqualTo("JP13"));
+        Assert.That(stations[0].StationId, Is.EqualTo("r1"));
+    }
+
+    [Test]
+    public async Task GetRadiruHlsUrlByAreaAndServiceAsync_エリアサービス定義から取得する()
+    {
+        _dbContext.NhkRadiruAreas.Add(new NhkRadiruArea
+        {
+            AreaId = "JP13",
+            ApiKey = "JP13",
+            AreaJpName = "東京",
+            ProgramNowOnAirApiUrl = "https://example/noa",
+            ProgramDetailApiUrlTemplate = "https://example/detail/{area}",
+            DailyProgramApiUrlTemplate = "https://example/day/{area}"
+        });
+        _dbContext.NhkRadiruAreaServices.Add(new NhkRadiruAreaService
+        {
+            AreaId = "JP13",
+            ServiceId = "r1",
+            ServiceName = "R1",
+            HlsUrl = "https://new.example/r1.m3u8",
+            IsActive = true
+        });
+        await _dbContext.SaveChangesAsync();
+
+        var url = await _repository.GetRadiruHlsUrlByAreaAndServiceAsync("JP13", "r1");
+
+        Assert.That(url, Is.EqualTo("https://new.example/r1.m3u8"));
+    }
+
+    [Test]
+    public async Task GetRadiruHlsUrlByAreaAndServiceAsync_未登録時はnullを返す()
+    {
+        var url = await _repository.GetRadiruHlsUrlByAreaAndServiceAsync("JP13", "r1");
+
+        Assert.That(url, Is.Null);
+    }
+
+    [Test]
+    public async Task UpsertRadiruAreasAndServicesAsync_対象エリアのサービスを置換する()
+    {
+        await _repository.UpsertRadiruAreasAndServicesAsync(
+        [
+            new NhkRadiruArea
+            {
+                AreaId = "130",
+                AreaJpName = "東京",
+                ApiKey = "130",
+                ProgramNowOnAirApiUrl = "https://example/noa",
+                ProgramDetailApiUrlTemplate = "https://example/detail/{area}",
+                DailyProgramApiUrlTemplate = "https://example/day/{area}"
+            }
+        ],
+        [
+            new NhkRadiruAreaService
+            {
+                AreaId = "130",
+                ServiceId = "r1",
+                ServiceName = "R1",
+                HlsUrl = "https://example/r1.m3u8",
+                IsActive = true
+            },
+            new NhkRadiruAreaService
+            {
+                AreaId = "130",
+                ServiceId = "r2",
+                ServiceName = "R2",
+                HlsUrl = "https://example/r2.m3u8",
+                IsActive = true
+            }
+        ]);
+
+        await _repository.UpsertRadiruAreasAndServicesAsync(
+        [
+            new NhkRadiruArea
+            {
+                AreaId = "130",
+                AreaJpName = "東京",
+                ApiKey = "130",
+                ProgramNowOnAirApiUrl = "https://example/noa2",
+                ProgramDetailApiUrlTemplate = "https://example/detail2/{area}",
+                DailyProgramApiUrlTemplate = "https://example/day2/{area}"
+            }
+        ],
+        [
+            new NhkRadiruAreaService
+            {
+                AreaId = "130",
+                ServiceId = "r3",
+                ServiceName = "FM",
+                HlsUrl = "https://example/r3.m3u8",
+                IsActive = true
+            }
+        ]);
+
+        var area = await _dbContext.NhkRadiruAreas.SingleAsync(x => x.AreaId == "130");
+        var services = await _dbContext.NhkRadiruAreaServices
+            .Where(x => x.AreaId == "130")
+            .OrderBy(x => x.ServiceId)
+            .ToListAsync();
+
+        Assert.That(area.ProgramNowOnAirApiUrl, Is.EqualTo("https://example/noa2"));
+        Assert.That(services.Select(x => x.ServiceId).ToArray(), Is.EqualTo(new[] { "r3" }));
     }
 
     [TearDown]

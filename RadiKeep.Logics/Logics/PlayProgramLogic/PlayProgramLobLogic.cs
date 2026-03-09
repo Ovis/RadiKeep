@@ -5,7 +5,6 @@ using RadiKeep.Logics.Logics.ProgramScheduleLogic;
 using RadiKeep.Logics.Logics.RadikoLogic;
 using RadiKeep.Logics.Logics.RecordingLogic;
 using RadiKeep.Logics.Logics.StationLogic;
-using RadiKeep.Logics.Models.NhkRadiru;
 using RadiKeep.Logics.RdbContext;
 using ZLogger;
 
@@ -119,21 +118,7 @@ namespace RadiKeep.Logics.Logics.PlayProgramLogic
                 return (false, null, null, new DomainException("この番組はすでに放送終了しているため再生できません。"));
             }
 
-            var station = await dbContext.NhkRadiruStations
-                .FirstOrDefaultAsync(s => s.AreaId == program.AreaId);
-            if (station == null)
-            {
-                logger.ZLogError($"らじる再生処理で局情報の取得に失敗 programId={programId} areaId={program.AreaId} stationId={program.StationId}");
-                return (false, null, null, new DomainException("番組の再生ができませんでした。"));
-            }
-
-            var streamUrl = program.StationId.ToLowerInvariant() switch
-            {
-                var id when id == RadiruStationKind.R1.ServiceId => station.R1Hls,
-                var id when id == RadiruStationKind.R2.ServiceId => station.R2Hls,
-                var id when id == RadiruStationKind.FM.ServiceId => station.FmHls,
-                _ => string.Empty
-            };
+            var streamUrl = await stationLobLogic.GetRadiruHlsUrlByAreaAndServiceAsync(program.AreaId, program.StationId);
 
             if (!IsValidRadiruHlsUrl(streamUrl))
             {

@@ -194,9 +194,17 @@ namespace RadiKeep.Logics.Services
             return kind switch
             {
                 RadioServiceKind.Radiko => RadikoStationDic[stationId],
-                RadioServiceKind.Radiru => Enumeration.GetAll<RadiruStationKind>().Single(r => r.ServiceId == stationId).Name,
+                RadioServiceKind.Radiru => ResolveRadiruStationName(stationId),
                 _ => throw new DomainException("未対応のサービス種別です。")
             };
+        }
+
+        private static string ResolveRadiruStationName(string stationId)
+        {
+            var station = Enumeration.GetAll<RadiruStationKind>()
+                .FirstOrDefault(r => r.ServiceId == stationId);
+
+            return station?.Name ?? $"不明局({stationId})";
         }
 
 

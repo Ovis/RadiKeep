@@ -24,27 +24,33 @@ public class RadiruApiClient(
     private HttpClient HttpClient => httpClientFactory.CreateClient(HttpClientNames.Radiru);
 
     /// <summary>
-    ///  指定されたエリア、放送局、日付の番組表を取得する
+    /// 取得対象のエリアID/サービスID組一覧を取得
     /// </summary>
-    /// <param name="area"></param>
-    /// <param name="stationKind"></param>
-    /// <param name="date"></param>
-    /// <param name="cancellationToken">キャンセル用トークン</param>
-    /// <returns></returns>
+    public ValueTask<List<(string AreaId, string ServiceId)>> GetAvailableAreaServicesAsync(CancellationToken cancellationToken = default)
+        => stationLobLogic.GetActiveRadiruAreaServiceKeysAsync(cancellationToken);
+
+    /// <summary>
+    ///  指定されたエリアID、サービスID、日付の番組表を取得する
+    /// </summary>
     public async Task<List<RadiruProgramJsonEntity>> GetDailyProgramsAsync(
-        RadiruAreaKind area,
-        RadiruStationKind stationKind,
+        string areaId,
+        string serviceId,
         DateTimeOffset date,
         CancellationToken cancellationToken = default)
     {
         try
         {
-            var station = await stationLobLogic.GetNhkRadiruStationInformationByAreaAsync(area);
+            var dailyProgramApiUrlTemplate = await stationLobLogic.GetRadiruDailyProgramApiUrlTemplateAsync(areaId, cancellationToken);
+            if (string.IsNullOrWhiteSpace(dailyProgramApiUrlTemplate))
+            {
+                logger.ZLogWarning($"らじる★らじる番組表URLテンプレートが見つからないためスキップ areaId={areaId} serviceId={serviceId}");
+                return [];
+            }
 
-            var url = station.DailyProgramApiUrlTemplate
+            var url = dailyProgramApiUrlTemplate
                 .ToHttpsUrl()
-                .Replace("{area}", $"{(int)area}")
-                .Replace("{service}", $"{stationKind.ServiceId}")
+                .Replace("{area}", areaId)
+                .Replace("{service}", serviceId)
                 .Replace("[YYYY-MM-DD]", date.ToString("yyyy-MM-dd"));
 
             await WaitForRadiruRequestSlotAsync(cancellationToken);
@@ -96,7 +102,7 @@ public class RadiruApiClient(
         }
         catch (Exception ex)
         {
-            logger.ZLogError(ex, $"らじる★らじる API呼び出し中に例外が発生: エリア {area}, 放送局 {stationKind.Name}, 日付 {date:yyyy-MM-dd}");
+            logger.ZLogError(ex, $"らじる★らじる API呼び出し中に例外が発生: エリア {areaId}, 放送局 {serviceId}, 日付 {date:yyyy-MM-dd}");
             return [];
         }
     }

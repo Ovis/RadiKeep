@@ -47,7 +47,7 @@ public class RadiruRecordingSourceTests
             entryMapper);
     }
 
-    private static RadiruRecordingSource CreateTarget(NhkRadiruProgram? program, NhkRadiruStation station)
+    private static RadiruRecordingSource CreateTarget(NhkRadiruProgram? program, string? hlsUrl = null)
     {
         var configMock = new Mock<IAppConfigurationService>();
         var entryMapper = new EntryMapper(configMock.Object);
@@ -62,7 +62,13 @@ public class RadiruRecordingSourceTests
 
         var programScheduleLogic = CreateProgramScheduleLobLogic(repoMock.Object, entryMapper);
 
-        var stationRepository = new FakeStationRepository { RadiruStation = station };
+        var stationRepository = new FakeStationRepository();
+        if (!string.IsNullOrWhiteSpace(program?.AreaId) &&
+            !string.IsNullOrWhiteSpace(program?.StationId) &&
+            !string.IsNullOrWhiteSpace(hlsUrl))
+        {
+            stationRepository.RadiruStreamUrls[$"{program.AreaId}:{program.StationId}"] = hlsUrl;
+        }
         var radikoApiClient = new FakeRadikoApiClient();
         var radikoHttpClientFactory = new FakeHttpClientFactory(new HttpClient(new FakeHttpMessageHandler()));
         var radikoLogic = new RadikoUniqueProcessLogic(
@@ -92,8 +98,7 @@ public class RadiruRecordingSourceTests
     [Test]
     public void PrepareAsync_番組がない場合は失敗()
     {
-        var station = new NhkRadiruStation();
-        var target = CreateTarget(null, station);
+        var target = CreateTarget(null);
 
         var command = new RecordingCommand(
             ServiceKind: RadioServiceKind.Radiru,
@@ -127,13 +132,7 @@ public class RadiruRecordingSourceTests
             ProgramUrl = "http://example"
         };
 
-        var station = new NhkRadiruStation
-        {
-            AreaId = area,
-            R1Hls = "http://r1"
-        };
-
-        var target = CreateTarget(program, station);
+        var target = CreateTarget(program, "http://r1");
 
         var command = new RecordingCommand(
             ServiceKind: RadioServiceKind.Radiru,
@@ -167,13 +166,7 @@ public class RadiruRecordingSourceTests
             ProgramUrl = "http://example"
         };
 
-        var station = new NhkRadiruStation
-        {
-            AreaId = area,
-            R1Hls = "http://r1-hls"
-        };
-
-        var target = CreateTarget(program, station);
+        var target = CreateTarget(program, "http://r1-hls");
 
         var command = new RecordingCommand(
             ServiceKind: RadioServiceKind.Radiru,
@@ -188,6 +181,40 @@ public class RadiruRecordingSourceTests
         Assert.That(result.StreamUrl, Is.EqualTo("http://r1-hls"));
         Assert.That(result.Options.ServiceKind, Is.EqualTo(RadioServiceKind.Radiru));
         Assert.That(result.Options.IsTimeFree, Is.False);
+    }
+
+    [Test]
+    public void PrepareAsync_未知StationIdは業務例外を返す()
+    {
+        var area = RadiruAreaKind.東京.GetEnumCodeId();
+        var program = new NhkRadiruProgram
+        {
+            ProgramId = "R1_1",
+            StationId = "am",
+            AreaId = area,
+            Title = "NHK",
+            Subtitle = "Test",
+            RadioDate = DateOnly.FromDateTime(DateTime.UtcNow),
+            DaysOfWeek = DaysOfWeek.Monday,
+            StartTime = DateTimeOffset.Now.AddMinutes(10),
+            EndTime = DateTimeOffset.Now.AddMinutes(40),
+            EventId = "EV",
+            SiteId = "site",
+            ProgramUrl = "http://example"
+        };
+
+        var target = CreateTarget(program);
+
+        var command = new RecordingCommand(
+            ServiceKind: RadioServiceKind.Radiru,
+            ProgramId: "R1_1",
+            ProgramName: "Test",
+            IsTimeFree: false,
+            StartDelaySeconds: 0,
+            EndDelaySeconds: 0);
+
+        var ex = Assert.ThrowsAsync<DomainException>(async () => await target.PrepareAsync(command));
+        Assert.That(ex!.Message, Is.EqualTo("放送局の判定ができませんでした。"));
     }
 }
 

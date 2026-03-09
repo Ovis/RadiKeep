@@ -17,7 +17,7 @@ namespace RadiKeep.Controllers
         {
             var radikoStationList = await stationLobLogic.GetRadikoStationAsync();
 
-            var radiruStationList = stationLobLogic.GetRadiruStationAsync();
+            var radiruStationList = await stationLobLogic.GetRadiruStationAsync();
 
             return View(new KeywordReserveViewModel
             {

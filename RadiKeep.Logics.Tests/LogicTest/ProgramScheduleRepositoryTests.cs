@@ -23,7 +23,6 @@ public class ProgramScheduleRepositoryTests : UnitTestBase
         await _dbContext.Database.ExecuteSqlRawAsync("DELETE FROM RadikoPrograms");
         await _dbContext.Database.ExecuteSqlRawAsync("DELETE FROM RadikoStations");
         await _dbContext.Database.ExecuteSqlRawAsync("DELETE FROM NhkRadiruPrograms");
-        await _dbContext.Database.ExecuteSqlRawAsync("DELETE FROM NhkRadiruStations");
         await _dbContext.Database.ExecuteSqlRawAsync("DELETE FROM ScheduleJob");
         await _dbContext.Database.ExecuteSqlRawAsync("DELETE FROM AppConfigurations");
         _repository = new ProgramScheduleRepository(_dbContext);
