@@ -110,33 +110,20 @@ namespace RadiKeep.Logics.Logics.ProgramScheduleLogic
 
                 foreach (var programJsonEntity in programList)
                 {
-                    var onDemandContentUrl = SelectOnDemandContentUrl(programJsonEntity.About.Audio);
-                    var onDemandExpiresAtUtc = programJsonEntity.About.Audio.Expires == default
-                        ? (DateTime?)null
-                        : programJsonEntity.About.Audio.Expires.UtcDateTime;
-
-                    var entry = new NhkRadiruProgram
+                    if (!TryCreateRadiruProgramEntry(area, stationKind, programJsonEntity, out var entry, out var missingFields))
                     {
-                        ProgramId = $"{programJsonEntity.Id}",
-                        StationId = stationKind.ServiceId,
-                        AreaId = $"{area.GetEnumCodeId()}",
-                        RadioDate = programJsonEntity.StartDate.ToRadioDate(),
-                        DaysOfWeek = programJsonEntity.StartDate.ToRadioDayOfWeek().ToDaysOfWeek(),
-                        EventId = programJsonEntity.About.Id,
-                        StartTime = programJsonEntity.StartDate,
-                        EndTime = programJsonEntity.EndDate,
-                        Title = programJsonEntity.GetTitle(),
-                        Subtitle = programJsonEntity.IdentifierGroup.RadioEpisodeName.ToSafeName().To半角英数字(),
-                        Description = programJsonEntity.GetCombinedDescription(),
-                        Performer = programJsonEntity.GetCombinedActorsAndArtists(),
-                        SiteId = programJsonEntity.IdentifierGroup.SiteId,
-                        ImageUrl = programJsonEntity.About.PartOfSeries.Logo.Medium.Url,
-                        ProgramUrl = programJsonEntity.About.Url,
-                        OnDemandContentUrl = onDemandContentUrl,
-                        OnDemandExpiresAtUtc = onDemandExpiresAtUtc
-                    };
+                        logger.ZLogWarning(
+                            $"らじる★らじる番組を必須項目不足でスキップ areaId={area.GetEnumCodeId()} stationId={stationKind.ServiceId} programId={programJsonEntity.Id} missing=[{string.Join(", ", missingFields)}]");
+                        continue;
+                    }
 
                     entries.Add(entry);
+                }
+
+                if (entries.Count == 0)
+                {
+                    logger.ZLogWarning($"らじる★らじる番組で保存可能なエントリがありませんでした areaId={area.GetEnumCodeId()} stationId={stationKind.ServiceId} date={dt:yyyy-MM-dd}");
+                    return false;
                 }
 
                 await programScheduleRepository.UpsertRadiruProgramsAsync(entries);
@@ -146,6 +133,78 @@ namespace RadiKeep.Logics.Logics.ProgramScheduleLogic
                 logger.ZLogError(e, $"番組表更新処理に失敗");
                 throw;
             }
+
+            return true;
+        }
+
+        private static bool TryCreateRadiruProgramEntry(
+            RadiruAreaKind area,
+            RadiruStationKind stationKind,
+            RadiruProgramJsonEntity programJsonEntity,
+            out NhkRadiruProgram entry,
+            out List<string> missingFields)
+        {
+            missingFields = [];
+            var title = programJsonEntity.GetTitle();
+
+            if (string.IsNullOrWhiteSpace(programJsonEntity.Id))
+            {
+                missingFields.Add("id");
+            }
+
+            if (programJsonEntity.StartDate == default)
+            {
+                missingFields.Add("startDate");
+            }
+
+            if (programJsonEntity.EndDate == default)
+            {
+                missingFields.Add("endDate");
+            }
+
+            if (programJsonEntity.StartDate != default &&
+                programJsonEntity.EndDate != default &&
+                programJsonEntity.EndDate <= programJsonEntity.StartDate)
+            {
+                missingFields.Add("timeRange");
+            }
+
+            if (string.IsNullOrWhiteSpace(title))
+            {
+                missingFields.Add("title");
+            }
+
+            if (missingFields.Count > 0)
+            {
+                entry = new NhkRadiruProgram();
+                return false;
+            }
+
+            var onDemandContentUrl = SelectOnDemandContentUrl(programJsonEntity.About.Audio);
+            var onDemandExpiresAtUtc = programJsonEntity.About.Audio.Expires == default
+                ? (DateTime?)null
+                : programJsonEntity.About.Audio.Expires.UtcDateTime;
+
+            entry = new NhkRadiruProgram
+            {
+                ProgramId = $"{programJsonEntity.Id}",
+                StationId = stationKind.ServiceId,
+                AreaId = $"{area.GetEnumCodeId()}",
+                RadioDate = programJsonEntity.StartDate.ToRadioDate(),
+                DaysOfWeek = programJsonEntity.StartDate.ToRadioDayOfWeek().ToDaysOfWeek(),
+                EventId = programJsonEntity.About.Id,
+                StartTime = programJsonEntity.StartDate,
+                EndTime = programJsonEntity.EndDate,
+                Title = title,
+                Subtitle = programJsonEntity.IdentifierGroup.RadioEpisodeName.ToSafeName().To半角英数字(),
+                Description = programJsonEntity.GetCombinedDescription(),
+                Performer = programJsonEntity.GetCombinedActorsAndArtists(),
+                SiteId = programJsonEntity.IdentifierGroup.SiteId,
+                ImageUrl = programJsonEntity.About.PartOfSeries.Logo.Medium.Url,
+                ProgramUrl = programJsonEntity.About.Url,
+                OnDemandContentUrl = onDemandContentUrl,
+                OnDemandExpiresAtUtc = onDemandExpiresAtUtc
+            };
 
             return true;
         }

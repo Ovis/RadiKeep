@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Moq;
+using System.Reflection;
 using RadiKeep.Logics.Domain.Notification;
 using RadiKeep.Logics.Domain.ProgramSchedule;
 using RadiKeep.Logics.Errors;
@@ -12,6 +13,7 @@ using RadiKeep.Logics.Mappers;
 using RadiKeep.Logics.Models;
 using RadiKeep.Logics.Models.Enums;
 using RadiKeep.Logics.Models.NhkRadiru;
+using RadiKeep.Logics.Models.NhkRadiru.JsonEntity;
 using RadiKeep.Logics.Models.Radiko;
 using RadiKeep.Logics.Primitives.DataAnnotations;
 using RadiKeep.Logics.RdbContext;
@@ -562,6 +564,57 @@ public class ProgramScheduleLobLogicTests
         Assert.That(list.Count, Is.EqualTo(1));
         Assert.That(list[0].AreaName, Is.EqualTo("東京"));
         Assert.That(list[0].StationId, Is.EqualTo("r1"));
+    }
+
+    [Test]
+    public async Task UpsertDailyProgramDataAsync_必須項目不足はスキップして保存対象から除外()
+    {
+        var (logic, repoMock, _, _, radiruApiClient) = CreateTargetWithClients();
+        var now = DateTimeOffset.Now;
+
+        radiruApiClient.Programs =
+        [
+            new RadiruProgramJsonEntity
+            {
+                Id = "ok-1",
+                Name = "Valid",
+                StartDate = now,
+                EndDate = now.AddMinutes(30),
+                IdentifierGroup = new IdentifierGroup { RadioSeriesName = "ValidTitle" },
+                About = new About { Audio = new Audio() }
+            },
+            new RadiruProgramJsonEntity
+            {
+                Id = "ng-1",
+                Name = "",
+                StartDate = default,
+                EndDate = default,
+                IdentifierGroup = new IdentifierGroup(),
+                About = new About { Audio = new Audio() }
+            }
+        ];
+
+        IEnumerable<NhkRadiruProgram>? saved = null;
+        repoMock.Setup(r => r.UpsertRadiruProgramsAsync(It.IsAny<IEnumerable<NhkRadiruProgram>>(), It.IsAny<CancellationToken>()))
+            .Callback<IEnumerable<NhkRadiruProgram>, CancellationToken>((entries, _) => saved = entries.ToList())
+            .Returns(ValueTask.CompletedTask);
+
+        var method = typeof(ProgramScheduleLobLogic).GetMethod(
+            "UpsertDailyProgramDataAsync",
+            BindingFlags.NonPublic | BindingFlags.Instance);
+
+        Assert.That(method, Is.Not.Null);
+
+        var invoked = method!.Invoke(
+            logic,
+            [RadiruAreaKind.東京, RadiruStationKind.R1, now]);
+
+        var result = await (ValueTask<bool>)invoked!;
+
+        Assert.That(result, Is.True);
+        Assert.That(saved, Is.Not.Null);
+        Assert.That(saved!.Count(), Is.EqualTo(1));
+        Assert.That(saved.Single().ProgramId, Is.EqualTo("ok-1"));
     }
 
     /// <summary>
