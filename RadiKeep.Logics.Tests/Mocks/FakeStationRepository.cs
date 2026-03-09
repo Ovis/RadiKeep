@@ -62,4 +62,10 @@ public class FakeStationRepository : IStationRepository
 
     public ValueTask<List<RadiruStationEntry>> GetRadiruStationsFromAreaServicesAsync(CancellationToken cancellationToken = default)
         => ValueTask.FromResult(RadiruStationsFromAreaServices);
+
+    public ValueTask UpsertRadiruAreasAndServicesAsync(
+        IEnumerable<NhkRadiruArea> areas,
+        IEnumerable<NhkRadiruAreaService> services,
+        CancellationToken cancellationToken = default)
+        => ValueTask.CompletedTask;
 }

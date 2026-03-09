@@ -70,4 +70,16 @@ public interface IStationRepository
     /// <param name="cancellationToken">キャンセル用トークン</param>
     /// <returns>局一覧。定義が未登録の場合は空配列</returns>
     ValueTask<List<RadiruStationEntry>> GetRadiruStationsFromAreaServicesAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// らじる★らじるのエリア定義とサービス定義を追加または更新する。
+    /// 対象エリアのサービス定義は新しい入力で置換される。
+    /// </summary>
+    /// <param name="areas">エリア定義</param>
+    /// <param name="services">サービス定義</param>
+    /// <param name="cancellationToken">キャンセル用トークン</param>
+    ValueTask UpsertRadiruAreasAndServicesAsync(
+        IEnumerable<NhkRadiruArea> areas,
+        IEnumerable<NhkRadiruAreaService> services,
+        CancellationToken cancellationToken = default);
 }

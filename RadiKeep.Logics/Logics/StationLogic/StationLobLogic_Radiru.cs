@@ -130,6 +130,25 @@ namespace RadiKeep.Logics.Logics.StationLogic
 
             try
             {
+                var syncedAtUtc = DateTimeOffset.UtcNow;
+                var areaDefinitions = stationList
+                    .Select(x => new NhkRadiruArea
+                    {
+                        AreaId = x.AreaId,
+                        AreaJpName = x.AreaJpName,
+                        ApiKey = x.ApiKey,
+                        ProgramNowOnAirApiUrl = x.ProgramNowOnAirApiUrl,
+                        ProgramDetailApiUrlTemplate = x.ProgramDetailApiUrlTemplate,
+                        DailyProgramApiUrlTemplate = x.DailyProgramApiUrlTemplate,
+                        LastSyncedAtUtc = syncedAtUtc
+                    })
+                    .ToList();
+
+                var serviceDefinitions = stationList
+                    .SelectMany(x => EnumerateLegacyServices(x, syncedAtUtc))
+                    .ToList();
+
+                await stationRepository.UpsertRadiruAreasAndServicesAsync(areaDefinitions, serviceDefinitions);
                 await stationRepository.UpsertRadiruStationsAsync(stationList);
             }
             catch (Exception e)
@@ -192,6 +211,51 @@ namespace RadiKeep.Logics.Logics.StationLogic
                 .FirstOrDefault(r => r.ServiceId == stationId);
 
             return station?.Name ?? $"不明局({stationId})";
+        }
+
+        private static IEnumerable<NhkRadiruAreaService> EnumerateLegacyServices(NhkRadiruStation station, DateTimeOffset syncedAtUtc)
+        {
+            if (!string.IsNullOrWhiteSpace(station.R1Hls))
+            {
+                yield return new NhkRadiruAreaService
+                {
+                    AreaId = station.AreaId,
+                    ServiceId = "r1",
+                    ServiceName = ResolveRadiruStationName("r1"),
+                    HlsUrl = station.R1Hls,
+                    IsActive = true,
+                    SourceTag = "r1hls",
+                    LastSyncedAtUtc = syncedAtUtc
+                };
+            }
+
+            if (!string.IsNullOrWhiteSpace(station.R2Hls))
+            {
+                yield return new NhkRadiruAreaService
+                {
+                    AreaId = station.AreaId,
+                    ServiceId = "r2",
+                    ServiceName = ResolveRadiruStationName("r2"),
+                    HlsUrl = station.R2Hls,
+                    IsActive = true,
+                    SourceTag = "r2hls",
+                    LastSyncedAtUtc = syncedAtUtc
+                };
+            }
+
+            if (!string.IsNullOrWhiteSpace(station.FmHls))
+            {
+                yield return new NhkRadiruAreaService
+                {
+                    AreaId = station.AreaId,
+                    ServiceId = "r3",
+                    ServiceName = ResolveRadiruStationName("r3"),
+                    HlsUrl = station.FmHls,
+                    IsActive = true,
+                    SourceTag = "fmhls",
+                    LastSyncedAtUtc = syncedAtUtc
+                };
+            }
         }
 
     }

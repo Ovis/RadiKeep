@@ -115,6 +115,73 @@ public class StationRepositoryTests : UnitTestBase
         Assert.That(url, Is.EqualTo("https://legacy.example/r1.m3u8"));
     }
 
+    [Test]
+    public async Task UpsertRadiruAreasAndServicesAsync_対象エリアのサービスを置換する()
+    {
+        await _repository.UpsertRadiruAreasAndServicesAsync(
+        [
+            new NhkRadiruArea
+            {
+                AreaId = "130",
+                AreaJpName = "東京",
+                ApiKey = "130",
+                ProgramNowOnAirApiUrl = "https://example/noa",
+                ProgramDetailApiUrlTemplate = "https://example/detail/{area}",
+                DailyProgramApiUrlTemplate = "https://example/day/{area}"
+            }
+        ],
+        [
+            new NhkRadiruAreaService
+            {
+                AreaId = "130",
+                ServiceId = "r1",
+                ServiceName = "R1",
+                HlsUrl = "https://example/r1.m3u8",
+                IsActive = true
+            },
+            new NhkRadiruAreaService
+            {
+                AreaId = "130",
+                ServiceId = "r2",
+                ServiceName = "R2",
+                HlsUrl = "https://example/r2.m3u8",
+                IsActive = true
+            }
+        ]);
+
+        await _repository.UpsertRadiruAreasAndServicesAsync(
+        [
+            new NhkRadiruArea
+            {
+                AreaId = "130",
+                AreaJpName = "東京",
+                ApiKey = "130",
+                ProgramNowOnAirApiUrl = "https://example/noa2",
+                ProgramDetailApiUrlTemplate = "https://example/detail2/{area}",
+                DailyProgramApiUrlTemplate = "https://example/day2/{area}"
+            }
+        ],
+        [
+            new NhkRadiruAreaService
+            {
+                AreaId = "130",
+                ServiceId = "r3",
+                ServiceName = "FM",
+                HlsUrl = "https://example/r3.m3u8",
+                IsActive = true
+            }
+        ]);
+
+        var area = await _dbContext.NhkRadiruAreas.SingleAsync(x => x.AreaId == "130");
+        var services = await _dbContext.NhkRadiruAreaServices
+            .Where(x => x.AreaId == "130")
+            .OrderBy(x => x.ServiceId)
+            .ToListAsync();
+
+        Assert.That(area.ProgramNowOnAirApiUrl, Is.EqualTo("https://example/noa2"));
+        Assert.That(services.Select(x => x.ServiceId).ToArray(), Is.EqualTo(new[] { "r3" }));
+    }
+
     [TearDown]
     public void TearDown()
     {

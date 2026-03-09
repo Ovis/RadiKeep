@@ -248,4 +248,83 @@ public class StationRepository(RadioDbContext dbContext) : IStationRepository
             throw;
         }
     }
+
+    /// <summary>
+    /// らじる★らじるのエリア定義とサービス定義を追加または更新する
+    /// </summary>
+    public async ValueTask UpsertRadiruAreasAndServicesAsync(
+        IEnumerable<NhkRadiruArea> areas,
+        IEnumerable<NhkRadiruAreaService> services,
+        CancellationToken cancellationToken = default)
+    {
+        var areaList = areas
+            .Where(a => !string.IsNullOrWhiteSpace(a.AreaId))
+            .GroupBy(a => a.AreaId, StringComparer.OrdinalIgnoreCase)
+            .Select(g => g.First())
+            .ToList();
+        var areaIdSet = areaList
+            .Select(a => a.AreaId)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var serviceList = services
+            .Where(s => !string.IsNullOrWhiteSpace(s.AreaId))
+            .Where(s => !string.IsNullOrWhiteSpace(s.ServiceId))
+            .Where(s => !string.IsNullOrWhiteSpace(s.HlsUrl))
+            .Where(s => areaIdSet.Contains(s.AreaId))
+            .GroupBy(s => $"{s.AreaId}:{s.ServiceId}", StringComparer.OrdinalIgnoreCase)
+            .Select(g => g.First())
+            .ToList();
+
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        try
+        {
+            foreach (var area in areaList)
+            {
+                var existing = await dbContext.NhkRadiruAreas
+                    .Where(a => a.AreaId == area.AreaId)
+                    .SingleOrDefaultAsync(cancellationToken);
+
+                if (existing == null)
+                {
+                    await dbContext.NhkRadiruAreas.AddAsync(area, cancellationToken);
+                }
+                else
+                {
+                    existing.AreaJpName = area.AreaJpName;
+                    existing.ApiKey = area.ApiKey;
+                    existing.ProgramNowOnAirApiUrl = area.ProgramNowOnAirApiUrl;
+                    existing.ProgramDetailApiUrlTemplate = area.ProgramDetailApiUrlTemplate;
+                    existing.DailyProgramApiUrlTemplate = area.DailyProgramApiUrlTemplate;
+                    existing.LastSyncedAtUtc = area.LastSyncedAtUtc;
+                }
+            }
+
+            await dbContext.SaveChangesAsync(cancellationToken);
+
+            if (areaIdSet.Count > 0)
+            {
+                var oldServices = await dbContext.NhkRadiruAreaServices
+                    .Where(s => areaIdSet.Contains(s.AreaId))
+                    .ToListAsync(cancellationToken);
+
+                if (oldServices.Count > 0)
+                {
+                    dbContext.NhkRadiruAreaServices.RemoveRange(oldServices);
+                }
+            }
+
+            if (serviceList.Count > 0)
+            {
+                await dbContext.NhkRadiruAreaServices.AddRangeAsync(serviceList, cancellationToken);
+            }
+
+            await dbContext.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+        }
+        catch
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            throw;
+        }
+    }
 }
