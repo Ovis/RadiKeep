@@ -11,6 +11,7 @@ public class FakeStationRepository : IStationRepository
 {
     public List<RadikoStation> RadikoStations { get; set; } = [];
     public NhkRadiruStation RadiruStation { get; set; } = new();
+    public Dictionary<string, string> RadiruStreamUrls { get; } = new(StringComparer.OrdinalIgnoreCase);
 
     public ValueTask<bool> HasAnyRadikoStationAsync(CancellationToken cancellationToken = default)
         => ValueTask.FromResult(RadikoStations.Count != 0);
@@ -34,5 +35,27 @@ public class FakeStationRepository : IStationRepository
     {
         RadiruStation.AreaId = areaId;
         return ValueTask.FromResult(RadiruStation);
+    }
+
+    public ValueTask<string?> GetRadiruHlsUrlByAreaAndServiceAsync(
+        string areaId,
+        string serviceId,
+        CancellationToken cancellationToken = default)
+    {
+        var key = $"{areaId}:{serviceId}";
+        if (RadiruStreamUrls.TryGetValue(key, out var url))
+        {
+            return ValueTask.FromResult<string?>(url);
+        }
+
+        var fallback = serviceId.ToLowerInvariant() switch
+        {
+            "r1" => RadiruStation.R1Hls,
+            "r2" => RadiruStation.R2Hls,
+            "r3" => RadiruStation.FmHls,
+            _ => null
+        };
+
+        return ValueTask.FromResult<string?>(fallback);
     }
 }

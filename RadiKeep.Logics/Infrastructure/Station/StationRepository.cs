@@ -152,4 +152,65 @@ public class StationRepository(RadioDbContext dbContext) : IStationRepository
             throw;
         }
     }
+
+    /// <summary>
+    /// 指定エリアとサービスIDに対応するらじる★らじるHLS URLを取得する
+    /// </summary>
+    public async ValueTask<string?> GetRadiruHlsUrlByAreaAndServiceAsync(
+        string areaId,
+        string serviceId,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedServiceId = serviceId?.Trim().ToLowerInvariant() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(areaId) || string.IsNullOrWhiteSpace(normalizedServiceId))
+        {
+            return null;
+        }
+
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+
+        try
+        {
+            var serviceUrl = await dbContext.NhkRadiruAreaServices
+                .AsNoTracking()
+                .Where(s => s.AreaId == areaId && s.IsActive)
+                .Where(s => s.ServiceId.ToLower() == normalizedServiceId)
+                .Select(s => s.HlsUrl)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (!string.IsNullOrWhiteSpace(serviceUrl))
+            {
+                await transaction.CommitAsync(cancellationToken);
+                return serviceUrl;
+            }
+
+            var legacyStation = await dbContext.NhkRadiruStations
+                .AsNoTracking()
+                .Where(r => r.AreaId == areaId)
+                .SingleOrDefaultAsync(cancellationToken);
+
+            var legacyUrl = legacyStation is null
+                ? null
+                : ResolveLegacyRadiruHlsUrl(legacyStation, normalizedServiceId);
+
+            await transaction.CommitAsync(cancellationToken);
+            return string.IsNullOrWhiteSpace(legacyUrl) ? null : legacyUrl;
+        }
+        catch
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            throw;
+        }
+    }
+
+    private static string? ResolveLegacyRadiruHlsUrl(NhkRadiruStation station, string normalizedServiceId)
+    {
+        return normalizedServiceId switch
+        {
+            "r1" => station.R1Hls,
+            "r2" => station.R2Hls,
+            "r3" => station.FmHls,
+            _ => null
+        };
+    }
 }

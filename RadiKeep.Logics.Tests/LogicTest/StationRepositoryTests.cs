@@ -18,6 +18,8 @@ public class StationRepositoryTests : UnitTestBase
         _dbContext = DbContext;
         _dbContext.ChangeTracker.Clear();
         await _dbContext.Database.ExecuteSqlRawAsync("DELETE FROM RadikoStations");
+        await _dbContext.Database.ExecuteSqlRawAsync("DELETE FROM NhkRadiruAreaServices");
+        await _dbContext.Database.ExecuteSqlRawAsync("DELETE FROM NhkRadiruAreas");
         await _dbContext.Database.ExecuteSqlRawAsync("DELETE FROM NhkRadiruStations");
         _repository = new StationRepository(_dbContext);
     }
@@ -60,6 +62,57 @@ public class StationRepositoryTests : UnitTestBase
 
         var station = await _repository.GetRadiruStationByAreaAsync("JP13");
         Assert.That(station.AreaId, Is.EqualTo("JP13"));
+    }
+
+    [Test]
+    public async Task GetRadiruHlsUrlByAreaAndServiceAsync_新テーブルを優先する()
+    {
+        _dbContext.NhkRadiruStations.Add(new NhkRadiruStation
+        {
+            AreaId = "JP13",
+            ApiKey = "JP13",
+            AreaJpName = "東京",
+            R1Hls = "https://legacy.example/r1.m3u8"
+        });
+        _dbContext.NhkRadiruAreas.Add(new NhkRadiruArea
+        {
+            AreaId = "JP13",
+            ApiKey = "JP13",
+            AreaJpName = "東京",
+            ProgramNowOnAirApiUrl = "https://example/noa",
+            ProgramDetailApiUrlTemplate = "https://example/detail/{area}",
+            DailyProgramApiUrlTemplate = "https://example/day/{area}"
+        });
+        _dbContext.NhkRadiruAreaServices.Add(new NhkRadiruAreaService
+        {
+            AreaId = "JP13",
+            ServiceId = "r1",
+            ServiceName = "R1",
+            HlsUrl = "https://new.example/r1.m3u8",
+            IsActive = true
+        });
+        await _dbContext.SaveChangesAsync();
+
+        var url = await _repository.GetRadiruHlsUrlByAreaAndServiceAsync("JP13", "r1");
+
+        Assert.That(url, Is.EqualTo("https://new.example/r1.m3u8"));
+    }
+
+    [Test]
+    public async Task GetRadiruHlsUrlByAreaAndServiceAsync_新テーブル未登録時は旧テーブルにフォールバック()
+    {
+        _dbContext.NhkRadiruStations.Add(new NhkRadiruStation
+        {
+            AreaId = "JP13",
+            ApiKey = "JP13",
+            AreaJpName = "東京",
+            R1Hls = "https://legacy.example/r1.m3u8"
+        });
+        await _dbContext.SaveChangesAsync();
+
+        var url = await _repository.GetRadiruHlsUrlByAreaAndServiceAsync("JP13", "r1");
+
+        Assert.That(url, Is.EqualTo("https://legacy.example/r1.m3u8"));
     }
 
     [TearDown]

@@ -4,9 +4,7 @@ using RadiKeep.Logics.Domain.Recording;
 using RadiKeep.Logics.Logics.ProgramScheduleLogic;
 using RadiKeep.Logics.Logics.StationLogic;
 using RadiKeep.Logics.Models.Enums;
-using RadiKeep.Logics.Models.NhkRadiru;
 using RadiKeep.Logics.Primitives;
-using RadiKeep.Logics.Primitives.DataAnnotations;
 using ZLogger;
 
 namespace RadiKeep.Logics.Infrastructure.Recording;
@@ -66,22 +64,16 @@ public class RadiruRecordingSource(
         }
         else
         {
-            var radiruAreaKind = Enum.GetValues<RadiruAreaKind>().First(r => r.GetEnumCodeId() == program.AreaId);
-            var stationInformation = await stationLobLogic.GetNhkRadiruStationInformationByAreaAsync(radiruAreaKind);
-            var radiruStationKind = Enumeration.GetAll<RadiruStationKind>().FirstOrDefault(r => r.ServiceId == program.StationId);
-            if (radiruStationKind == null)
+            streamUrl = await stationLobLogic.GetRadiruHlsUrlByAreaAndServiceAsync(
+                program.AreaId,
+                program.StationId,
+                cancellationToken) ?? string.Empty;
+
+            if (string.IsNullOrWhiteSpace(streamUrl))
             {
-                logger.ZLogWarning($"らじる★らじるの放送局IDが未知のため録音できません。 stationId={program.StationId} programId={program.ProgramId}");
+                logger.ZLogWarning($"らじる★らじるの放送局URLが解決できないため録音できません。 areaId={program.AreaId} stationId={program.StationId} programId={program.ProgramId}");
                 throw new DomainException("放送局の判定ができませんでした。");
             }
-
-            streamUrl = radiruStationKind switch
-            {
-                not null when radiruStationKind == RadiruStationKind.R1 => stationInformation.R1Hls,
-                not null when radiruStationKind == RadiruStationKind.R2 => stationInformation.R2Hls,
-                not null when radiruStationKind == RadiruStationKind.FM => stationInformation.FmHls,
-                _ => throw new DomainException("放送局の判定ができませんでした。"),
-            };
         }
 
         var programInfo = new ProgramRecordingInfo(

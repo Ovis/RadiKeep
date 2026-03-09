@@ -138,6 +138,29 @@ namespace RadiKeep.Logics.Logics.StationLogic
             return station;
         }
 
+        /// <summary>
+        /// 指定エリアとサービスIDかららじる★らじるのHLS URLを取得
+        /// </summary>
+        /// <param name="areaId">エリアID</param>
+        /// <param name="serviceId">サービスID</param>
+        /// <param name="cancellationToken">キャンセル用トークン</param>
+        /// <returns>HLS URL。未取得時はnull</returns>
+        public async ValueTask<string?> GetRadiruHlsUrlByAreaAndServiceAsync(
+            string areaId,
+            string serviceId,
+            CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                return await stationRepository.GetRadiruHlsUrlByAreaAndServiceAsync(areaId, serviceId, cancellationToken);
+            }
+            catch (Exception e)
+            {
+                logger.ZLogError(e, $"らじる★らじるのHLS URL取得に失敗 areaId={areaId} serviceId={serviceId}");
+                throw;
+            }
+        }
+
     }
 }
 

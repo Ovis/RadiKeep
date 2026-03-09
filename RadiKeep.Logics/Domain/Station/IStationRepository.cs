@@ -49,4 +49,17 @@ public interface IStationRepository
     /// <param name="cancellationToken">キャンセル用トークン</param>
     /// <returns>放送局情報</returns>
     ValueTask<NhkRadiruStation> GetRadiruStationByAreaAsync(string areaId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// 指定エリアとサービスIDに対応するらじる★らじるHLS URLを取得する。
+    /// 新テーブルを優先し、未存在時は旧テーブルにフォールバックする。
+    /// </summary>
+    /// <param name="areaId">エリアID</param>
+    /// <param name="serviceId">サービスID</param>
+    /// <param name="cancellationToken">キャンセル用トークン</param>
+    /// <returns>HLS URL。見つからない場合はnull</returns>
+    ValueTask<string?> GetRadiruHlsUrlByAreaAndServiceAsync(
+        string areaId,
+        string serviceId,
+        CancellationToken cancellationToken = default);
 }
