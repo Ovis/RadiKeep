@@ -6,6 +6,7 @@ namespace RadiKeep.Logics.Infrastructure.Recording;
 public static class TemporaryStoragePaths
 {
     public const string RecordingsWorkDirectoryName = "recordings-work";
+    public const string SaveFailedDirectoryName = "save-failed";
     public const string HlsCacheDirectoryName = "hls-cache";
     public const string TimeFreeWorkDirectoryName = "timefree-work";
     public const string LogoImageDirectoryName = "logo-image";
@@ -18,6 +19,11 @@ public static class TemporaryStoragePaths
     public static string GetHlsCacheRootDirectory(string temporaryRoot)
     {
         return Path.Combine(temporaryRoot, HlsCacheDirectoryName);
+    }
+
+    public static string GetSaveFailedDirectory(string temporaryRoot)
+    {
+        return Path.Combine(temporaryRoot, SaveFailedDirectoryName);
     }
 
     public static string GetTimeFreeWorkDirectory(string temporaryRoot)

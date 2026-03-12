@@ -28,4 +28,15 @@ public interface IMediaStorageService
     /// <param name="path">パス情報</param>
     /// <param name="cancellationToken">キャンセル用トークン</param>
     ValueTask CleanupTempAsync(MediaPath path, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// 最終保存に失敗した一時ファイルを退避保存する
+    /// </summary>
+    /// <param name="path">パス情報</param>
+    /// <param name="metadata">退避時メタ情報</param>
+    /// <param name="cancellationToken">キャンセル用トークン</param>
+    ValueTask<SaveFailedFallbackResult> SaveFailedAsync(
+        MediaPath path,
+        SaveFailedFallbackMetadata metadata,
+        CancellationToken cancellationToken = default);
 }
