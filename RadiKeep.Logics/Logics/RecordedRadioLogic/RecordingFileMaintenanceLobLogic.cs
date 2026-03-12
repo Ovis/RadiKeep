@@ -24,13 +24,19 @@ public class RecordingFileMaintenanceLobLogic(
         var rootPath = GetRootPath();
         var records = await LoadRecordEntriesAsync(cancellationToken);
         var fileIndex = BuildFileIndex(rootPath);
+        var usedPaths = records
+            .Where(entry => File.Exists(entry.ResolvedFullPath))
+            .Select(entry => entry.ResolvedFullPath)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         var missingEntries = records
             .Where(entry => !File.Exists(entry.ResolvedFullPath))
             .Select(entry =>
             {
                 fileIndex.TryGetValue(entry.FileName, out var candidates);
-                var candidatePaths = candidates ?? [];
+                var candidatePaths = (candidates ?? [])
+                    .Where(path => !usedPaths.Contains(path))
+                    .ToList();
                 return new RecordingFileMaintenanceEntry
                 {
                     IssueType = "missing_file",

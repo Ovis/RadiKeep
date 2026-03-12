@@ -89,6 +89,24 @@ public class RecordingFileMaintenanceLobLogicTests : UnitTestBase
     }
 
     [Test]
+    public async Task ScanMissingRecordsAsync_他レコード参照中の候補は除外される()
+    {
+        var inUsePath = Path.Combine(_rootPath, "in-use", "shared.mp3");
+        await AddRecordingAsync(inUsePath, "InUseRecord", true);
+
+        var missingStoredPath = Path.Combine("missing", "shared.mp3");
+        await AddRecordingAsync(Path.Combine(_rootPath, missingStoredPath), "MissingRecord", false);
+
+        var result = await _logic.ScanMissingRecordsAsync();
+
+        Assert.That(result.MissingCount, Is.EqualTo(1));
+        Assert.That(result.Entries.Count(x => x.IssueType == "missing_file"), Is.EqualTo(1));
+        var missingEntry = result.Entries.Single(x => x.IssueType == "missing_file");
+        Assert.That(missingEntry.CandidateCount, Is.EqualTo(0));
+        Assert.That(missingEntry.CandidateRelativePaths, Is.Empty);
+    }
+
+    [Test]
     public async Task DeleteMissingRecordsAsync_欠損レコードをDBから削除できる()
     {
         var missingPath = Path.Combine("missing", "delete-target.mp3");
