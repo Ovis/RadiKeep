@@ -384,10 +384,10 @@ public class RecordingOrchestratorTests
     }
 
     /// <summary>
-    /// 異常系: Commit失敗時はCleanupが実行される
+    /// 異常系: Commit失敗時は退避保存され、Cleanupは実行されない
     /// </summary>
     [Test]
-    public async Task RecordAsync_CommitThrows_Cleanup実行()
+    public async Task RecordAsync_CommitThrows_退避保存してCleanupしない()
     {
         var logger = new Mock<ILogger<RecordingOrchestrator>>().Object;
 
@@ -441,7 +441,9 @@ public class RecordingOrchestratorTests
         var result = await orchestrator.RecordAsync(command);
 
         Assert.That(result.IsSuccess, Is.False);
-        Assert.That(storage.IsCleanupCalled, Is.True);
+        Assert.That(storage.IsSaveFailedCalled, Is.True);
+        Assert.That(storage.IsCleanupCalled, Is.False);
+        Assert.That(result.ErrorMessage, Is.EqualTo("録音は完了しましたが、保存先エラーのため正式保存できませんでした（退避済み）"));
     }
 
     /// <summary>
@@ -576,6 +578,7 @@ public class RecordingOrchestratorTests
     private sealed class ThrowingMediaStorageService : IMediaStorageService
     {
         public bool IsCleanupCalled { get; private set; }
+        public bool IsSaveFailedCalled { get; private set; }
 
         public ValueTask<MediaPath> PrepareAsync(ProgramRecordingInfo programInfo, RecordingOptions options, CancellationToken cancellationToken = default)
             => ValueTask.FromResult(new MediaPath("temp.m4a", "final.m4a", "rel\\final.m4a"));
@@ -587,6 +590,15 @@ public class RecordingOrchestratorTests
         {
             IsCleanupCalled = true;
             return ValueTask.CompletedTask;
+        }
+
+        public ValueTask<SaveFailedFallbackResult> SaveFailedAsync(
+            MediaPath path,
+            SaveFailedFallbackMetadata metadata,
+            CancellationToken cancellationToken = default)
+        {
+            IsSaveFailedCalled = true;
+            return ValueTask.FromResult(new SaveFailedFallbackResult("save-failed\\fallback.m4a", "save-failed\\fallback.m4a.meta.json"));
         }
     }
 
@@ -612,6 +624,12 @@ public class RecordingOrchestratorTests
 
         public ValueTask CleanupTempAsync(MediaPath path, CancellationToken cancellationToken = default)
             => ValueTask.CompletedTask;
+
+        public ValueTask<SaveFailedFallbackResult> SaveFailedAsync(
+            MediaPath path,
+            SaveFailedFallbackMetadata metadata,
+            CancellationToken cancellationToken = default)
+            => ValueTask.FromResult(new SaveFailedFallbackResult("save-failed\\fallback.m4a", "save-failed\\fallback.m4a.meta.json"));
     }
 
     private sealed class RetryAwareRecordingSource(RadioServiceKind kind, RecordingSourceResult result)

@@ -169,6 +169,56 @@ public class MediaStorageServiceTests
     }
 
     /// <summary>
+    /// 最終保存失敗時に一時保存領域へ退避し、メタ情報を出力する
+    /// </summary>
+    [Test]
+    public async Task SaveFailedAsync_退避保存とメタ情報出力()
+    {
+        var baseDir = CreateTempDirectory();
+        var tempDir = CreateTempDirectory();
+
+        try
+        {
+            var configMock = CreateConfig(baseDir, tempDir, null, null);
+            var service = new MediaStorageService(configMock.Object);
+            var program = CreateProgramInfo();
+            var path = await service.PrepareAsync(program, CreateOptions());
+
+            File.WriteAllText(path.TempFilePath, "temp-recorded");
+
+            var result = await service.SaveFailedAsync(
+                path,
+                new SaveFailedFallbackMetadata(
+                    RecordedAt: DateTimeOffset.UtcNow,
+                    ProgramId: "P1",
+                    StationId: "TBS",
+                    Title: "TestTitle",
+                    OriginalDestinationPath: path.FinalFilePath,
+                    ErrorType: "UnauthorizedAccessException",
+                    ErrorMessage: "Access denied",
+                    ExpectedTags: new Dictionary<string, string>
+                    {
+                        ["title"] = "TestTitle",
+                        ["artist"] = "Tester",
+                        ["comment"] = "Desc",
+                        ["date"] = "2026-02-09T03:00:00.0000000+00:00"
+                    }));
+
+            var saveFailedRoot = Path.Combine(tempDir, TemporaryStoragePaths.SaveFailedDirectoryName);
+            Assert.That(result.FilePath, Does.StartWith(saveFailedRoot));
+            Assert.That(File.Exists(result.FilePath), Is.True);
+            Assert.That(File.Exists(path.TempFilePath), Is.False);
+            Assert.That(result.MetadataPath, Is.Not.Null.And.Not.Empty);
+            Assert.That(File.Exists(result.MetadataPath!), Is.True);
+        }
+        finally
+        {
+            SafeDeleteDirectory(baseDir);
+            SafeDeleteDirectory(tempDir);
+        }
+    }
+
+    /// <summary>
     /// 全トークンが期待どおりに展開される
     /// </summary>
     [Test]

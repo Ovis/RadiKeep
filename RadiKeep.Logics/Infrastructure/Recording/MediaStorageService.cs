@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using RadiKeep.Logics.Errors;
 using RadiKeep.Logics.Domain.Recording;
@@ -88,6 +89,73 @@ public class MediaStorageService(
         }
 
         return ValueTask.CompletedTask;
+    }
+
+    /// <summary>
+    /// 最終保存に失敗した一時ファイルを退避保存する
+    /// </summary>
+    public async ValueTask<SaveFailedFallbackResult> SaveFailedAsync(
+        MediaPath path,
+        SaveFailedFallbackMetadata metadata,
+        CancellationToken cancellationToken = default)
+    {
+        var saveFailedDir = TemporaryStoragePaths.GetSaveFailedDirectory(config.TemporaryFileSaveDir);
+        Directory.CreateDirectory(saveFailedDir);
+
+        var originalName = Path.GetFileNameWithoutExtension(path.FinalFilePath);
+        if (string.IsNullOrWhiteSpace(originalName))
+        {
+            originalName = Path.GetFileNameWithoutExtension(path.TempFilePath);
+        }
+
+        if (string.IsNullOrWhiteSpace(originalName))
+        {
+            originalName = "recording";
+        }
+
+        var originalExtension = Path.GetExtension(path.FinalFilePath);
+        if (string.IsNullOrWhiteSpace(originalExtension))
+        {
+            originalExtension = Path.GetExtension(path.TempFilePath);
+        }
+
+        if (string.IsNullOrWhiteSpace(originalExtension))
+        {
+            originalExtension = ".m4a";
+        }
+
+        var fallbackFileName = $"{originalName}_save_failed_{DateTimeOffset.UtcNow:yyyyMMddHHmmss}_{Ulid.NewUlid()}{originalExtension}";
+        var fallbackFilePath = Path.Combine(saveFailedDir, fallbackFileName);
+
+        File.Move(path.TempFilePath, fallbackFilePath);
+
+        string? metadataPath = null;
+        try
+        {
+            metadataPath = $"{fallbackFilePath}.meta.json";
+            var payload = new
+            {
+                metadata.RecordedAt,
+                metadata.ProgramId,
+                metadata.StationId,
+                metadata.Title,
+                metadata.OriginalDestinationPath,
+                FallbackPath = fallbackFilePath,
+                metadata.ErrorType,
+                metadata.ErrorMessage,
+                metadata.ExpectedTags
+            };
+
+            var json = JsonSerializer.Serialize(payload, new JsonSerializerOptions { WriteIndented = true });
+            await File.WriteAllTextAsync(metadataPath, json, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            logger?.ZLogWarning(ex, $"退避保存メタ情報の出力に失敗しました。 fallbackPath={fallbackFilePath}");
+            metadataPath = null;
+        }
+
+        return new SaveFailedFallbackResult(fallbackFilePath, metadataPath);
     }
 
     /// <summary>

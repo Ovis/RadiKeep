@@ -44,4 +44,12 @@ public class FakeMediaStorageService : IMediaStorageService
         IsCleanupCalled = true;
         return ValueTask.CompletedTask;
     }
+
+    public ValueTask<SaveFailedFallbackResult> SaveFailedAsync(
+        MediaPath path,
+        SaveFailedFallbackMetadata metadata,
+        CancellationToken cancellationToken = default)
+    {
+        return ValueTask.FromResult(new SaveFailedFallbackResult("save-failed\\fallback.m4a", "save-failed\\fallback.m4a.meta.json"));
+    }
 }
