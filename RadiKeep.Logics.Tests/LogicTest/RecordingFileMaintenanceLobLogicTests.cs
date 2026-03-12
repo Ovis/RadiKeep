@@ -101,7 +101,44 @@ public class RecordingFileMaintenanceLobLogicTests : UnitTestBase
         Assert.That(await DbContext.Recordings.FindAsync(recordingId), Is.Null);
     }
 
-    private async ValueTask<Ulid> AddRecordingAsync(string fullPath, string title, bool createFile = true)
+    [Test]
+    public async Task ScanMissingRecordsAsync_Failedかつファイル存在レコードを復旧候補として抽出できる()
+    {
+        var failedPath = Path.Combine(_rootPath, "recover", "failed-target.mp3");
+        var failedId = await AddRecordingAsync(failedPath, "RecoverTarget", true, RecordingState.Failed, "保存エラー");
+
+        var result = await _logic.ScanMissingRecordsAsync();
+
+        Assert.That(result.RecoverableFailedCount, Is.EqualTo(1));
+        var target = result.Entries.SingleOrDefault(x => x.RecordingId == failedId.ToString());
+        Assert.That(target, Is.Not.Null);
+        Assert.That(target!.IssueType, Is.EqualTo("failed_with_existing_file"));
+    }
+
+    [Test]
+    public async Task RelinkMissingRecordsAsync_Failedかつファイル存在レコードをCompletedへ復旧できる()
+    {
+        var failedPath = Path.Combine(_rootPath, "recover", "failed-to-completed.mp3");
+        var failedId = await AddRecordingAsync(failedPath, "RecoverActionTarget", true, RecordingState.Failed, "保存エラー");
+
+        var result = await _logic.RelinkMissingRecordsAsync([failedId]);
+
+        Assert.That(result.TargetCount, Is.EqualTo(1));
+        Assert.That(result.SuccessCount, Is.EqualTo(1));
+        Assert.That(result.FailCount, Is.EqualTo(0));
+
+        var recording = await DbContext.Recordings.FindAsync(failedId);
+        Assert.That(recording, Is.Not.Null);
+        Assert.That(recording!.State, Is.EqualTo(RecordingState.Completed));
+        Assert.That(recording.ErrorMessage, Is.Null);
+    }
+
+    private async ValueTask<Ulid> AddRecordingAsync(
+        string fullPath,
+        string title,
+        bool createFile = true,
+        RecordingState state = RecordingState.Completed,
+        string? errorMessage = null)
     {
         if (createFile)
         {
@@ -121,8 +158,8 @@ public class RecordingFileMaintenanceLobLogicTests : UnitTestBase
             StartDateTime = DateTimeOffset.UtcNow.AddHours(-1).UtcDateTime,
             EndDateTime = DateTimeOffset.UtcNow.UtcDateTime,
             IsTimeFree = false,
-            State = RecordingState.Completed,
-            ErrorMessage = null,
+            State = state,
+            ErrorMessage = errorMessage,
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow,
             SourceType = RecordingSourceType.Recorded

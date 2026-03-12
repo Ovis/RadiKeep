@@ -6,6 +6,11 @@ namespace RadiKeep.Logics.Models.ExternalImport;
 public class RecordingFileMaintenanceEntry
 {
     /// <summary>
+    /// 問題種別（missing_file / failed_with_existing_file）
+    /// </summary>
+    public string IssueType { get; set; } = "missing_file";
+
+    /// <summary>
     /// 録音ID
     /// </summary>
     public string RecordingId { get; set; } = string.Empty;
@@ -50,6 +55,11 @@ public class RecordingFileMaintenanceScanResult
     /// 欠損レコード数
     /// </summary>
     public int MissingCount { get; set; }
+
+    /// <summary>
+    /// ファイル実在のFailedレコード数
+    /// </summary>
+    public int RecoverableFailedCount { get; set; }
 
     /// <summary>
     /// 欠損レコード一覧
