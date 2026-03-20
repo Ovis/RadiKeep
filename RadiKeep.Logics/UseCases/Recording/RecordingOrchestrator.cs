@@ -29,6 +29,7 @@ public class RecordingOrchestrator(
         Ulid? recordingId = null;
         MediaPath? mediaPath = null;
         var isCommitted = false;
+        var shouldPreserveTempFile = false;
 
         // 例外が起きても録音フローを中断しないように安全に状態更新を行う
         async ValueTask UpdateStateSafeAsync(RecordingState state, string? message)
@@ -95,7 +96,7 @@ public class RecordingOrchestrator(
         // コミット前に失敗した場合は一時ファイルを確実に削除する
         async ValueTask CleanupTempSafeAsync()
         {
-            if (mediaPath == null || isCommitted)
+            if (mediaPath == null || isCommitted || shouldPreserveTempFile)
             {
                 return;
             }
@@ -144,13 +145,60 @@ public class RecordingOrchestrator(
                 var ok = await transcoder.RecordAsync(sourceResult, mediaPath, cancellationToken);
                 if (ok)
                 {
-                    mediaPath = await storage.CommitAsync(mediaPath, cancellationToken);
-                    isCommitted = true;
-                    await repository.UpdateFilePathAsync(recordingId.Value, mediaPath, cancellationToken);
-                    await UpdateStateSafeAsync(RecordingState.Completed, null);
-                    await PublishGlobalToastSafeAsync($"{command.ProgramName} の録音が完了しました。", true);
+                    try
+                    {
+                        mediaPath = await storage.CommitAsync(mediaPath, cancellationToken);
+                        isCommitted = true;
+                        await repository.UpdateFilePathAsync(recordingId.Value, mediaPath, cancellationToken);
+                        await UpdateStateSafeAsync(RecordingState.Completed, null);
+                        await PublishGlobalToastSafeAsync($"{command.ProgramName} の録音が完了しました。", true);
 
-                    return new RecordingResult(true, recordingId, null);
+                        return new RecordingResult(true, recordingId, null);
+                    }
+                    catch (Exception commitEx)
+                    {
+                        shouldPreserveTempFile = true;
+                        SaveFailedFallbackResult? fallbackResult = null;
+
+                        try
+                        {
+                            fallbackResult = await storage.SaveFailedAsync(
+                                mediaPath,
+                                new SaveFailedFallbackMetadata(
+                                    RecordedAt: DateTimeOffset.UtcNow,
+                                    ProgramId: sourceResult.ProgramInfo.ProgramId,
+                                    StationId: sourceResult.ProgramInfo.StationId,
+                                    Title: sourceResult.ProgramInfo.Title,
+                                    OriginalDestinationPath: mediaPath.FinalFilePath,
+                                    ErrorType: commitEx.GetType().Name,
+                                    ErrorMessage: commitEx.Message,
+                                    ExpectedTags: new Dictionary<string, string>
+                                    {
+                                        ["title"] = sourceResult.ProgramInfo.Title,
+                                        ["artist"] = sourceResult.ProgramInfo.Performer,
+                                        ["comment"] = sourceResult.ProgramInfo.Description,
+                                        ["date"] = sourceResult.ProgramInfo.StartTime.ToString("O")
+                                    }),
+                                cancellationToken);
+                            logger.ZLogError(
+                                commitEx,
+                                $"保存先への移動に失敗したため退避保存しました。 originalPath={mediaPath.FinalFilePath} fallbackPath={fallbackResult.FilePath} metadataPath={fallbackResult.MetadataPath}");
+                        }
+                        catch (Exception fallbackEx)
+                        {
+                            logger.ZLogError(
+                                fallbackEx,
+                                $"保存先への移動失敗後の退避保存にも失敗しました。 tempPath={mediaPath.TempFilePath} originalPath={mediaPath.FinalFilePath}");
+                        }
+
+                        var commitErrorMessage = fallbackResult is null
+                            ? "録音は完了しましたが、保存先エラーのため正式保存できませんでした。"
+                            : "録音は完了しましたが、保存先エラーのため正式保存できませんでした（退避済み）";
+
+                        await UpdateStateSafeAsync(RecordingState.Failed, commitErrorMessage);
+                        await PublishGlobalToastSafeAsync(commitErrorMessage, false);
+                        return new RecordingResult(false, recordingId, commitErrorMessage);
+                    }
                 }
 
                 if (command.IsTimeFree && attempt < maxAttempts)

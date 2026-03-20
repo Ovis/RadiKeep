@@ -89,6 +89,24 @@ public class RecordingFileMaintenanceLobLogicTests : UnitTestBase
     }
 
     [Test]
+    public async Task ScanMissingRecordsAsync_他レコード参照中の候補は除外される()
+    {
+        var inUsePath = Path.Combine(_rootPath, "in-use", "shared.mp3");
+        await AddRecordingAsync(inUsePath, "InUseRecord", true);
+
+        var missingStoredPath = Path.Combine("missing", "shared.mp3");
+        await AddRecordingAsync(Path.Combine(_rootPath, missingStoredPath), "MissingRecord", false);
+
+        var result = await _logic.ScanMissingRecordsAsync();
+
+        Assert.That(result.MissingCount, Is.EqualTo(1));
+        Assert.That(result.Entries.Count(x => x.IssueType == "missing_file"), Is.EqualTo(1));
+        var missingEntry = result.Entries.Single(x => x.IssueType == "missing_file");
+        Assert.That(missingEntry.CandidateCount, Is.EqualTo(0));
+        Assert.That(missingEntry.CandidateRelativePaths, Is.Empty);
+    }
+
+    [Test]
     public async Task DeleteMissingRecordsAsync_欠損レコードをDBから削除できる()
     {
         var missingPath = Path.Combine("missing", "delete-target.mp3");
@@ -101,7 +119,44 @@ public class RecordingFileMaintenanceLobLogicTests : UnitTestBase
         Assert.That(await DbContext.Recordings.FindAsync(recordingId), Is.Null);
     }
 
-    private async ValueTask<Ulid> AddRecordingAsync(string fullPath, string title, bool createFile = true)
+    [Test]
+    public async Task ScanMissingRecordsAsync_Failedかつファイル存在レコードを復旧候補として抽出できる()
+    {
+        var failedPath = Path.Combine(_rootPath, "recover", "failed-target.mp3");
+        var failedId = await AddRecordingAsync(failedPath, "RecoverTarget", true, RecordingState.Failed, "保存エラー");
+
+        var result = await _logic.ScanMissingRecordsAsync();
+
+        Assert.That(result.RecoverableFailedCount, Is.EqualTo(1));
+        var target = result.Entries.SingleOrDefault(x => x.RecordingId == failedId.ToString());
+        Assert.That(target, Is.Not.Null);
+        Assert.That(target!.IssueType, Is.EqualTo("failed_with_existing_file"));
+    }
+
+    [Test]
+    public async Task RelinkMissingRecordsAsync_Failedかつファイル存在レコードをCompletedへ復旧できる()
+    {
+        var failedPath = Path.Combine(_rootPath, "recover", "failed-to-completed.mp3");
+        var failedId = await AddRecordingAsync(failedPath, "RecoverActionTarget", true, RecordingState.Failed, "保存エラー");
+
+        var result = await _logic.RelinkMissingRecordsAsync([failedId]);
+
+        Assert.That(result.TargetCount, Is.EqualTo(1));
+        Assert.That(result.SuccessCount, Is.EqualTo(1));
+        Assert.That(result.FailCount, Is.EqualTo(0));
+
+        var recording = await DbContext.Recordings.FindAsync(failedId);
+        Assert.That(recording, Is.Not.Null);
+        Assert.That(recording!.State, Is.EqualTo(RecordingState.Completed));
+        Assert.That(recording.ErrorMessage, Is.Null);
+    }
+
+    private async ValueTask<Ulid> AddRecordingAsync(
+        string fullPath,
+        string title,
+        bool createFile = true,
+        RecordingState state = RecordingState.Completed,
+        string? errorMessage = null)
     {
         if (createFile)
         {
@@ -121,8 +176,8 @@ public class RecordingFileMaintenanceLobLogicTests : UnitTestBase
             StartDateTime = DateTimeOffset.UtcNow.AddHours(-1).UtcDateTime,
             EndDateTime = DateTimeOffset.UtcNow.UtcDateTime,
             IsTimeFree = false,
-            State = RecordingState.Completed,
-            ErrorMessage = null,
+            State = state,
+            ErrorMessage = errorMessage,
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow,
             SourceType = RecordingSourceType.Recorded
