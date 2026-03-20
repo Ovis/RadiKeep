@@ -1,9 +1,6 @@
 name: Build and Release
 
 on:
-  push:
-    tags:
-      - "v*.*.*"
   workflow_dispatch:
     inputs:
       version:
@@ -499,15 +496,29 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    env:
+      TAG: ${{ needs.prepare-release.outputs.tag }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      IS_PRERELEASE: ${{ needs.prepare-release.outputs.release_mode == 'prerelease' }}
     steps:
-      - name: Publish Release (only when all build jobs succeeded)
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: ${{ needs.prepare-release.outputs.tag }}
-          name: ${{ needs.prepare-release.outputs.tag }}
-          generate_release_notes: true
-          draft: false
-          prerelease: ${{ needs.prepare-release.outputs.release_mode == 'prerelease' }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish existing draft Release
+        shell: bash
+        run: |
+          set -euo pipefail
+          for _ in $(seq 1 10); do
+            if gh release view "${TAG}" -R "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+              break
+            fi
+            sleep 3
+          done
 
+          if ! gh release view "${TAG}" -R "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            echo "tag ${TAG} の Release が見つかりません。" >&2
+            exit 1
+          fi
+
+          if [[ "${IS_PRERELEASE}" == "true" ]]; then
+            gh release edit "${TAG}" -R "${GITHUB_REPOSITORY}" --draft=false --prerelease
+          else
+            gh release edit "${TAG}" -R "${GITHUB_REPOSITORY}" --draft=false
+          fi

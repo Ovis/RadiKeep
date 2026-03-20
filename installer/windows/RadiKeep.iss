@@ -40,6 +40,8 @@ SetupLogging=yes
 UsePreviousAppDir=yes
 DisableDirPage=no
 UninstallDisplayIcon={app}\RadiKeep.exe
+AppMutex=RadiKeepRunningMutex
+CloseApplications=yes
 
 [Languages]
 Name: "japanese"; MessagesFile: "compiler:Languages\Japanese.isl"
