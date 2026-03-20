@@ -179,6 +179,12 @@ using (var scope = app.Services.CreateScope())
     await startupTask.InitializeAsync();
 }
 
+// Windows インストーラー（Inno Setup / WinGet）がアップグレード時に実行中を検出できるよう
+// Mutex をプロセス存続中だけ保持する。多重起動の制御はHTTPポートバインドに委ねる。
+using var appMutex = OperatingSystem.IsWindows()
+    ? new Mutex(false, "RadiKeepRunningMutex")
+    : null;
+
 app.Run();
 
 static string? EnsureLinuxSettingsFile(string localSettingsPath, string systemSettingsPath, string contentRootPath)
