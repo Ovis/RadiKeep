@@ -64,6 +64,19 @@ public class StationRepositoryTests : UnitTestBase
         Assert.That(all.Single(x => x.StationId == "OLD").IsActive, Is.False);
     }
 
+    [Test]
+    public async Task RadikoStations_空入力時は既存局を無効化しない()
+    {
+        await _repository.UpsertRadikoStationsAsync([
+            new RadikoStation { StationId = "TBS", RegionId = "JP13", StationName = "TBS", IsActive = true }
+        ]);
+
+        await _repository.UpsertRadikoStationsAsync([]);
+
+        var all = await _repository.GetRadikoStationsAsync(activeOnly: false);
+        Assert.That(all.Single(x => x.StationId == "TBS").IsActive, Is.True);
+    }
+
     /// <summary>
     /// らじる★らじる放送局の追加/取得
     /// </summary>

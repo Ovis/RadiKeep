@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Moq;
+using RadiKeep.Logics.Errors;
 using RadiKeep.Logics.Domain.Station;
 using RadiKeep.Logics.Infrastructure.Station;
 using RadiKeep.Logics.Interfaces;
@@ -138,6 +139,16 @@ namespace RadiKeep.Logics.Tests.LogicTest
             }
 
             Assert.Pass();
+        }
+
+        [Test]
+        public void UpsertRadikoStationDefinitionAsync_空リストは例外()
+        {
+            _radikoApiClientMock
+                .Setup(x => x.GetRadikoStationsAsync(It.IsAny<CancellationToken>()))
+                .ReturnsAsync([]);
+
+            Assert.ThrowsAsync<DomainException>(async () => await _stationLogic.UpsertRadikoStationDefinitionAsync());
         }
 
         [Test]

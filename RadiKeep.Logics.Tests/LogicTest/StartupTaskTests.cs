@@ -11,6 +11,7 @@ using RadiKeep.Logics.Logics.RadikoLogic;
 using RadiKeep.Logics.Logics.RecordJobLogic;
 using RadiKeep.Logics.Logics.StationLogic;
 using RadiKeep.Logics.Mappers;
+using RadiKeep.Logics.Interfaces;
 using RadiKeep.Logics.Options;
 using RadiKeep.Logics.RdbContext;
 using RadiKeep.Logics.Services;
@@ -54,12 +55,31 @@ public class StartupTaskTests
     }
 
     /// <summary>
+    /// radiko局同期に失敗しても起動継続する
+    /// </summary>
+    [Test]
+    public async Task InitializeAsync_radiko局同期失敗でも起動継続()
+    {
+        var (task, repo) = CreateTarget(
+            ffmpegOk: true,
+            hasRadikoStations: true,
+            hasRadiruStations: true,
+            failRadikoStationSync: true);
+
+        Assert.DoesNotThrowAsync(async () => await task.InitializeAsync());
+
+        var list = await repo.GetUnreadListAsync();
+        Assert.That(list.Any(x => x.Message.Contains("radikoの放送局情報同期に失敗")), Is.True);
+    }
+
+    /// <summary>
     /// StartupTask構築
     /// </summary>
     private static (StartupTask Task, FakeNotificationRepository Repo) CreateTarget(
         bool ffmpegOk,
         bool hasRadikoStations = true,
-        bool hasRadiruStations = true)
+        bool hasRadiruStations = true,
+        bool failRadikoStationSync = false)
     {
         var configMock = CreateConfig();
 
@@ -107,10 +127,26 @@ public class StartupTaskTests
             .Setup(x => x.CreateClient(It.IsAny<string>()))
             .Returns(new HttpClient(new HttpClientHandler()));
 
+        IRadikoApiClient radikoApiClient = failRadikoStationSync
+            ? new ThrowingRadikoApiClient()
+            : new FakeRadikoApiClient
+            {
+                Stations =
+                [
+                    new RadikoStation
+                    {
+                        StationId = "TBS",
+                        RegionId = "JP13",
+                        StationName = "TBS",
+                        IsActive = true
+                    }
+                ]
+            };
+
         var stationLogic = new StationLobLogic(
             new Mock<ILogger<StationLobLogic>>().Object,
             configMock.Object,
-            new FakeRadikoApiClient(),
+            radikoApiClient,
             stationRepoMock.Object,
             radikoLogic,
             httpClientFactoryMock.Object,
@@ -156,6 +192,21 @@ public class StartupTaskTests
             notificationLogic);
 
         return (task, notificationRepo);
+    }
+
+    private sealed class ThrowingRadikoApiClient : IRadikoApiClient
+    {
+        public Task<List<RadikoStation>> GetRadikoStationsAsync(CancellationToken cancellationToken = default)
+            => throw new DomainException("radiko station sync failed");
+
+        public Task<List<string>> GetStationsByAreaAsync(string area, CancellationToken cancellationToken = default)
+            => Task.FromResult(new List<string>());
+
+        public Task<List<RadikoProgram>> GetWeeklyProgramsAsync(string stationId, CancellationToken cancellationToken = default)
+            => Task.FromResult(new List<RadikoProgram>());
+
+        public Task<List<string>> GetTimeFreePlaylistCreateUrlsAsync(string stationId, bool isAreaFree, CancellationToken cancellationToken = default)
+            => Task.FromResult(new List<string>());
     }
 
     /// <summary>

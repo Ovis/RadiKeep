@@ -63,6 +63,11 @@ public class StationRepository(RadioDbContext dbContext) : IStationRepository
             .GroupBy(s => s.StationId, StringComparer.OrdinalIgnoreCase)
             .Select(g => g.First())
             .ToList();
+        if (stationList.Count == 0)
+        {
+            return;
+        }
+
         var stationIdSet = stationList
             .Select(s => s.StationId)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);

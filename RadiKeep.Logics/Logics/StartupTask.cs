@@ -48,13 +48,30 @@ namespace RadiKeep.Logics.Logics
                 {
                     // radiko
                     {
-                        // radikoの放送局情報を同期
-                        await stationLobLogic.UpsertRadikoStationDefinitionAsync();
+                        try
+                        {
+                            // radikoの放送局情報を同期
+                            await stationLobLogic.UpsertRadikoStationDefinitionAsync();
+                        }
+                        catch (Exception ex)
+                        {
+                            logger.ZLogWarning(ex, $"radikoの放送局情報同期に失敗しました。既存データで継続します。");
+                            await notificationLobLogic.SetNotificationAsync(
+                                logLevel: LogLevel.Warning,
+                                category: NoticeCategory.SystemError,
+                                message: "radikoの放送局情報同期に失敗しました。既存データで継続します。");
+                        }
 
-                        // radikoの放送局データをキャッシュ
-                        var radikoStationList = await stationLobLogic.GetAllRadikoStationAsync();
-
-                        config.UpdateRadikoStationDic(radikoStationList);
+                        try
+                        {
+                            // radikoの放送局データをキャッシュ
+                            var radikoStationList = await stationLobLogic.GetAllRadikoStationAsync();
+                            config.UpdateRadikoStationDic(radikoStationList);
+                        }
+                        catch (Exception ex)
+                        {
+                            logger.ZLogWarning(ex, $"radikoの放送局キャッシュ更新に失敗しました。");
+                        }
                     }
 
 

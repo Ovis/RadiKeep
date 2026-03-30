@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Caching.Memory;
+using RadiKeep.Logics.Errors;
 using RadiKeep.Logics.Models;
 using RadiKeep.Logics.RdbContext;
 using ZLogger;
@@ -33,6 +34,10 @@ namespace RadiKeep.Logics.Logics.StationLogic
         {
             // クライアントから放送局情報を取得
             var radikoStationList = await radikoApiClient.GetRadikoStationsAsync();
+            if (radikoStationList.Count == 0)
+            {
+                throw new DomainException("radiko放送局情報が空のため同期を中止しました。");
+            }
 
             try
             {
