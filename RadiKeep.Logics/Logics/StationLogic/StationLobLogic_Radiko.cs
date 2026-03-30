@@ -36,7 +36,7 @@ namespace RadiKeep.Logics.Logics.StationLogic
 
             try
             {
-                await stationRepository.AddRadikoStationsIfMissingAsync(radikoStationList);
+                await stationRepository.UpsertRadikoStationsAsync(radikoStationList);
 
                 // 放送局情報をキャッシュに保持
                 config.UpdateRadikoStationDic(radikoStationList);

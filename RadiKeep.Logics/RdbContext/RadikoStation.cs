@@ -66,5 +66,15 @@ namespace RadiKeep.Logics.RdbContext
         /// 放送局表示順
         /// </summary>
         public int StationOrder { get; set; }
+
+        /// <summary>
+        /// 有効な放送局か
+        /// </summary>
+        public bool IsActive { get; set; } = true;
+
+        /// <summary>
+        /// full.xmlで最後に確認できた日時(UTC)
+        /// </summary>
+        public DateTimeOffset? LastSeenAtUtc { get; set; }
     }
 }

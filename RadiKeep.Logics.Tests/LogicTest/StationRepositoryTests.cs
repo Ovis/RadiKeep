@@ -32,8 +32,8 @@ public class StationRepositoryTests : UnitTestBase
         var hasAnyBefore = await _repository.HasAnyRadikoStationAsync();
         Assert.That(hasAnyBefore, Is.False);
 
-        await _repository.AddRadikoStationsIfMissingAsync([
-            new RadikoStation { StationId = "TBS", RegionId = "JP13" }
+        await _repository.UpsertRadikoStationsAsync([
+            new RadikoStation { StationId = "TBS", RegionId = "JP13", IsActive = true }
         ]);
 
         var hasAnyAfter = await _repository.HasAnyRadikoStationAsync();
@@ -41,6 +41,27 @@ public class StationRepositoryTests : UnitTestBase
 
         var list = await _repository.GetRadikoStationsAsync();
         Assert.That(list.Count, Is.EqualTo(1));
+    }
+
+    [Test]
+    public async Task RadikoStations_既存局を更新し未掲載局を無効化する()
+    {
+        await _repository.UpsertRadikoStationsAsync([
+            new RadikoStation { StationId = "TBS", RegionId = "JP13", StationName = "旧TBS", IsActive = true },
+            new RadikoStation { StationId = "OLD", RegionId = "JP13", StationName = "旧局", IsActive = true }
+        ]);
+
+        await _repository.UpsertRadikoStationsAsync([
+            new RadikoStation { StationId = "TBS", RegionId = "JP13", StationName = "新TBS", IsActive = true },
+            new RadikoStation { StationId = "NEW", RegionId = "JP13", StationName = "新局", IsActive = true }
+        ]);
+
+        var active = await _repository.GetRadikoStationsAsync();
+        var all = await _repository.GetRadikoStationsAsync(activeOnly: false);
+
+        Assert.That(active.Select(x => x.StationId).OrderBy(x => x).ToArray(), Is.EqualTo(new[] { "NEW", "TBS" }));
+        Assert.That(active.Single(x => x.StationId == "TBS").StationName, Is.EqualTo("新TBS"));
+        Assert.That(all.Single(x => x.StationId == "OLD").IsActive, Is.False);
     }
 
     /// <summary>

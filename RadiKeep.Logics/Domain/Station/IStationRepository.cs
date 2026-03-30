@@ -18,16 +18,17 @@ public interface IStationRepository
     /// <summary>
     /// radiko放送局を取得する
     /// </summary>
+    /// <param name="activeOnly">有効な放送局のみを取得する場合はtrue</param>
     /// <param name="cancellationToken">キャンセル用トークン</param>
     /// <returns>放送局一覧</returns>
-    ValueTask<List<RadikoStation>> GetRadikoStationsAsync(CancellationToken cancellationToken = default);
+    ValueTask<List<RadikoStation>> GetRadikoStationsAsync(bool activeOnly = true, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// radiko放送局を追加する
+    /// radiko放送局を追加または更新し、入力に含まれない既存局を無効化する
     /// </summary>
     /// <param name="stations">放送局一覧</param>
     /// <param name="cancellationToken">キャンセル用トークン</param>
-    ValueTask AddRadikoStationsIfMissingAsync(IEnumerable<RadikoStation> stations, CancellationToken cancellationToken = default);
+    ValueTask UpsertRadikoStationsAsync(IEnumerable<RadikoStation> stations, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// らじる★らじる放送局が初期化済みか確認する

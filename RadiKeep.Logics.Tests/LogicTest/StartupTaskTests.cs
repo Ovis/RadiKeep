@@ -97,7 +97,7 @@ public class StartupTaskTests
         var stationRepoMock = new Mock<IStationRepository>();
         stationRepoMock.Setup(x => x.HasAnyRadikoStationAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(hasRadikoStations);
-        stationRepoMock.Setup(x => x.GetRadikoStationsAsync(It.IsAny<CancellationToken>()))
+        stationRepoMock.Setup(x => x.GetRadikoStationsAsync(It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([new RadikoStation { StationId = "TBS", StationName = "TBS" }]);
         stationRepoMock.Setup(x => x.HasAnyRadiruStationAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(hasRadiruStations);
