@@ -6,7 +6,7 @@ namespace RadiKeep.Logics.Models.NhkRadiru
     {
         public static readonly RadiruStationKind R1 = new(
             id: 1,
-            name: "NHKラジオ第1",
+            name: "NHK-AM",
             serviceId: "r1");
 
         public static readonly RadiruStationKind R2 = new(
