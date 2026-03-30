@@ -87,6 +87,7 @@ public class ProgramScheduleRepository(RadioDbContext dbContext) : IProgramSched
     {
         return await dbContext.RadikoStations
             .AsNoTracking()
+            .Where(r => r.IsActive)
             .Select(r => r.StationId)
             .ToListAsync(cancellationToken);
     }
@@ -163,6 +164,7 @@ public class ProgramScheduleRepository(RadioDbContext dbContext) : IProgramSched
     {
         var stationIds = await dbContext.RadikoStations
             .AsNoTracking()
+            .Where(r => r.IsActive)
             .Select(r => r.StationId)
             .ToListAsync(cancellationToken);
 
