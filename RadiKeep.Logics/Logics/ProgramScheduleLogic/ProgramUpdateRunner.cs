@@ -48,10 +48,7 @@ public class ProgramUpdateRunner(
 
             // radiko 側の放送局/番組情報を更新する。
             await radikoUniqueProcessLogic.RefreshRadikoAreaCacheAsync();
-            if (!await stationLobLogic.CheckInitializedRadikoStationAsync())
-            {
-                await stationLobLogic.UpsertRadikoStationDefinitionAsync();
-            }
+            await stationLobLogic.UpsertRadikoStationDefinitionAsync();
             await programScheduleLobLogic.UpdateLatestRadikoProgramDataAsync();
             await programScheduleLobLogic.DeleteOldRadikoProgramAsync();
 

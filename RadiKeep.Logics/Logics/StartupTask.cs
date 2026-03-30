@@ -48,11 +48,8 @@ namespace RadiKeep.Logics.Logics
                 {
                     // radiko
                     {
-                        if (!(await stationLobLogic.CheckInitializedRadikoStationAsync()))
-                        {
-                            // radikoの放送局情報を初期化
-                            await stationLobLogic.UpsertRadikoStationDefinitionAsync();
-                        }
+                        // radikoの放送局情報を同期
+                        await stationLobLogic.UpsertRadikoStationDefinitionAsync();
 
                         // radikoの放送局データをキャッシュ
                         var radikoStationList = await stationLobLogic.GetAllRadikoStationAsync();
