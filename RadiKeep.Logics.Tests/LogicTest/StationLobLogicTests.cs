@@ -238,6 +238,8 @@ namespace RadiKeep.Logics.Tests.LogicTest
             Assert.That(list.Any(x => x.AreaId == "130"), Is.True);
             Assert.That(list.Any(x => x.StationId == "r1"), Is.True);
             Assert.That(list.Any(x => x.StationId == "r2"), Is.True);
+            Assert.That(list.Single(x => x.StationId == "r1").StationName, Is.EqualTo("NHK-AM"));
+            Assert.That(list.Single(x => x.StationId == "r2").StationName, Is.EqualTo("NHKラジオ第2"));
         }
 
         [Test]
@@ -267,7 +269,7 @@ namespace RadiKeep.Logics.Tests.LogicTest
             Assert.That(list.Count, Is.EqualTo(1));
             Assert.That(list[0].AreaId, Is.EqualTo("130"));
             Assert.That(list[0].StationId, Is.EqualTo("am"));
-            Assert.That(list[0].StationName, Is.EqualTo("NHK AM"));
+            Assert.That(list[0].StationName, Is.EqualTo("不明局(am)"));
         }
 
         [Test]

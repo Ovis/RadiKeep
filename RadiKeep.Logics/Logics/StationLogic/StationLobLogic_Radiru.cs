@@ -44,9 +44,7 @@ namespace RadiKeep.Logics.Logics.StationLogic
                     AreaId = entry.AreaId,
                     AreaName = entry.AreaName,
                     StationId = entry.StationId,
-                    StationName = string.IsNullOrWhiteSpace(entry.StationName)
-                        ? ResolveRadiruStationName(entry.StationId)
-                        : entry.StationName
+                    StationName = ResolveRadiruStationName(entry.StationId)
                 })
                 .GroupBy(x => $"{x.AreaId}:{x.StationId}", StringComparer.OrdinalIgnoreCase)
                 .Select(x => x.First())
