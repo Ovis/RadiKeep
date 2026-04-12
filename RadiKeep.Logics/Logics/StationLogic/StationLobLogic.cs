@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
+using RadiKeep.Logics.Context;
 using RadiKeep.Logics.Domain.Station;
 using RadiKeep.Logics.Interfaces;
 using RadiKeep.Logics.Logics.RadikoLogic;
@@ -10,6 +11,7 @@ namespace RadiKeep.Logics.Logics.StationLogic
 {
     public partial class StationLobLogic(
         ILogger<StationLobLogic> logger,
+        IRadioAppContext appContext,
         IAppConfigurationService config,
         IRadikoApiClient radikoApiClient,
         IStationRepository stationRepository,

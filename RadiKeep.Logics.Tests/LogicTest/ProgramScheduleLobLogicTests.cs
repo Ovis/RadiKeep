@@ -449,7 +449,7 @@ public class ProgramScheduleLobLogicTests
         var radikoApiClient = new FakeRadikoApiClient();
         var radiruApiClientMock = new Mock<IRadiruApiClient>();
 
-        radiruApiClientMock.Setup(x => x.GetAvailableAreaServicesAsync(It.IsAny<CancellationToken>()))
+        radiruApiClientMock.Setup(x => x.GetAvailableAreaServicesAsync(It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([("130", "r1")]);
 
         radiruApiClientMock.Setup(x => x.GetDailyProgramsAsync(

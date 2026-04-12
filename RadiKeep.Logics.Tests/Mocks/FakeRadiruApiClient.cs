@@ -13,7 +13,9 @@ public class FakeRadiruApiClient : IRadiruApiClient
     public List<(string AreaId, string ServiceId)> AreaServices { get; set; } = [];
     public List<(string AreaId, string ServiceId, DateTimeOffset Date)> Requests { get; } = [];
 
-    public ValueTask<List<(string AreaId, string ServiceId)>> GetAvailableAreaServicesAsync(CancellationToken cancellationToken = default)
+    public ValueTask<List<(string AreaId, string ServiceId)>> GetAvailableAreaServicesAsync(
+        DateTimeOffset targetDateJst,
+        CancellationToken cancellationToken = default)
         => ValueTask.FromResult(AreaServices);
 
     public Task<List<RadiruProgramJsonEntity>> GetDailyProgramsAsync(

@@ -151,6 +151,7 @@ public class RadikoRecordingSourceTests
 
         var stationLogic = new StationLobLogic(
             new Mock<ILogger<StationLobLogic>>().Object,
+            new FakeRadioAppContext(),
             config,
             radikoApiClient,
             stationRepository,

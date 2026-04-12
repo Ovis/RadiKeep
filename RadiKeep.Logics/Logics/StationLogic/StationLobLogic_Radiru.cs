@@ -38,14 +38,13 @@ namespace RadiKeep.Logics.Logics.StationLogic
         {
             var stationEntries = await stationRepository.GetRadiruStationsFromAreaServicesAsync(cancellationToken);
             return stationEntries
+                .Where(entry => IsRadiruStationVisible(entry.StationId, appContext.StandardDateTimeOffset))
                 .Select(entry => new RadiruStationEntry
                 {
                     AreaId = entry.AreaId,
                     AreaName = entry.AreaName,
                     StationId = entry.StationId,
-                    StationName = string.IsNullOrWhiteSpace(entry.StationName)
-                        ? ResolveRadiruStationName(entry.StationId)
-                        : entry.StationName
+                    StationName = ResolveRadiruStationName(entry.StationId)
                 })
                 .GroupBy(x => $"{x.AreaId}:{x.StationId}", StringComparer.OrdinalIgnoreCase)
                 .Select(x => x.First())
@@ -195,11 +194,16 @@ namespace RadiKeep.Logics.Logics.StationLogic
         /// <summary>
         /// らじる★らじるの有効なエリアID/サービスID組を取得
         /// </summary>
-        public async ValueTask<List<(string AreaId, string ServiceId)>> GetActiveRadiruAreaServiceKeysAsync(CancellationToken cancellationToken = default)
+        public async ValueTask<List<(string AreaId, string ServiceId)>> GetActiveRadiruAreaServiceKeysAsync(
+            DateTimeOffset targetDateJst,
+            CancellationToken cancellationToken = default)
         {
             try
             {
-                return await stationRepository.GetActiveRadiruAreaServiceKeysAsync(cancellationToken);
+                var keys = await stationRepository.GetActiveRadiruAreaServiceKeysAsync(cancellationToken);
+                return keys
+                    .Where(x => CanFetchRadiruProgramsForDate(x.ServiceId, appContext.StandardDateTimeOffset, targetDateJst))
+                    .ToList();
             }
             catch (Exception e)
             {
@@ -231,10 +235,21 @@ namespace RadiKeep.Logics.Logics.StationLogic
 
         private static string ResolveRadiruStationName(string stationId)
         {
-            var station = Enumeration.GetAll<RadiruStationKind>()
-                .FirstOrDefault(r => r.ServiceId == stationId);
+            var station = RadiruStationKind.FindByServiceId(stationId);
 
             return station?.Name ?? $"不明局({stationId})";
+        }
+
+        private static bool IsRadiruStationVisible(string stationId, DateTimeOffset nowJst)
+        {
+            var station = RadiruStationKind.FindByServiceId(stationId);
+            return station?.IsVisibleAt(nowJst) ?? true;
+        }
+
+        private static bool CanFetchRadiruProgramsForDate(string stationId, DateTimeOffset nowJst, DateTimeOffset targetDateJst)
+        {
+            var station = RadiruStationKind.FindByServiceId(stationId);
+            return station?.CanFetchProgramsForDateAt(nowJst, targetDateJst) ?? true;
         }
 
         private static string GetDescendantValue(XContainer element, string descendantName)

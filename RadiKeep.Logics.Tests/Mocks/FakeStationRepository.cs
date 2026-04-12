@@ -16,14 +16,53 @@ public class FakeStationRepository : IStationRepository
     public Dictionary<string, string> RadiruStreamUrls { get; } = new(StringComparer.OrdinalIgnoreCase);
 
     public ValueTask<bool> HasAnyRadikoStationAsync(CancellationToken cancellationToken = default)
-        => ValueTask.FromResult(RadikoStations.Count != 0);
+        => ValueTask.FromResult(RadikoStations.Any(x => x.IsActive));
 
-    public ValueTask<List<RadikoStation>> GetRadikoStationsAsync(CancellationToken cancellationToken = default)
-        => ValueTask.FromResult(RadikoStations);
+    public ValueTask<List<RadikoStation>> GetRadikoStationsAsync(bool activeOnly = true, CancellationToken cancellationToken = default)
+        => ValueTask.FromResult(activeOnly
+            ? RadikoStations.Where(x => x.IsActive).ToList()
+            : RadikoStations.ToList());
 
-    public ValueTask AddRadikoStationsIfMissingAsync(IEnumerable<RadikoStation> stations, CancellationToken cancellationToken = default)
+    public ValueTask UpsertRadikoStationsAsync(IEnumerable<RadikoStation> stations, CancellationToken cancellationToken = default)
     {
-        RadikoStations.AddRange(stations);
+        var now = DateTimeOffset.UtcNow;
+        var input = stations
+            .Where(x => !string.IsNullOrWhiteSpace(x.StationId))
+            .GroupBy(x => x.StationId, StringComparer.OrdinalIgnoreCase)
+            .Select(g => g.First())
+            .ToList();
+        var ids = input.Select(x => x.StationId).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var station in input)
+        {
+            var existing = RadikoStations.FirstOrDefault(x => string.Equals(x.StationId, station.StationId, StringComparison.OrdinalIgnoreCase));
+            if (existing == null)
+            {
+                station.IsActive = true;
+                station.LastSeenAtUtc = now;
+                RadikoStations.Add(station);
+                continue;
+            }
+
+            existing.RegionId = station.RegionId;
+            existing.RegionName = station.RegionName;
+            existing.RegionOrder = station.RegionOrder;
+            existing.Area = station.Area;
+            existing.StationName = station.StationName;
+            existing.StationUrl = station.StationUrl;
+            existing.LogoPath = station.LogoPath;
+            existing.AreaFree = station.AreaFree;
+            existing.TimeFree = station.TimeFree;
+            existing.StationOrder = station.StationOrder;
+            existing.IsActive = true;
+            existing.LastSeenAtUtc = now;
+        }
+
+        foreach (var station in RadikoStations.Where(x => !ids.Contains(x.StationId)))
+        {
+            station.IsActive = false;
+        }
+
         return ValueTask.CompletedTask;
     }
 

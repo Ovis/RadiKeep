@@ -17,19 +17,28 @@ public class StationRepository(RadioDbContext dbContext) : IStationRepository
     {
         return await dbContext.RadikoStations
             .AsNoTracking()
+            .Where(x => x.IsActive)
             .AnyAsync(cancellationToken);
     }
 
     /// <summary>
     /// radiko放送局を取得する
     /// </summary>
-    public async ValueTask<List<RadikoStation>> GetRadikoStationsAsync(CancellationToken cancellationToken = default)
+    public async ValueTask<List<RadikoStation>> GetRadikoStationsAsync(
+        bool activeOnly = true,
+        CancellationToken cancellationToken = default)
     {
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
 
         try
         {
-            var list = await dbContext.RadikoStations
+            var query = dbContext.RadikoStations.AsQueryable();
+            if (activeOnly)
+            {
+                query = query.Where(x => x.IsActive);
+            }
+
+            var list = await query
                 .ToListAsync(cancellationToken);
 
             await transaction.CommitAsync(cancellationToken);
@@ -46,19 +55,61 @@ public class StationRepository(RadioDbContext dbContext) : IStationRepository
     /// <summary>
     /// radiko放送局を追加する
     /// </summary>
-    public async ValueTask AddRadikoStationsIfMissingAsync(IEnumerable<RadikoStation> stations, CancellationToken cancellationToken = default)
+    public async ValueTask UpsertRadikoStationsAsync(IEnumerable<RadikoStation> stations, CancellationToken cancellationToken = default)
     {
+        var syncedAtUtc = DateTimeOffset.UtcNow;
+        var stationList = stations
+            .Where(s => !string.IsNullOrWhiteSpace(s.StationId))
+            .GroupBy(s => s.StationId, StringComparer.OrdinalIgnoreCase)
+            .Select(g => g.First())
+            .ToList();
+        if (stationList.Count == 0)
+        {
+            return;
+        }
+
+        var stationIdSet = stationList
+            .Select(s => s.StationId)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
 
         try
         {
-            foreach (var station in stations)
-            {
-                var existing = await dbContext.RadikoStations.FindAsync([station.StationId], cancellationToken);
+            var existingStations = await dbContext.RadikoStations
+                .ToListAsync(cancellationToken);
+            var existingById = existingStations
+                .ToDictionary(x => x.StationId, StringComparer.OrdinalIgnoreCase);
 
-                if (existing == null)
+            foreach (var station in stationList)
+            {
+                if (!existingById.TryGetValue(station.StationId, out var existing))
                 {
+                    station.IsActive = true;
+                    station.LastSeenAtUtc = syncedAtUtc;
                     await dbContext.RadikoStations.AddAsync(station, cancellationToken);
+                    continue;
+                }
+
+                existing.RegionId = station.RegionId;
+                existing.RegionName = station.RegionName;
+                existing.RegionOrder = station.RegionOrder;
+                existing.Area = station.Area;
+                existing.StationName = station.StationName;
+                existing.StationUrl = station.StationUrl;
+                existing.LogoPath = station.LogoPath;
+                existing.AreaFree = station.AreaFree;
+                existing.TimeFree = station.TimeFree;
+                existing.StationOrder = station.StationOrder;
+                existing.IsActive = true;
+                existing.LastSeenAtUtc = syncedAtUtc;
+            }
+
+            foreach (var existing in existingStations)
+            {
+                if (!stationIdSet.Contains(existing.StationId))
+                {
+                    existing.IsActive = false;
                 }
             }
 

@@ -310,7 +310,17 @@ public static class ProgramEndpoints
 
         if (entity.SelectedRadiruStationIds.Any())
         {
-            radiruResults = await programScheduleLobLogic.SearchRadiruProgramAsync(entity);
+            var visibleRadiruStationIds = (await stationLobLogic.GetRadiruStationAsync())
+                .Select(x => $"{x.AreaId}:{x.StationId}")
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            entity.SelectedRadiruStationIds = entity.SelectedRadiruStationIds
+                .Where(id => visibleRadiruStationIds.Contains(id))
+                .ToList();
+
+            if (entity.SelectedRadiruStationIds.Any())
+            {
+                radiruResults = await programScheduleLobLogic.SearchRadiruProgramAsync(entity);
+            }
         }
 
         var sortedRadiko = SortSearchResults(

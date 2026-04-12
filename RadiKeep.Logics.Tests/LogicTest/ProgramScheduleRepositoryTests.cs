@@ -75,6 +75,41 @@ public class ProgramScheduleRepositoryTests : UnitTestBase
     }
 
     /// <summary>
+    /// 番組更新対象のradiko局IDは有効局のみ取得する
+    /// </summary>
+    [Test]
+    public async Task GetRadikoStationIdsAsync_有効局のみ取得()
+    {
+        _dbContext.RadikoStations.AddRange(
+            new RadikoStation { StationId = "TBS", RegionId = "JP13", IsActive = true },
+            new RadikoStation { StationId = "OLD", RegionId = "JP13", IsActive = false });
+        await _dbContext.SaveChangesAsync();
+
+        var stationIds = await _repository.GetRadikoStationIdsAsync();
+
+        Assert.That(stationIds, Is.EqualTo(new[] { "TBS" }));
+    }
+
+    /// <summary>
+    /// 全局番組表判定は有効局のみを対象にする
+    /// </summary>
+    [Test]
+    public async Task HasRadikoProgramsForAllStationsThroughAsync_無効局は判定対象外()
+    {
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        _dbContext.RadikoStations.AddRange(
+            new RadikoStation { StationId = "TBS", RegionId = "JP13", IsActive = true },
+            new RadikoStation { StationId = "OLD", RegionId = "JP13", IsActive = false });
+        await _dbContext.SaveChangesAsync();
+
+        await AddRadikoProgramAsync("P1", "TBS", DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddMinutes(30), date: today);
+
+        var hasAll = await _repository.HasRadikoProgramsForAllStationsThroughAsync(today);
+
+        Assert.That(hasAll, Is.True);
+    }
+
+    /// <summary>
     /// radiko番組の重複追加を避ける
     /// </summary>
     [Test]

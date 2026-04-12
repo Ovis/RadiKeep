@@ -832,10 +832,18 @@ namespace RadiKeep.Logics.Services
         {
             lock (_lock)
             {
-                foreach (var station in stationList)
-                {
-                    RadikoStationDic.AddOrUpdate(station.StationId, station.StationName, (_, _) => station.StationName);
-                }
+                var normalizedStations = stationList
+                    .Where(station => !string.IsNullOrWhiteSpace(station.StationId))
+                    .GroupBy(station => station.StationId, StringComparer.OrdinalIgnoreCase)
+                    .Select(group => group.Last())
+                    .ToList();
+
+                var newMap = new ConcurrentDictionary<string, string>(
+                    normalizedStations.Select(station => new KeyValuePair<string, string>(station.StationId, station.StationName)),
+                    StringComparer.OrdinalIgnoreCase);
+
+                RadikoStationDic = newMap;
+
             }
         }
 

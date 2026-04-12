@@ -156,6 +156,15 @@ public class RadioDbContext : DbContext
 
             entity.Property(e => e.TimeFree)
                 .HasColumnOrder(10);
+
+            entity.Property(e => e.StationOrder)
+                .HasColumnOrder(11);
+
+            entity.Property(e => e.IsActive)
+                .HasColumnOrder(12);
+
+            entity.Property(e => e.LastSeenAtUtc)
+                .HasColumnOrder(13);
         });
 
         modelBuilder.Entity<RadikoProgram>(entity =>

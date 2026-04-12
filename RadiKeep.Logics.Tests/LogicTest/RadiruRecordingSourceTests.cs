@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Moq;
+using RadiKeep.Logics.Context;
 using RadiKeep.Logics.Domain.ProgramSchedule;
 using RadiKeep.Logics.Domain.Recording;
 using RadiKeep.Logics.Errors;
@@ -82,6 +83,7 @@ public class RadiruRecordingSourceTests
 
         var stationLogic = new StationLobLogic(
             new Mock<ILogger<StationLobLogic>>().Object,
+            new FakeRadioAppContext(),
             configMock.Object,
             radikoApiClient,
             stationRepository,

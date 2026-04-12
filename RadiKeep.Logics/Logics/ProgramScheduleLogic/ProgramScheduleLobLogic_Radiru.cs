@@ -54,22 +54,24 @@ namespace RadiKeep.Logics.Logics.ProgramScheduleLogic
 
         public async ValueTask UpdateRadiruProgramDataAsync()
         {
-            var areaServices = await radiruApiClient.GetAvailableAreaServicesAsync();
             var dateList = Enumerable.Range(-7, 15)
                 .Select(i => appContext.StandardDateTimeOffset.AddDays(-i))
                 .ToList();
-
-            if (areaServices.Count == 0)
-            {
-                logger.ZLogWarning($"らじる★らじるの取得対象サービスが存在しないため番組表更新をスキップしました。");
-                return;
-            }
+            var hasAnyTarget = false;
 
             try
             {
-                foreach (var (areaId, serviceId) in areaServices.Distinct())
+                foreach (var dateTimeOffset in dateList)
                 {
-                    foreach (var dateTimeOffset in dateList)
+                    var areaServices = await radiruApiClient.GetAvailableAreaServicesAsync(dateTimeOffset);
+                    if (areaServices.Count == 0)
+                    {
+                        continue;
+                    }
+
+                    hasAnyTarget = true;
+
+                    foreach (var (areaId, serviceId) in areaServices.Distinct())
                     {
                         await UpsertDailyProgramDataAsync(areaId, serviceId, dateTimeOffset);
                     }
@@ -79,6 +81,11 @@ namespace RadiKeep.Logics.Logics.ProgramScheduleLogic
             {
                 logger.ZLogError(e, $"らじる\u2605らじるの番組表情報更新で例外発生");
                 throw;
+            }
+
+            if (!hasAnyTarget)
+            {
+                logger.ZLogWarning($"らじる★らじるの取得対象サービスが存在しないため番組表更新をスキップしました。");
             }
         }
 
