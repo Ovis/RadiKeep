@@ -26,8 +26,10 @@ public class RadiruApiClient(
     /// <summary>
     /// 取得対象のエリアID/サービスID組一覧を取得
     /// </summary>
-    public ValueTask<List<(string AreaId, string ServiceId)>> GetAvailableAreaServicesAsync(CancellationToken cancellationToken = default)
-        => stationLobLogic.GetActiveRadiruAreaServiceKeysAsync(cancellationToken);
+    public ValueTask<List<(string AreaId, string ServiceId)>> GetAvailableAreaServicesAsync(
+        DateTimeOffset targetDateJst,
+        CancellationToken cancellationToken = default)
+        => stationLobLogic.GetActiveRadiruAreaServiceKeysAsync(targetDateJst, cancellationToken);
 
     /// <summary>
     ///  指定されたエリアID、サービスID、日付の番組表を取得する

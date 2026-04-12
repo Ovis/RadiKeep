@@ -143,6 +143,7 @@ public class PlayProgramLobLogicTests
             .Returns(new HttpClient(new HttpClientHandler()));
         var stationLogic = new StationLobLogic(
             new Mock<ILogger<StationLobLogic>>().Object,
+            appContext,
             configMock.Object,
             radikoApiClient,
             stationRepository ?? new FakeStationRepository(),

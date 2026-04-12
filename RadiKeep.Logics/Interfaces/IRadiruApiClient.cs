@@ -8,9 +8,12 @@ public interface IRadiruApiClient
     /// <summary>
     /// 取得対象のエリアID/サービスID組一覧を取得する
     /// </summary>
+    /// <param name="targetDateJst">取得対象日(JST)</param>
     /// <param name="cancellationToken">キャンセル用トークン</param>
     /// <returns>エリアID/サービスID組一覧</returns>
-    ValueTask<List<(string AreaId, string ServiceId)>> GetAvailableAreaServicesAsync(CancellationToken cancellationToken = default);
+    ValueTask<List<(string AreaId, string ServiceId)>> GetAvailableAreaServicesAsync(
+        DateTimeOffset targetDateJst,
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// 指定日の番組表を取得する

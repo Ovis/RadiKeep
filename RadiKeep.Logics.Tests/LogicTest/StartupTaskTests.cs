@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Moq;
+using RadiKeep.Logics.Context;
 using RadiKeep.Logics.Domain.Station;
 using RadiKeep.Logics.Errors;
 using RadiKeep.Logics.Logics;
@@ -145,6 +146,7 @@ public class StartupTaskTests
 
         var stationLogic = new StationLobLogic(
             new Mock<ILogger<StationLobLogic>>().Object,
+            appContext,
             configMock.Object,
             radikoApiClient,
             stationRepoMock.Object,

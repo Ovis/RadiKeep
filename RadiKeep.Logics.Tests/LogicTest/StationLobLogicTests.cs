@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Moq;
 using RadiKeep.Logics.Errors;
 using RadiKeep.Logics.Domain.Station;
+using RadiKeep.Logics.Context;
 using RadiKeep.Logics.Infrastructure.Station;
 using RadiKeep.Logics.Interfaces;
 using RadiKeep.Logics.Logics.RadikoLogic;
@@ -28,6 +29,7 @@ namespace RadiKeep.Logics.Tests.LogicTest
         private StationLobLogic _stationLogic;
         private Mock<RadikoUniqueProcessLogic> _radikoUniqueProcessLogicMock;
         private IStationRepository _stationRepository;
+        private FakeRadioAppContext _appContext;
 
         [SetUp]
         public async Task Setup()
@@ -46,6 +48,10 @@ namespace RadiKeep.Logics.Tests.LogicTest
             await _dbContext.Database.ExecuteSqlRawAsync("DELETE FROM NhkRadiruAreas");
             _entryMapper = new EntryMapper(_configServiceMock.Object);
             _stationRepository = new StationRepository(_dbContext);
+            _appContext = new FakeRadioAppContext
+            {
+                StandardDateTimeOffset = new DateTimeOffset(2026, 4, 12, 12, 0, 0, TimeSpan.FromHours(9))
+            };
 
             _radikoUniqueProcessLogicMock = new Mock<RadikoUniqueProcessLogic>(
                 new Mock<ILogger<RadikoUniqueProcessLogic>>().Object,
@@ -55,6 +61,7 @@ namespace RadiKeep.Logics.Tests.LogicTest
 
             _stationLogic = new StationLobLogic(
                 _loggerMock.Object,
+                _appContext,
                 _configServiceMock.Object,
                 _radikoApiClientMock.Object,
                 _stationRepository,
@@ -193,8 +200,10 @@ namespace RadiKeep.Logics.Tests.LogicTest
         }
 
         [Test]
-    public async Task GetRadiruStationAsync_一覧取得()
-    {
+        public async Task GetRadiruStationAsync_一覧取得()
+        {
+            _appContext.StandardDateTimeOffset = new DateTimeOffset(2026, 4, 6, 12, 0, 0, TimeSpan.FromHours(9));
+
             _dbContext.NhkRadiruAreas.Add(new NhkRadiruArea
             {
                 AreaId = "130",
@@ -262,6 +271,87 @@ namespace RadiKeep.Logics.Tests.LogicTest
         }
 
         [Test]
+        public async Task GetRadiruStationAsync_廃止後1週間経過した局は一覧に出さない()
+        {
+            _appContext.StandardDateTimeOffset = new DateTimeOffset(2026, 4, 7, 0, 0, 0, TimeSpan.FromHours(9));
+
+            _dbContext.NhkRadiruAreas.Add(new NhkRadiruArea
+            {
+                AreaId = "130",
+                AreaJpName = "東京",
+                ApiKey = "130",
+                ProgramNowOnAirApiUrl = "https://example/noa",
+                ProgramDetailApiUrlTemplate = "https://example/detail/{area}",
+                DailyProgramApiUrlTemplate = "https://example/day/{area}"
+            });
+            _dbContext.NhkRadiruAreaServices.AddRange(
+                new NhkRadiruAreaService
+                {
+                    AreaId = "130",
+                    ServiceId = "r1",
+                    ServiceName = "NHK AM",
+                    HlsUrl = "https://example/r1.m3u8",
+                    IsActive = true
+                },
+                new NhkRadiruAreaService
+                {
+                    AreaId = "130",
+                    ServiceId = "r2",
+                    ServiceName = "NHKラジオ第2",
+                    HlsUrl = "https://example/r2.m3u8",
+                    IsActive = true
+                });
+            await _dbContext.SaveChangesAsync();
+
+            var list = (await _stationLogic.GetRadiruStationAsync()).ToList();
+
+            Assert.That(list.Any(x => x.StationId == "r1"), Is.True);
+            Assert.That(list.Any(x => x.StationId == "r2"), Is.False);
+        }
+
+        [Test]
+        public async Task GetActiveRadiruAreaServiceKeysAsync_廃止後も猶予期間中は廃止日前日まで取得対象に含む()
+        {
+            _appContext.StandardDateTimeOffset = new DateTimeOffset(2026, 4, 6, 12, 0, 0, TimeSpan.FromHours(9));
+
+            _dbContext.NhkRadiruAreas.Add(new NhkRadiruArea
+            {
+                AreaId = "130",
+                AreaJpName = "東京",
+                ApiKey = "130",
+                ProgramNowOnAirApiUrl = "https://example/noa",
+                ProgramDetailApiUrlTemplate = "https://example/detail/{area}",
+                DailyProgramApiUrlTemplate = "https://example/day/{area}"
+            });
+            _dbContext.NhkRadiruAreaServices.AddRange(
+                new NhkRadiruAreaService
+                {
+                    AreaId = "130",
+                    ServiceId = "r1",
+                    ServiceName = "NHK AM",
+                    HlsUrl = "https://example/r1.m3u8",
+                    IsActive = true
+                },
+                new NhkRadiruAreaService
+                {
+                    AreaId = "130",
+                    ServiceId = "r2",
+                    ServiceName = "NHKラジオ第2",
+                    HlsUrl = "https://example/r2.m3u8",
+                    IsActive = true
+                });
+            await _dbContext.SaveChangesAsync();
+
+            var beforeAbolish = await _stationLogic.GetActiveRadiruAreaServiceKeysAsync(
+                new DateTimeOffset(2026, 3, 30, 12, 0, 0, TimeSpan.FromHours(9)));
+            var afterAbolish = await _stationLogic.GetActiveRadiruAreaServiceKeysAsync(
+                new DateTimeOffset(2026, 3, 31, 12, 0, 0, TimeSpan.FromHours(9)));
+
+            Assert.That(beforeAbolish.Any(x => x.ServiceId == "r2"), Is.True);
+            Assert.That(afterAbolish.Any(x => x.ServiceId == "r2"), Is.False);
+        }
+
+        [Test]
         public async Task UpdateRadiruStationInformationAsync_未知サービスIDを保持して保存()
         {
             await _dbContext.Database.ExecuteSqlRawAsync("DELETE FROM NhkRadiruAreaServices");
@@ -296,6 +386,7 @@ namespace RadiKeep.Logics.Tests.LogicTest
 
             var localStationLogic = new StationLobLogic(
                 _loggerMock.Object,
+                _appContext,
                 _configServiceMock.Object,
                 _radikoApiClientMock.Object,
                 _stationRepository,
