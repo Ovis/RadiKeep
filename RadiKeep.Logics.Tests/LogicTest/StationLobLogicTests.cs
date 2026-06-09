@@ -410,6 +410,126 @@ namespace RadiKeep.Logics.Tests.LogicTest
             Assert.That(services.Select(x => x.ServiceId).ToArray(), Is.EqualTo(new[] { "am", "r1" }));
         }
 
+        [Test]
+        public async Task TryUpdateRadiruStationInformationIfDueAsync_当日確認済みならスキップ()
+        {
+            _configServiceMock
+                .Setup(x => x.GetRadiruStationDefinitionLastCheckedAtAsync())
+                .ReturnsAsync(_appContext.StandardDateTimeOffset.ToUniversalTime());
+
+            var httpClientFactoryMock = new Mock<IHttpClientFactory>(MockBehavior.Strict);
+            var localStationLogic = new StationLobLogic(
+                _loggerMock.Object,
+                _appContext,
+                _configServiceMock.Object,
+                _radikoApiClientMock.Object,
+                _stationRepository,
+                _radikoUniqueProcessLogicMock.Object,
+                httpClientFactoryMock.Object,
+                _entryMapper
+            );
+
+            var result = await localStationLogic.TryUpdateRadiruStationInformationIfDueAsync();
+
+            Assert.That(result, Is.False);
+            _configServiceMock.Verify(x => x.UpdateRadiruStationDefinitionLastCheckedAtAsync(It.IsAny<DateTimeOffset>()), Times.Never);
+        }
+
+        [Test]
+        public async Task TryUpdateRadiruStationInformationIfDueAsync_未確認なら更新して時刻保存()
+        {
+            await _dbContext.Database.ExecuteSqlRawAsync("DELETE FROM NhkRadiruAreaServices");
+            await _dbContext.Database.ExecuteSqlRawAsync("DELETE FROM NhkRadiruAreas");
+
+            _configServiceMock
+                .Setup(x => x.GetRadiruStationDefinitionLastCheckedAtAsync())
+                .ReturnsAsync((DateTimeOffset?)null);
+
+            var xml = """
+                      <root>
+                        <url_program_noa>https://example/noa/{area}</url_program_noa>
+                        <url_program_detail>https://example/detail/{area}</url_program_detail>
+                        <url_program_day>https://example/day/{area}</url_program_day>
+                        <stream_url>
+                          <data>
+                            <areajp>東京</areajp>
+                            <areakey>130</areakey>
+                            <apikey>130</apikey>
+                            <r1hls>https://example/r1.m3u8</r1hls>
+                          </data>
+                        </stream_url>
+                      </root>
+                      """;
+
+            var handler = new FakeHttpMessageHandler();
+            handler.AddHandler(
+                _ => true,
+                _ => new HttpResponseMessage(System.Net.HttpStatusCode.OK) { Content = new StringContent(xml) });
+
+            var httpClientFactoryMock = new Mock<IHttpClientFactory>();
+            httpClientFactoryMock
+                .Setup(x => x.CreateClient(It.IsAny<string>()))
+                .Returns(new HttpClient(handler));
+
+            var localStationLogic = new StationLobLogic(
+                _loggerMock.Object,
+                _appContext,
+                _configServiceMock.Object,
+                _radikoApiClientMock.Object,
+                _stationRepository,
+                _radikoUniqueProcessLogicMock.Object,
+                httpClientFactoryMock.Object,
+                _entryMapper
+            );
+
+            var result = await localStationLogic.TryUpdateRadiruStationInformationIfDueAsync();
+
+            var area = await _dbContext.NhkRadiruAreas.SingleAsync(x => x.AreaId == "130");
+            var service = await _dbContext.NhkRadiruAreaServices.SingleAsync(x => x.AreaId == "130" && x.ServiceId == "r1");
+
+            Assert.That(result, Is.True);
+            Assert.That(area.AreaJpName, Is.EqualTo("東京"));
+            Assert.That(service.HlsUrl, Is.EqualTo("https://example/r1.m3u8"));
+            _configServiceMock.Verify(
+                x => x.UpdateRadiruStationDefinitionLastCheckedAtAsync(
+                    It.Is<DateTimeOffset>(v => v == _appContext.StandardDateTimeOffset.ToUniversalTime())),
+                Times.Once);
+        }
+
+        [Test]
+        public async Task TryUpdateRadiruStationInformationIfDueAsync_取得失敗でも例外を投げず継続できる()
+        {
+            _configServiceMock
+                .Setup(x => x.GetRadiruStationDefinitionLastCheckedAtAsync())
+                .ReturnsAsync((DateTimeOffset?)null);
+
+            var handler = new FakeHttpMessageHandler();
+            handler.AddHandler(
+                _ => true,
+                _ => new HttpResponseMessage(System.Net.HttpStatusCode.InternalServerError));
+
+            var httpClientFactoryMock = new Mock<IHttpClientFactory>();
+            httpClientFactoryMock
+                .Setup(x => x.CreateClient(It.IsAny<string>()))
+                .Returns(new HttpClient(handler));
+
+            var localStationLogic = new StationLobLogic(
+                _loggerMock.Object,
+                _appContext,
+                _configServiceMock.Object,
+                _radikoApiClientMock.Object,
+                _stationRepository,
+                _radikoUniqueProcessLogicMock.Object,
+                httpClientFactoryMock.Object,
+                _entryMapper
+            );
+
+            var result = await localStationLogic.TryUpdateRadiruStationInformationIfDueAsync();
+
+            Assert.That(result, Is.False);
+            _configServiceMock.Verify(x => x.UpdateRadiruStationDefinitionLastCheckedAtAsync(It.IsAny<DateTimeOffset>()), Times.Never);
+        }
+
         [TearDown]
         public async Task TearDown()
         {

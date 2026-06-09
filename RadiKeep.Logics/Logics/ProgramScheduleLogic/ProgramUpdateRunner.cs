@@ -53,10 +53,7 @@ public class ProgramUpdateRunner(
             await programScheduleLobLogic.DeleteOldRadikoProgramAsync();
 
             // らじる★らじる側の放送局/番組情報を更新する。
-            if (!await stationLobLogic.CheckInitializedRadiruRadiruStationAsync())
-            {
-                await stationLobLogic.UpdateRadiruStationInformationAsync();
-            }
+            await stationLobLogic.TryUpdateRadiruStationInformationIfDueAsync(cancellationToken);
             await programScheduleLobLogic.UpdateRadiruProgramDataAsync();
             await programScheduleLobLogic.DeleteOldRadiruProgramAsync();
 

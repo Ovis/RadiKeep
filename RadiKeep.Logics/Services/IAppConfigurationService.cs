@@ -93,6 +93,10 @@ namespace RadiKeep.Logics.Services
 
         ValueTask UpdateReleaseCheckLastCheckedAtAsync(DateTimeOffset utcTimestamp);
 
+        ValueTask<DateTimeOffset?> GetRadiruStationDefinitionLastCheckedAtAsync();
+
+        ValueTask UpdateRadiruStationDefinitionLastCheckedAtAsync(DateTimeOffset utcTimestamp);
+
         ValueTask<string?> GetReleaseLastNotifiedVersionAsync();
 
         ValueTask UpdateReleaseLastNotifiedVersionAsync(string version);
