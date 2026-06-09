@@ -169,6 +169,36 @@ namespace RadiKeep.Logics.Logics.StationLogic
         }
 
         /// <summary>
+        /// らじる★らじるの放送局定義を、未確認日であれば再取得する
+        /// </summary>
+        public async ValueTask<bool> TryUpdateRadiruStationInformationIfDueAsync(CancellationToken cancellationToken = default)
+        {
+            var lastCheckedAt = await config.GetRadiruStationDefinitionLastCheckedAtAsync();
+            var todayJst = DateOnly.FromDateTime(appContext.StandardDateTimeOffset.ToJapanDateTime());
+
+            if (lastCheckedAt.HasValue)
+            {
+                var checkedDateJst = DateOnly.FromDateTime(lastCheckedAt.Value.ToJapanDateTime());
+                if (checkedDateJst >= todayJst)
+                {
+                    return false;
+                }
+            }
+
+            try
+            {
+                await UpdateRadiruStationInformationAsync();
+                await config.UpdateRadiruStationDefinitionLastCheckedAtAsync(appContext.StandardDateTimeOffset.ToUniversalTime());
+                return true;
+            }
+            catch (Exception e)
+            {
+                logger.ZLogWarning(e, $"らじる★らじるの放送局定義更新に失敗しました。既存データで継続します。");
+                return false;
+            }
+        }
+
+        /// <summary>
         /// 指定エリアとサービスIDかららじる★らじるのHLS URLを取得
         /// </summary>
         /// <param name="areaId">エリアID</param>

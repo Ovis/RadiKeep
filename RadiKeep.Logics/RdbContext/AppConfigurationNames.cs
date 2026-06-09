@@ -56,6 +56,11 @@ public static class AppConfigurationNames
     public const string LastUpdatedProgram = "LastUpdatedProgram";
 
     /// <summary>
+    /// らじる★らじる放送局定義の最終確認時刻（UTC, ISO8601）
+    /// </summary>
+    public const string RadiruStationDefinitionLastCheckedAtUtc = "RadiruStationDefinitionLastCheckedAtUtc";
+
+    /// <summary>
     /// 外部取込時のファイル更新日時タイムゾーン
     /// </summary>
     public const string ExternalImportFileTimeZoneId = "ExternalImportFileTimeZoneId";

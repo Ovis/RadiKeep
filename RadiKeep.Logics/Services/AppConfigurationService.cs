@@ -807,6 +807,33 @@ namespace RadiKeep.Logics.Services
                 utcTimestamp.ToUniversalTime().ToString("O"));
         }
 
+        public ValueTask<DateTimeOffset?> GetRadiruStationDefinitionLastCheckedAtAsync()
+        {
+            using var scope = CreateDbContextScope(out var dbContext);
+
+            var raw = GetStringValue(dbContext, AppConfigurationNames.RadiruStationDefinitionLastCheckedAtUtc);
+            if (string.IsNullOrWhiteSpace(raw))
+            {
+                return ValueTask.FromResult<DateTimeOffset?>(null);
+            }
+
+            if (DateTimeOffset.TryParse(raw, out var parsed))
+            {
+                return ValueTask.FromResult<DateTimeOffset?>(parsed.ToUniversalTime());
+            }
+
+            return ValueTask.FromResult<DateTimeOffset?>(null);
+        }
+
+        public async ValueTask UpdateRadiruStationDefinitionLastCheckedAtAsync(DateTimeOffset utcTimestamp)
+        {
+            using var scope = CreateDbContextScope(out var dbContext);
+            await UpsertStringAsync(
+                dbContext,
+                AppConfigurationNames.RadiruStationDefinitionLastCheckedAtUtc,
+                utcTimestamp.ToUniversalTime().ToString("O"));
+        }
+
         public ValueTask<string?> GetReleaseLastNotifiedVersionAsync()
         {
             using var scope = CreateDbContextScope(out var dbContext);

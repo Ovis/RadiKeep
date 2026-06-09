@@ -54,7 +54,7 @@ namespace RadiKeep.Logics.Logics.ProgramScheduleLogic
 
         public async ValueTask UpdateRadiruProgramDataAsync()
         {
-            var dateList = Enumerable.Range(-7, 15)
+            var dateList = Enumerable.Range(-6, 15)
                 .Select(i => appContext.StandardDateTimeOffset.AddDays(-i))
                 .ToList();
             var hasAnyTarget = false;
