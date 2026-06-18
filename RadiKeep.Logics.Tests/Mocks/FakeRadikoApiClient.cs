@@ -11,6 +11,8 @@ public class FakeRadikoApiClient : IRadikoApiClient
     public List<RadikoStation> Stations { get; set; } = [];
     public List<string> StationsByArea { get; set; } = [];
     public List<RadikoProgram> WeeklyPrograms { get; set; } = [];
+    public List<string> RealTimeUrls { get; set; } = [];
+    public List<string> RealTimeUrlsForAreaFree { get; set; } = [];
     public List<string> TimeFreeUrls { get; set; } = [];
     public List<string> TimeFreeUrlsForAreaFree { get; set; } = [];
 
@@ -27,6 +29,14 @@ public class FakeRadikoApiClient : IRadikoApiClient
     public Task<List<RadikoProgram>> GetWeeklyProgramsAsync(string stationId, CancellationToken cancellationToken = default)
     {
         return Task.FromResult(WeeklyPrograms);
+    }
+
+    public Task<List<string>> GetRealTimePlaylistUrlsAsync(string stationId, bool isAreaFree, CancellationToken cancellationToken = default)
+    {
+        var list = isAreaFree && RealTimeUrlsForAreaFree.Count != 0
+            ? RealTimeUrlsForAreaFree
+            : RealTimeUrls;
+        return Task.FromResult(list);
     }
 
     public Task<List<string>> GetTimeFreePlaylistCreateUrlsAsync(string stationId, bool isAreaFree, CancellationToken cancellationToken = default)

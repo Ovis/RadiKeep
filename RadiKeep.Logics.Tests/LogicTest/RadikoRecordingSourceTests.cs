@@ -126,7 +126,8 @@ public class RadikoRecordingSourceTests
         string area,
         bool isAreaFree,
         List<string> currentAreaStations,
-        List<string> timeFreeUrls)
+        List<string> timeFreeUrls,
+        List<string>? realTimeUrls = null)
     {
         var config = CreateConfig(stationId);
         var entryMapper = new EntryMapper(config);
@@ -141,6 +142,8 @@ public class RadikoRecordingSourceTests
         var radikoApiClient = new FakeRadikoApiClient
         {
             StationsByArea = currentAreaStations,
+            RealTimeUrls = realTimeUrls ?? [],
+            RealTimeUrlsForAreaFree = realTimeUrls ?? [],
             TimeFreeUrls = timeFreeUrls,
             TimeFreeUrlsForAreaFree = timeFreeUrls
         };
@@ -158,6 +161,14 @@ public class RadikoRecordingSourceTests
             radikoLogic,
             httpClientFactoryMock.Object,
             entryMapper);
+        var localApplicationUrlServiceMock = new Mock<ILocalApplicationUrlService>();
+        localApplicationUrlServiceMock
+            .Setup(x => x.GetBaseUrl())
+            .Returns("http://127.0.0.1:5148");
+        var radikoProxyTicketServiceMock = new Mock<IRadikoProxyTicketService>();
+        radikoProxyTicketServiceMock
+            .Setup(x => x.IssueTokenTicket("token"))
+            .Returns("proxy-ticket");
 
         var repository = new FakeProgramScheduleRepository
         {
@@ -183,6 +194,8 @@ public class RadikoRecordingSourceTests
             stationLogic,
             radikoLogic,
             radikoApiClient,
+            radikoProxyTicketServiceMock.Object,
+            localApplicationUrlServiceMock.Object,
             _dbContext);
     }
 
@@ -266,8 +279,54 @@ public class RadikoRecordingSourceTests
 
         Assert.That(result.StreamUrl, Is.EqualTo("http://example/timefree.m3u8"));
         Assert.That(result.Headers.ContainsKey("X-Radiko-Authtoken"), Is.True);
-        Assert.That(result.Headers.ContainsKey("X-Radiko-AreaId"), Is.True);
+        Assert.That(result.Headers.ContainsKey("X-Radiko-AreaId"), Is.False);
         Assert.That(result.Options.IsTimeFree, Is.True);
+        Assert.That(result.ProgramInfo.StationId, Is.EqualTo(stationId));
+    }
+
+    /// <summary>
+    /// 正常系: リアルタイム録音のURLとヘッダを取得できる
+    /// </summary>
+    [Test]
+    public async Task PrepareAsync_RealTime_ReturnsUrlAndHeaders()
+    {
+        var stationId = "IN";
+        _dbContext.RadikoStations.Add(new RadikoStation
+        {
+            StationId = stationId,
+            StationName = "In Station",
+            Area = "JP13",
+            RegionId = "R1",
+            RegionName = "Region",
+            RegionOrder = 1,
+            StationOrder = 1,
+            AreaFree = true,
+            TimeFree = true
+        });
+        await _dbContext.SaveChangesAsync();
+
+        var target = CreateTarget(
+            stationId,
+            area: "JP13",
+            isAreaFree: true,
+            currentAreaStations: ["IN"],
+            timeFreeUrls: ["http://example/timefree.m3u8"],
+            realTimeUrls: ["https://si-f-radiko.smartstream.ne.jp/so/playlist.m3u8?station_id=IN&l=15&lsid=test-session&type=b"]);
+
+        var command = new RecordingCommand(
+            ServiceKind: RadioServiceKind.Radiko,
+            ProgramId: "P1",
+            ProgramName: "Test",
+            IsTimeFree: false,
+            StartDelaySeconds: 0,
+            EndDelaySeconds: 0);
+
+        var result = await target.PrepareAsync(command);
+
+        Assert.That(result.StreamUrl, Is.EqualTo("http://127.0.0.1:5148/api/programs/radiko-proxy/playlist.m3u8?target=https%3A%2F%2Fsi-f-radiko.smartstream.ne.jp%2Fso%2Fplaylist.m3u8%3Fstation_id%3DIN%26l%3D15%26lsid%3Dtest-session%26type%3Db&proxyKey=proxy-ticket&resolveLivePlaylist=true"));
+        Assert.That(result.Headers.ContainsKey("X-Radiko-Authtoken"), Is.True);
+        Assert.That(result.Headers.ContainsKey("X-Radiko-AreaId"), Is.False);
+        Assert.That(result.Options.IsTimeFree, Is.False);
         Assert.That(result.ProgramInfo.StationId, Is.EqualTo(stationId));
     }
 }

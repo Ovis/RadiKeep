@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using RadiKeep.Logics.Errors;
+using RadiKeep.Logics.Interfaces;
 using RadiKeep.Logics.Logics.ProgramScheduleLogic;
 using RadiKeep.Logics.Logics.RadikoLogic;
 using RadiKeep.Logics.Logics.RecordingLogic;
@@ -13,6 +14,7 @@ namespace RadiKeep.Logics.Logics.PlayProgramLogic
     public class PlayProgramLobLogic(
         ILogger<RecordingLobLogic> logger,
         RadioDbContext dbContext,
+        IRadikoApiClient radikoApiClient,
         RadikoUniqueProcessLogic radikoUniqueProcessLogic,
         ProgramScheduleLobLogic programScheduleLobLogic,
         StationLobLogic stationLobLogic
@@ -87,7 +89,19 @@ namespace RadiKeep.Logics.Logics.PlayProgramLogic
                 return (false, null, null, new DomainException("radiko認証に失敗しました。"));
             }
 
-            var streamUrl = $"https://f-radiko.smartstream.ne.jp/{program.StationId}/_definst_/simul-stream.stream/playlist.m3u8";
+            var streamUrls = await radikoApiClient.GetRealTimePlaylistUrlsAsync(program.StationId, isAreaFree);
+            if (streamUrls.Count == 0 && isAreaFree)
+            {
+                streamUrls = await radikoApiClient.GetRealTimePlaylistUrlsAsync(program.StationId, false);
+            }
+
+            if (streamUrls.Count == 0)
+            {
+                logger.ZLogError($"再生処理においてリアルタイム再生URLの取得に失敗 stationId={program.StationId}");
+                return (false, null, null, new DomainException("リアルタイム再生URLの取得に失敗しました。"));
+            }
+
+            var streamUrl = streamUrls[0];
 
             return (true, token, streamUrl, null);
         }

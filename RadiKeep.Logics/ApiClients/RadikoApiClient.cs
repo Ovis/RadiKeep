@@ -1,5 +1,6 @@
 using System.Xml.Linq;
 using System.Xml.XPath;
+using System.Web;
 using Microsoft.Extensions.Logging;
 using RadiKeep.Logics.Application;
 using RadiKeep.Logics.Errors;
@@ -332,6 +333,25 @@ public class RadikoApiClient(
         return string.IsNullOrWhiteSpace(imageUrl) ? string.Empty : imageUrl;
     }
     /// <summary>
+    /// リアルタイム再生・録音用のplaylist_create_urlを取得する
+    /// </summary>
+    /// <param name="stationId">放送局ID</param>
+    /// <param name="isAreaFree">areafreeの有無</param>
+    /// <param name="cancellationToken">キャンセル用トークン</param>
+    /// <returns>リアルタイム再生・録音用URLのリスト</returns>
+    public async Task<List<string>> GetRealTimePlaylistUrlsAsync(
+        string stationId,
+        bool isAreaFree,
+        CancellationToken cancellationToken = default)
+    {
+        var baseUrls = await GetPlaylistCreateUrlsByFlagsAsync(stationId, isAreaFree, isTimeFree: false, cancellationToken);
+        return baseUrls
+            .Select(x => BuildRealTimePlaylistUrl(x, stationId))
+            .Distinct()
+            .ToList();
+    }
+
+    /// <summary>
     /// タイムフリー録音用のplaylist_create_urlを取得する
     /// </summary>
     /// <param name="stationId">放送局ID</param>
@@ -343,15 +363,25 @@ public class RadikoApiClient(
         bool isAreaFree,
         CancellationToken cancellationToken = default)
     {
+        return await GetPlaylistCreateUrlsByFlagsAsync(stationId, isAreaFree, isTimeFree: true, cancellationToken);
+    }
+
+    private async Task<List<string>> GetPlaylistCreateUrlsByFlagsAsync(
+        string stationId,
+        bool isAreaFree,
+        bool isTimeFree,
+        CancellationToken cancellationToken)
+    {
         try
         {
             var areafree = isAreaFree ? "1" : "0";
+            var timefree = isTimeFree ? "1" : "0";
             var xmlUrl = $"https://radiko.jp/v3/station/stream/pc_html5/{stationId}.xml";
 
             using var response = await HttpClientExecutionHelper.SendWithRetryAsync(
                 logger,
                 HttpClient,
-                "radikoタイムフリーURL取得",
+                isTimeFree ? "radikoタイムフリーURL取得" : "radikoリアルタイムURL取得",
                 () =>
                 {
                     var request = new HttpRequestMessage(HttpMethod.Get, xmlUrl);
@@ -364,7 +394,7 @@ public class RadikoApiClient(
             var xmlString = await response.Content.ReadAsStringAsync(cancellationToken);
 
             var doc = XDocument.Parse(xmlString);
-            var nodes = doc.XPathSelectElements($"/urls/url[@timefree='1' and @areafree='{areafree}']/playlist_create_url");
+            var nodes = doc.XPathSelectElements($"/urls/url[@timefree='{timefree}' and @areafree='{areafree}']/playlist_create_url");
             var list = nodes.Select(x => x.Value.Trim())
                 .Where(x => !string.IsNullOrWhiteSpace(x))
                 .Distinct()
@@ -374,9 +404,22 @@ public class RadikoApiClient(
         }
         catch (Exception ex)
         {
-            logger.ZLogError(ex, $"radikoタイムフリーURL取得に失敗: StationId={stationId}");
-            throw new DomainException("radikoタイムフリーURLの取得に失敗しました。", ex);
+            var kind = isTimeFree ? "タイムフリー" : "リアルタイム";
+            logger.ZLogError(ex, $"radiko{kind}URL取得に失敗: StationId={stationId}");
+            throw new DomainException($"radiko{kind}URLの取得に失敗しました。", ex);
         }
+    }
+
+    private static string BuildRealTimePlaylistUrl(string baseUrl, string stationId)
+    {
+        var builder = new UriBuilder(baseUrl);
+        var query = HttpUtility.ParseQueryString(builder.Query);
+        query["station_id"] = stationId;
+        query["l"] = "15";
+        query["lsid"] = Guid.NewGuid().ToString("N");
+        query["type"] = "b";
+        builder.Query = query.ToString() ?? string.Empty;
+        return builder.Uri.ToString();
     }
 }
 

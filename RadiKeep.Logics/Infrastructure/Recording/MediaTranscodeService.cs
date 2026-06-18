@@ -69,6 +69,7 @@ public class MediaTranscodeService(
 
         var command = new StringBuilder();
         command.Append(" -nostdin -loglevel error -stats");
+        AppendUserAgent(command, config.ExternalServiceUserAgent);
         AppendHeaders(command, source.Headers);
         command.Append(" -http_seekable 0 -seekable 0");
         command.Append($" -i \"{source.StreamUrl}\"");
@@ -147,6 +148,7 @@ public class MediaTranscodeService(
                 var command = new StringBuilder();
                 command.Append(" -nostdin -loglevel error -stats");
                 command.Append(" -fflags +discardcorrupt");
+                AppendUserAgent(command, config.ExternalServiceUserAgent);
                 AppendHeaders(command, source.Headers);
                 command.Append(" -http_seekable 0 -seekable 0");
                 command.Append($" -i \"{url}\"");
@@ -220,7 +222,9 @@ public class MediaTranscodeService(
 
         var command = new StringBuilder();
         command.Append(" -re -vn -nostdin");
+        AppendUserAgent(command, config.ExternalServiceUserAgent);
         AppendHeaders(command, source.Headers);
+        command.Append(" -http_seekable 0 -seekable 0");
         command.Append(" -reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 120");
         command.Append($" -i \"{source.StreamUrl}\"");
         command.Append($" -t {diff.TotalSeconds}");
@@ -253,8 +257,21 @@ public class MediaTranscodeService(
         if (headers.Count == 0)
             return;
 
-        var headerValue = string.Join("\r\n", headers.Select(h => $"{h.Key}: {h.Value}"));
+        var headerValue = string.Join("\r\n", headers.Select(h => $"{h.Key}: {h.Value}")) + "\r\n";
         command.Append($" -headers \"{headerValue}\"");
+    }
+
+    /// <summary>
+    /// HTTP User-Agent をFFmpegコマンドに追加する
+    /// </summary>
+    private static void AppendUserAgent(StringBuilder command, string userAgent)
+    {
+        if (string.IsNullOrWhiteSpace(userAgent))
+        {
+            return;
+        }
+
+        command.Append($" -user_agent \"{userAgent.ToSafeNameAndSafeCommandParameter()}\"");
     }
 
     /// <summary>

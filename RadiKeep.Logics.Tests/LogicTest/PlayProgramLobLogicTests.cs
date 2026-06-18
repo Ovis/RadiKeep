@@ -110,6 +110,7 @@ public class PlayProgramLobLogicTests
         string stationId,
         bool isPremium,
         List<string> currentAreaStations,
+        List<string> realTimeUrls,
         IProgramScheduleRepository repository,
         IStationRepository? stationRepository = null)
     {
@@ -136,7 +137,12 @@ public class PlayProgramLobLogicTests
             configMock.Object,
             httpClientFactory);
 
-        var radikoApiClient = new FakeRadikoApiClient { StationsByArea = currentAreaStations };
+        var radikoApiClient = new FakeRadikoApiClient
+        {
+            StationsByArea = currentAreaStations,
+            RealTimeUrls = realTimeUrls,
+            RealTimeUrlsForAreaFree = realTimeUrls
+        };
         var httpClientFactoryMock = new Mock<IHttpClientFactory>();
         httpClientFactoryMock
             .Setup(x => x.CreateClient(It.IsAny<string>()))
@@ -156,6 +162,7 @@ public class PlayProgramLobLogicTests
         return new PlayProgramLobLogic(
             new Mock<ILogger<RecordingLobLogic>>().Object,
             _dbContext,
+            radikoApiClient,
             radikoLogic,
             programScheduleLogic,
             stationLogic);
@@ -169,7 +176,7 @@ public class PlayProgramLobLogicTests
             RadikoProgramById = null
         };
 
-        var logic = CreateTarget("TBS", isPremium: true, currentAreaStations: ["TBS"], repository);
+        var logic = CreateTarget("TBS", isPremium: true, currentAreaStations: ["TBS"], realTimeUrls: [], repository);
 
         var (isSuccess, _, _, error) = await logic.PlayRadikoProgramAsync("P1");
 
@@ -210,7 +217,7 @@ public class PlayProgramLobLogicTests
         });
         await _dbContext.SaveChangesAsync();
 
-        var logic = CreateTarget("OUT", isPremium: false, currentAreaStations: ["IN"], repository);
+        var logic = CreateTarget("OUT", isPremium: false, currentAreaStations: ["IN"], realTimeUrls: [], repository);
 
         var (isSuccess, _, _, error) = await logic.PlayRadikoProgramAsync("P1");
 
@@ -251,14 +258,19 @@ public class PlayProgramLobLogicTests
         });
         await _dbContext.SaveChangesAsync();
 
-        var logic = CreateTarget("TBS", isPremium: true, currentAreaStations: ["TBS"], repository);
+        var logic = CreateTarget(
+            "TBS",
+            isPremium: true,
+            currentAreaStations: ["TBS"],
+            realTimeUrls: ["https://si-f-radiko.smartstream.ne.jp/so/playlist.m3u8?station_id=TBS&l=15&lsid=test-session&type=b"],
+            repository);
 
         var (isSuccess, token, url, error) = await logic.PlayRadikoProgramAsync("P1");
 
         Assert.That(isSuccess, Is.True);
         Assert.That(error, Is.Null);
         Assert.That(token, Is.EqualTo("token"));
-        Assert.That(url, Is.EqualTo("https://f-radiko.smartstream.ne.jp/TBS/_definst_/simul-stream.stream/playlist.m3u8"));
+        Assert.That(url, Is.EqualTo("https://si-f-radiko.smartstream.ne.jp/so/playlist.m3u8?station_id=TBS&l=15&lsid=test-session&type=b"));
     }
 
     [Test]
@@ -301,6 +313,7 @@ public class PlayProgramLobLogicTests
             stationId: "TBS",
             isPremium: true,
             currentAreaStations: ["TBS"],
+            realTimeUrls: [],
             repository: new FakeProgramScheduleRepository(),
             stationRepository: new StationRepository(_dbContext));
 
@@ -335,6 +348,7 @@ public class PlayProgramLobLogicTests
             stationId: "TBS",
             isPremium: true,
             currentAreaStations: ["TBS"],
+            realTimeUrls: [],
             repository: new FakeProgramScheduleRepository(),
             stationRepository: new StationRepository(_dbContext));
 

@@ -95,6 +95,8 @@ public static class ServiceCollectionExtensions
         services.Configure<ReleaseOptions>(config.GetSection(@"ReleaseOptions"));
 
         services.AddSingleton<IAppConfigurationService, AppConfigurationService>();
+        services.AddSingleton<ILocalApplicationUrlService, LocalApplicationUrlService>();
+        services.AddSingleton<IRadikoProxyTicketService, RadikoProxyTicketService>();
 
         return services;
     }

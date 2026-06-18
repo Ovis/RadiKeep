@@ -7,6 +7,7 @@ using RadiKeep.Logics.Logics.RadikoLogic;
 using RadiKeep.Logics.Logics.StationLogic;
 using RadiKeep.Logics.Models.Enums;
 using RadiKeep.Logics.RdbContext;
+using RadiKeep.Logics.Services;
 using ZLogger;
 
 namespace RadiKeep.Logics.Infrastructure.Recording;
@@ -20,6 +21,8 @@ public class RadikoRecordingSource(
     StationLobLogic stationLobLogic,
     RadikoUniqueProcessLogic radikoUniqueProcessLogic,
     IRadikoApiClient radikoApiClient,
+    IRadikoProxyTicketService radikoProxyTicketService,
+    ILocalApplicationUrlService localApplicationUrlService,
     RadioDbContext dbContext) : IRecordingSource, IRecordingSourceRetryHandler
 {
     /// <summary>
@@ -65,8 +68,7 @@ public class RadikoRecordingSource(
 
         var headers = new Dictionary<string, string>
         {
-            { "X-Radiko-Authtoken", token },
-            { "X-Radiko-AreaId", areaId }
+            { "X-Radiko-Authtoken", token }
         };
 
         // タイムフリーとリアルタイムでURLを切り替える
@@ -89,7 +91,24 @@ public class RadikoRecordingSource(
         }
         else
         {
-            streamUrl = $"https://f-radiko.smartstream.ne.jp/{program.StationId}/_definst_/simul-stream.stream/playlist.m3u8";
+            var urls = await radikoApiClient.GetRealTimePlaylistUrlsAsync(program.StationId, isAreaFree, cancellationToken);
+            if (urls.Count == 0 && isAreaFree)
+            {
+                // areafree URLが取得できない場合はfallbackで通常URLを試す
+                urls = await radikoApiClient.GetRealTimePlaylistUrlsAsync(program.StationId, false, cancellationToken);
+            }
+
+            if (urls.Count == 0)
+            {
+                throw new DomainException("リアルタイム録音URLの取得に失敗しました。");
+            }
+
+            var resolvedUrl = urls[0];
+            var localBaseUrl = localApplicationUrlService.GetBaseUrl();
+            var proxyKey = radikoProxyTicketService.IssueTokenTicket(token);
+            streamUrl = string.IsNullOrWhiteSpace(localBaseUrl)
+                ? resolvedUrl
+                : RadikoProxyUrlUtility.BuildAbsoluteProxyUrlWithProxyKey(localBaseUrl, resolvedUrl, proxyKey, resolveLivePlaylist: true);
         }
 
         var programInfo = new ProgramRecordingInfo(
