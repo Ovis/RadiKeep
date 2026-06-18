@@ -31,6 +31,15 @@ public interface IRadikoApiClient
     Task<List<RadikoProgram>> GetWeeklyProgramsAsync(string stationId, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// リアルタイム再生・録音用のplaylist_create_urlを取得する
+    /// </summary>
+    /// <param name="stationId">放送局ID</param>
+    /// <param name="isAreaFree">areafreeの有無</param>
+    /// <param name="cancellationToken">キャンセル用トークン</param>
+    /// <returns>リアルタイム再生・録音用URLのリスト</returns>
+    Task<List<string>> GetRealTimePlaylistUrlsAsync(string stationId, bool isAreaFree, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// タイムフリー録音用のplaylist_create_urlを取得する
     /// </summary>
     /// <param name="stationId">放送局ID</param>

@@ -173,6 +173,45 @@ public class MediaTranscodeServiceTests
     }
 
     /// <summary>
+    /// リアルタイム録音（radiko）は末尾欠け防止の補正を加える
+    /// </summary>
+    [Test]
+    public async Task RecordAsync_RealTimeRadiko_末尾補正を付与する()
+    {
+        var logger = new Mock<ILogger<MediaTranscodeService>>().Object;
+        var ffmpeg = new Mock<IFfmpegService>();
+        var config = CreateConfigMock();
+        string? captured = null;
+
+        ffmpeg.Setup(x => x.RunProcessAsync(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true)
+            .Callback<string, int, string, CancellationToken>((a, _, _, _) => captured = a);
+
+        var service = new MediaTranscodeService(logger, ffmpeg.Object, config.Object);
+
+        var now = DateTimeOffset.UtcNow;
+        var program = CreateProgramInfo() with
+        {
+            StartTime = now.AddMinutes(1),
+            EndTime = now.AddMinutes(2)
+        };
+
+        var source = new RecordingSourceResult(
+            StreamUrl: "http://example/stream",
+            Headers: new Dictionary<string, string>(),
+            ProgramInfo: program,
+            Options: new RecordingOptions(RadioServiceKind.Radiko, false, 0, 0));
+
+        var path = new MediaPath(Path.Combine(Path.GetTempPath(), "temp.m4a"), "final.m4a", string.Empty);
+
+        var result = await service.RecordAsync(source, path);
+
+        Assert.That(result, Is.True);
+        Assert.That(captured, Is.Not.Null);
+        Assert.That(captured!, Does.Contain(" -t 90"));
+    }
+
+    /// <summary>
     /// テスト用番組情報
     /// </summary>
     private static ProgramRecordingInfo CreateProgramInfo()

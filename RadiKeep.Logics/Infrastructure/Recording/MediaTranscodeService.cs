@@ -24,6 +24,7 @@ public class MediaTranscodeService(
     private const int TimeFreeChunkUnitSeconds = 5;
     private const int NonRealtimeRetryMaxAttempts = 3; // 初回 + リトライ2回
     private const int NonRealtimeRetryInitialDelaySeconds = 30;
+    private const int RadikoRealTimeTailCompensationSeconds = 30;
     private static readonly Encoding FileListEncoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
 
     /// <summary>
@@ -69,6 +70,7 @@ public class MediaTranscodeService(
 
         var command = new StringBuilder();
         command.Append(" -nostdin -loglevel error -stats");
+        AppendUserAgent(command, config.ExternalServiceUserAgent);
         AppendHeaders(command, source.Headers);
         command.Append(" -http_seekable 0 -seekable 0");
         command.Append($" -i \"{source.StreamUrl}\"");
@@ -147,6 +149,7 @@ public class MediaTranscodeService(
                 var command = new StringBuilder();
                 command.Append(" -nostdin -loglevel error -stats");
                 command.Append(" -fflags +discardcorrupt");
+                AppendUserAgent(command, config.ExternalServiceUserAgent);
                 AppendHeaders(command, source.Headers);
                 command.Append(" -http_seekable 0 -seekable 0");
                 command.Append($" -i \"{url}\"");
@@ -213,14 +216,18 @@ public class MediaTranscodeService(
             startTime = source.ProgramInfo.StartTime;
         }
 
+        var tailCompensationSeconds = GetRealTimeTailCompensationSeconds(source);
         var diff = source.ProgramInfo.EndTime
             .AddSeconds(source.Options.StartDelaySeconds)
             .AddSeconds(source.Options.EndDelaySeconds)
+            .AddSeconds(tailCompensationSeconds)
             - startTime;
 
         var command = new StringBuilder();
         command.Append(" -re -vn -nostdin");
+        AppendUserAgent(command, config.ExternalServiceUserAgent);
         AppendHeaders(command, source.Headers);
+        command.Append(" -http_seekable 0 -seekable 0");
         command.Append(" -reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 120");
         command.Append($" -i \"{source.StreamUrl}\"");
         command.Append($" -t {diff.TotalSeconds}");
@@ -236,13 +243,18 @@ public class MediaTranscodeService(
         command.Append($" -y \"{path.TempFilePath}\"");
 
         var timeout = (int)diff.Add(new TimeSpan(0, 10, 0)).TotalSeconds;
-        logger.ZLogDebug($"リアルタイム録音開始: station={source.ProgramInfo.StationId} title={source.ProgramInfo.Title} start={source.ProgramInfo.StartTime:O} end={source.ProgramInfo.EndTime:O} timeoutSec={timeout}");
+        logger.ZLogDebug($"リアルタイム録音開始: station={source.ProgramInfo.StationId} title={source.ProgramInfo.Title} start={source.ProgramInfo.StartTime:O} end={source.ProgramInfo.EndTime:O} tailCompSec={tailCompensationSeconds} timeoutSec={timeout}");
 
         return await ffmpegService.RunProcessAsync(
             command.ToString(),
             timeout,
             $"{DateTimeOffset.UtcNow:yyyyMMddHHmmss}_{source.ProgramInfo.Title}",
             cancellationToken);
+    }
+
+    private static int GetRealTimeTailCompensationSeconds(RecordingSourceResult source)
+    {
+        return source.Options.ServiceKind == RadioServiceKind.Radiko ? RadikoRealTimeTailCompensationSeconds : 0;
     }
 
     /// <summary>
@@ -253,8 +265,21 @@ public class MediaTranscodeService(
         if (headers.Count == 0)
             return;
 
-        var headerValue = string.Join("\r\n", headers.Select(h => $"{h.Key}: {h.Value}"));
+        var headerValue = string.Join("\r\n", headers.Select(h => $"{h.Key}: {h.Value}")) + "\r\n";
         command.Append($" -headers \"{headerValue}\"");
+    }
+
+    /// <summary>
+    /// HTTP User-Agent をFFmpegコマンドに追加する
+    /// </summary>
+    private static void AppendUserAgent(StringBuilder command, string userAgent)
+    {
+        if (string.IsNullOrWhiteSpace(userAgent))
+        {
+            return;
+        }
+
+        command.Append($" -user_agent \"{userAgent.ToSafeNameAndSafeCommandParameter()}\"");
     }
 
     /// <summary>

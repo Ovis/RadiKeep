@@ -179,6 +179,13 @@ using (var scope = app.Services.CreateScope())
     await startupTask.InitializeAsync();
 }
 
+var localApplicationUrlService = app.Services.GetRequiredService<ILocalApplicationUrlService>();
+localApplicationUrlService.SetCandidateUrls(app.Urls);
+app.Lifetime.ApplicationStarted.Register(() =>
+{
+    localApplicationUrlService.SetCandidateUrls(app.Urls);
+});
+
 // Windows インストーラー（Inno Setup / WinGet）がアップグレード時に実行中を検出できるよう
 // Mutex をプロセス存続中だけ保持する。多重起動の制御はHTTPポートバインドに委ねる。
 using var appMutex = OperatingSystem.IsWindows()
