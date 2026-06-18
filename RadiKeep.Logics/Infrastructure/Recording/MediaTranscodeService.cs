@@ -24,6 +24,7 @@ public class MediaTranscodeService(
     private const int TimeFreeChunkUnitSeconds = 5;
     private const int NonRealtimeRetryMaxAttempts = 3; // 初回 + リトライ2回
     private const int NonRealtimeRetryInitialDelaySeconds = 30;
+    private const int RadikoRealTimeTailCompensationSeconds = 30;
     private static readonly Encoding FileListEncoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
 
     /// <summary>
@@ -215,9 +216,11 @@ public class MediaTranscodeService(
             startTime = source.ProgramInfo.StartTime;
         }
 
+        var tailCompensationSeconds = GetRealTimeTailCompensationSeconds(source);
         var diff = source.ProgramInfo.EndTime
             .AddSeconds(source.Options.StartDelaySeconds)
             .AddSeconds(source.Options.EndDelaySeconds)
+            .AddSeconds(tailCompensationSeconds)
             - startTime;
 
         var command = new StringBuilder();
@@ -240,13 +243,18 @@ public class MediaTranscodeService(
         command.Append($" -y \"{path.TempFilePath}\"");
 
         var timeout = (int)diff.Add(new TimeSpan(0, 10, 0)).TotalSeconds;
-        logger.ZLogDebug($"リアルタイム録音開始: station={source.ProgramInfo.StationId} title={source.ProgramInfo.Title} start={source.ProgramInfo.StartTime:O} end={source.ProgramInfo.EndTime:O} timeoutSec={timeout}");
+        logger.ZLogDebug($"リアルタイム録音開始: station={source.ProgramInfo.StationId} title={source.ProgramInfo.Title} start={source.ProgramInfo.StartTime:O} end={source.ProgramInfo.EndTime:O} tailCompSec={tailCompensationSeconds} timeoutSec={timeout}");
 
         return await ffmpegService.RunProcessAsync(
             command.ToString(),
             timeout,
             $"{DateTimeOffset.UtcNow:yyyyMMddHHmmss}_{source.ProgramInfo.Title}",
             cancellationToken);
+    }
+
+    private static int GetRealTimeTailCompensationSeconds(RecordingSourceResult source)
+    {
+        return source.Options.ServiceKind == RadioServiceKind.Radiko ? RadikoRealTimeTailCompensationSeconds : 0;
     }
 
     /// <summary>
