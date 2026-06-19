@@ -44,7 +44,7 @@ public class PlayProgramLobLogicTests
         _dbContext.Dispose();
     }
 
-    private static IHttpClientFactory CreateHttpClientFactory(string area, bool isPremium)
+    private static IHttpClientFactory CreateHttpClientFactory(string area, bool isPremium, bool? isAreaFree = null)
     {
         var handler = new FakeHttpMessageHandler();
 
@@ -52,7 +52,8 @@ public class PlayProgramLobLogicTests
             req => req.RequestUri!.ToString().StartsWith("http://radiko.jp/area/"),
             _ => new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(area) });
 
-        var loginJson = $"{{\"radiko_session\":\"session\",\"paid_member\":\"{(isPremium ? "1" : "0")}\",\"areafree\":\"{(isPremium ? "1" : "0")}\"}}";
+        var effectiveIsAreaFree = isAreaFree ?? isPremium;
+        var loginJson = $"{{\"radiko_session\":\"session\",\"paid_member\":\"{(isPremium ? "1" : "0")}\",\"areafree\":\"{(effectiveIsAreaFree ? "1" : "0")}\"}}";
         handler.AddHandler(
             req => req.RequestUri!.ToString().StartsWith("https://radiko.jp/ap/member/webapi/member/login"),
             _ => new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(loginJson) });
@@ -109,9 +110,12 @@ public class PlayProgramLobLogicTests
     private PlayProgramLobLogic CreateTarget(
         string stationId,
         bool isPremium,
+        bool? isAreaFree,
         List<string> currentAreaStations,
         List<string> realTimeUrls,
+        List<string>? realTimeUrlsForAreaFree,
         IProgramScheduleRepository repository,
+        string area = "JP13",
         IStationRepository? stationRepository = null)
     {
         var configMock = new Mock<IAppConfigurationService>();
@@ -131,17 +135,18 @@ public class PlayProgramLobLogicTests
         var entryMapper = new EntryMapper(configMock.Object);
         var appContext = new FakeRadioAppContext();
 
-        var httpClientFactory = CreateHttpClientFactory("JP13", isPremium);
+        var httpClientFactory = CreateHttpClientFactory(area, isPremium, isAreaFree);
         var radikoLogic = new RadikoUniqueProcessLogic(
             new Mock<ILogger<RadikoUniqueProcessLogic>>().Object,
             configMock.Object,
             httpClientFactory);
+        radikoLogic.RefreshRadikoAreaCacheAsync().AsTask().GetAwaiter().GetResult();
 
         var radikoApiClient = new FakeRadikoApiClient
         {
             StationsByArea = currentAreaStations,
             RealTimeUrls = realTimeUrls,
-            RealTimeUrlsForAreaFree = realTimeUrls
+            RealTimeUrlsForAreaFree = realTimeUrlsForAreaFree ?? realTimeUrls
         };
         var httpClientFactoryMock = new Mock<IHttpClientFactory>();
         httpClientFactoryMock
@@ -176,7 +181,7 @@ public class PlayProgramLobLogicTests
             RadikoProgramById = null
         };
 
-        var logic = CreateTarget("TBS", isPremium: true, currentAreaStations: ["TBS"], realTimeUrls: [], repository);
+        var logic = CreateTarget("TBS", isPremium: true, isAreaFree: null, currentAreaStations: ["TBS"], realTimeUrls: [], realTimeUrlsForAreaFree: null, repository, area: "JP10");
 
         var (isSuccess, _, _, error) = await logic.PlayRadikoProgramAsync("P1");
 
@@ -217,7 +222,7 @@ public class PlayProgramLobLogicTests
         });
         await _dbContext.SaveChangesAsync();
 
-        var logic = CreateTarget("OUT", isPremium: false, currentAreaStations: ["IN"], realTimeUrls: [], repository);
+        var logic = CreateTarget("OUT", isPremium: false, isAreaFree: null, currentAreaStations: ["IN"], realTimeUrls: [], realTimeUrlsForAreaFree: null, repository, area: "JP11");
 
         var (isSuccess, _, _, error) = await logic.PlayRadikoProgramAsync("P1");
 
@@ -261,9 +266,12 @@ public class PlayProgramLobLogicTests
         var logic = CreateTarget(
             "TBS",
             isPremium: true,
+            isAreaFree: null,
             currentAreaStations: ["TBS"],
             realTimeUrls: ["https://si-f-radiko.smartstream.ne.jp/so/playlist.m3u8?station_id=TBS&l=15&lsid=test-session&type=b"],
-            repository);
+            realTimeUrlsForAreaFree: ["https://si-c-radiko.smartstream.ne.jp/so/playlist.m3u8?station_id=TBS&l=15&lsid=af-session&type=c"],
+            repository,
+            area: "JP12");
 
         var (isSuccess, token, url, error) = await logic.PlayRadikoProgramAsync("P1");
 
@@ -312,8 +320,10 @@ public class PlayProgramLobLogicTests
         var logic = CreateTarget(
             stationId: "TBS",
             isPremium: true,
+            isAreaFree: null,
             currentAreaStations: ["TBS"],
             realTimeUrls: [],
+            realTimeUrlsForAreaFree: null,
             repository: new FakeProgramScheduleRepository(),
             stationRepository: new StationRepository(_dbContext));
 
@@ -347,8 +357,10 @@ public class PlayProgramLobLogicTests
         var logic = CreateTarget(
             stationId: "TBS",
             isPremium: true,
+            isAreaFree: null,
             currentAreaStations: ["TBS"],
             realTimeUrls: [],
+            realTimeUrlsForAreaFree: null,
             repository: new FakeProgramScheduleRepository(),
             stationRepository: new StationRepository(_dbContext));
 
@@ -359,5 +371,54 @@ public class PlayProgramLobLogicTests
         Assert.That(token, Is.Null);
         Assert.That(url, Is.Null);
     }
-}
 
+    [Test]
+    public async Task PlayRadikoProgramAsync_エリア外のプレミアム会員はAreaFreeUrlで再生できる()
+    {
+        var repository = new FakeProgramScheduleRepository
+        {
+            RadikoProgramById = new RadikoProgram
+            {
+                ProgramId = "P2",
+                StationId = "OUT",
+                Title = "Out Of Area",
+                RadioDate = DateOnly.FromDateTime(DateTime.UtcNow),
+                DaysOfWeek = DaysOfWeek.Monday,
+                StartTime = DateTimeOffset.UtcNow,
+                EndTime = DateTimeOffset.UtcNow.AddMinutes(30),
+                AvailabilityTimeFree = AvailabilityTimeFree.Available
+            }
+        };
+
+        _dbContext.RadikoStations.Add(new RadikoStation
+        {
+            StationId = "OUT",
+            StationName = "Out Station",
+            Area = "JP27",
+            RegionId = "R2",
+            RegionName = "Region2",
+            RegionOrder = 2,
+            StationOrder = 1,
+            AreaFree = true,
+            TimeFree = true
+        });
+        await _dbContext.SaveChangesAsync();
+
+        var logic = CreateTarget(
+            "OUT",
+            isPremium: true,
+            isAreaFree: true,
+            currentAreaStations: ["IN"],
+            realTimeUrls: ["https://si-f-radiko.smartstream.ne.jp/so/playlist.m3u8?station_id=OUT&l=15&lsid=normal&type=b"],
+            realTimeUrlsForAreaFree: ["https://si-c-radiko.smartstream.ne.jp/so/playlist.m3u8?station_id=OUT&l=15&lsid=af&type=c"],
+            repository,
+            area: "JP14");
+
+        var (isSuccess, token, url, error) = await logic.PlayRadikoProgramAsync("P2");
+
+        Assert.That(isSuccess, Is.True);
+        Assert.That(error, Is.Null);
+        Assert.That(token, Is.EqualTo("token"));
+        Assert.That(url, Is.EqualTo("https://si-c-radiko.smartstream.ne.jp/so/playlist.m3u8?station_id=OUT&l=15&lsid=af&type=c"));
+    }
+}

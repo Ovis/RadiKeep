@@ -59,6 +59,10 @@ public class RadikoRecordingSource(
             throw new DomainException("この番組は地域が異なるため録音できません。プレミアム会員でのログインが必要です。");
         }
 
+        var useAreaFreeConnection = stationInformation != null &&
+                                    isAreaFree &&
+                                    !currentAreaStation.Contains(stationInformation.StationId);
+
         // 認証トークン取得
         var (authSuccess, token, areaId) = await radikoUniqueProcessLogic.AuthorizeRadikoAsync(session);
         if (!authSuccess || string.IsNullOrWhiteSpace(token) || string.IsNullOrWhiteSpace(areaId))
@@ -75,8 +79,8 @@ public class RadikoRecordingSource(
         string streamUrl;
         if (command.IsTimeFree)
         {
-            var urls = await radikoApiClient.GetTimeFreePlaylistCreateUrlsAsync(program.StationId, isAreaFree, cancellationToken);
-            if (urls.Count == 0 && isAreaFree)
+            var urls = await radikoApiClient.GetTimeFreePlaylistCreateUrlsAsync(program.StationId, useAreaFreeConnection, cancellationToken);
+            if (urls.Count == 0 && useAreaFreeConnection)
             {
                 // areafree URLが取得できない場合はfallbackで通常URLを試す
                 urls = await radikoApiClient.GetTimeFreePlaylistCreateUrlsAsync(program.StationId, false, cancellationToken);
@@ -91,8 +95,8 @@ public class RadikoRecordingSource(
         }
         else
         {
-            var urls = await radikoApiClient.GetRealTimePlaylistUrlsAsync(program.StationId, isAreaFree, cancellationToken);
-            if (urls.Count == 0 && isAreaFree)
+            var urls = await radikoApiClient.GetRealTimePlaylistUrlsAsync(program.StationId, useAreaFreeConnection, cancellationToken);
+            if (urls.Count == 0 && useAreaFreeConnection)
             {
                 // areafree URLが取得できない場合はfallbackで通常URLを試す
                 urls = await radikoApiClient.GetRealTimePlaylistUrlsAsync(program.StationId, false, cancellationToken);

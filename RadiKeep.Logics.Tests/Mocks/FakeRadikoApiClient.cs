@@ -31,17 +31,17 @@ public class FakeRadikoApiClient : IRadikoApiClient
         return Task.FromResult(WeeklyPrograms);
     }
 
-    public Task<List<string>> GetRealTimePlaylistUrlsAsync(string stationId, bool isAreaFree, CancellationToken cancellationToken = default)
+    public Task<List<string>> GetRealTimePlaylistUrlsAsync(string stationId, bool useAreaFreeConnection, CancellationToken cancellationToken = default)
     {
-        var list = isAreaFree && RealTimeUrlsForAreaFree.Count != 0
+        var list = useAreaFreeConnection && RealTimeUrlsForAreaFree.Count != 0
             ? RealTimeUrlsForAreaFree
             : RealTimeUrls;
         return Task.FromResult(list);
     }
 
-    public Task<List<string>> GetTimeFreePlaylistCreateUrlsAsync(string stationId, bool isAreaFree, CancellationToken cancellationToken = default)
+    public Task<List<string>> GetTimeFreePlaylistCreateUrlsAsync(string stationId, bool useAreaFreeConnection, CancellationToken cancellationToken = default)
     {
-        var list = isAreaFree && TimeFreeUrlsForAreaFree.Count != 0
+        var list = useAreaFreeConnection && TimeFreeUrlsForAreaFree.Count != 0
             ? TimeFreeUrlsForAreaFree
             : TimeFreeUrls;
         return Task.FromResult(list);

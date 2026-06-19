@@ -336,17 +336,17 @@ public class RadikoApiClient(
     /// リアルタイム再生・録音用のplaylist_create_urlを取得する
     /// </summary>
     /// <param name="stationId">放送局ID</param>
-    /// <param name="isAreaFree">areafreeの有無</param>
+    /// <param name="useAreaFreeConnection">エリアフリー接続を利用するか</param>
     /// <param name="cancellationToken">キャンセル用トークン</param>
     /// <returns>リアルタイム再生・録音用URLのリスト</returns>
     public async Task<List<string>> GetRealTimePlaylistUrlsAsync(
         string stationId,
-        bool isAreaFree,
+        bool useAreaFreeConnection,
         CancellationToken cancellationToken = default)
     {
-        var baseUrls = await GetPlaylistCreateUrlsByFlagsAsync(stationId, isAreaFree, isTimeFree: false, cancellationToken);
+        var baseUrls = await GetPlaylistCreateUrlsByFlagsAsync(stationId, useAreaFreeConnection, isTimeFree: false, cancellationToken);
         return baseUrls
-            .Select(x => BuildRealTimePlaylistUrl(x, stationId))
+            .Select(x => BuildRealTimePlaylistUrl(x, stationId, useAreaFreeConnection))
             .Distinct()
             .ToList();
     }
@@ -355,26 +355,26 @@ public class RadikoApiClient(
     /// タイムフリー録音用のplaylist_create_urlを取得する
     /// </summary>
     /// <param name="stationId">放送局ID</param>
-    /// <param name="isAreaFree">areafreeの有無</param>
+    /// <param name="useAreaFreeConnection">エリアフリー接続を利用するか</param>
     /// <param name="cancellationToken">キャンセル用トークン</param>
     /// <returns>playlist_create_urlのリスト</returns>
     public async Task<List<string>> GetTimeFreePlaylistCreateUrlsAsync(
         string stationId,
-        bool isAreaFree,
+        bool useAreaFreeConnection,
         CancellationToken cancellationToken = default)
     {
-        return await GetPlaylistCreateUrlsByFlagsAsync(stationId, isAreaFree, isTimeFree: true, cancellationToken);
+        return await GetPlaylistCreateUrlsByFlagsAsync(stationId, useAreaFreeConnection, isTimeFree: true, cancellationToken);
     }
 
     private async Task<List<string>> GetPlaylistCreateUrlsByFlagsAsync(
         string stationId,
-        bool isAreaFree,
+        bool useAreaFreeConnection,
         bool isTimeFree,
         CancellationToken cancellationToken)
     {
         try
         {
-            var areafree = isAreaFree ? "1" : "0";
+            var areafree = useAreaFreeConnection ? "1" : "0";
             var timefree = isTimeFree ? "1" : "0";
             var xmlUrl = $"https://radiko.jp/v3/station/stream/pc_html5/{stationId}.xml";
 
@@ -410,14 +410,14 @@ public class RadikoApiClient(
         }
     }
 
-    private static string BuildRealTimePlaylistUrl(string baseUrl, string stationId)
+    private static string BuildRealTimePlaylistUrl(string baseUrl, string stationId, bool useAreaFreeConnection)
     {
         var builder = new UriBuilder(baseUrl);
         var query = HttpUtility.ParseQueryString(builder.Query);
         query["station_id"] = stationId;
         query["l"] = "15";
         query["lsid"] = Guid.NewGuid().ToString("N");
-        query["type"] = "b";
+        query["type"] = useAreaFreeConnection ? "c" : "b";
         builder.Query = query.ToString() ?? string.Empty;
         return builder.Uri.ToString();
     }

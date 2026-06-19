@@ -64,7 +64,7 @@ namespace RadiKeep.Logics.Logics.PlayProgramLogic
             }
 
             string loginSession;
-            bool isAreaFree;
+            bool useAreaFreeConnection;
             {
                 var (_, loginSessionString, isPremiumUser, currentIsAreaFree) = await radikoUniqueProcessLogic.LoginRadikoAsync();
 
@@ -79,7 +79,7 @@ namespace RadiKeep.Logics.Logics.PlayProgramLogic
                 }
 
                 loginSession = loginSessionString;
-                isAreaFree = currentIsAreaFree;
+                useAreaFreeConnection = currentIsAreaFree && !currentAreaStation.Contains(stationInformation.StationId);
             }
 
             var (authSuccess, token, _) = await radikoUniqueProcessLogic.AuthorizeRadikoAsync(loginSession);
@@ -89,8 +89,8 @@ namespace RadiKeep.Logics.Logics.PlayProgramLogic
                 return (false, null, null, new DomainException("radiko認証に失敗しました。"));
             }
 
-            var streamUrls = await radikoApiClient.GetRealTimePlaylistUrlsAsync(program.StationId, isAreaFree);
-            if (streamUrls.Count == 0 && isAreaFree)
+            var streamUrls = await radikoApiClient.GetRealTimePlaylistUrlsAsync(program.StationId, useAreaFreeConnection);
+            if (streamUrls.Count == 0 && useAreaFreeConnection)
             {
                 streamUrls = await radikoApiClient.GetRealTimePlaylistUrlsAsync(program.StationId, false);
             }

@@ -127,7 +127,9 @@ public class RadikoRecordingSourceTests
         bool isAreaFree,
         List<string> currentAreaStations,
         List<string> timeFreeUrls,
-        List<string>? realTimeUrls = null)
+        List<string>? realTimeUrls = null,
+        List<string>? timeFreeUrlsForAreaFree = null,
+        List<string>? realTimeUrlsForAreaFree = null)
     {
         var config = CreateConfig(stationId);
         var entryMapper = new EntryMapper(config);
@@ -137,15 +139,16 @@ public class RadikoRecordingSourceTests
             new Mock<ILogger<RadikoUniqueProcessLogic>>().Object,
             config,
             httpClientFactory);
+        radikoLogic.RefreshRadikoAreaCacheAsync().AsTask().GetAwaiter().GetResult();
 
         var stationRepository = new FakeStationRepository();
         var radikoApiClient = new FakeRadikoApiClient
         {
             StationsByArea = currentAreaStations,
             RealTimeUrls = realTimeUrls ?? [],
-            RealTimeUrlsForAreaFree = realTimeUrls ?? [],
+            RealTimeUrlsForAreaFree = realTimeUrlsForAreaFree ?? realTimeUrls ?? [],
             TimeFreeUrls = timeFreeUrls,
-            TimeFreeUrlsForAreaFree = timeFreeUrls
+            TimeFreeUrlsForAreaFree = timeFreeUrlsForAreaFree ?? timeFreeUrls
         };
         var httpClientFactoryMock = new Mock<IHttpClientFactory>();
         httpClientFactoryMock
@@ -328,6 +331,46 @@ public class RadikoRecordingSourceTests
         Assert.That(result.Headers.ContainsKey("X-Radiko-AreaId"), Is.False);
         Assert.That(result.Options.IsTimeFree, Is.False);
         Assert.That(result.ProgramInfo.StationId, Is.EqualTo(stationId));
+    }
+
+    [Test]
+    public async Task PrepareAsync_RealTime_OutOfAreaAreaFreeUsesAreaFreeUrl()
+    {
+        var stationId = "OUT";
+        _dbContext.RadikoStations.Add(new RadikoStation
+        {
+            StationId = stationId,
+            StationName = "Out Station",
+            Area = "JP01",
+            RegionId = "R2",
+            RegionName = "Region2",
+            RegionOrder = 2,
+            StationOrder = 1,
+            AreaFree = true,
+            TimeFree = true
+        });
+        await _dbContext.SaveChangesAsync();
+
+        var target = CreateTarget(
+            stationId,
+            area: "JP13",
+            isAreaFree: true,
+            currentAreaStations: ["IN"],
+            timeFreeUrls: ["http://example/timefree.m3u8"],
+            realTimeUrls: ["https://si-f-radiko.smartstream.ne.jp/so/playlist.m3u8?station_id=OUT&l=15&lsid=normal&type=b"],
+            realTimeUrlsForAreaFree: ["https://si-c-radiko.smartstream.ne.jp/so/playlist.m3u8?station_id=OUT&l=15&lsid=af&type=c"]);
+
+        var command = new RecordingCommand(
+            ServiceKind: RadioServiceKind.Radiko,
+            ProgramId: "P1",
+            ProgramName: "Test",
+            IsTimeFree: false,
+            StartDelaySeconds: 0,
+            EndDelaySeconds: 0);
+
+        var result = await target.PrepareAsync(command);
+
+        Assert.That(result.StreamUrl, Is.EqualTo("http://127.0.0.1:5148/api/programs/radiko-proxy/playlist.m3u8?target=https%3A%2F%2Fsi-c-radiko.smartstream.ne.jp%2Fso%2Fplaylist.m3u8%3Fstation_id%3DOUT%26l%3D15%26lsid%3Daf%26type%3Dc&proxyKey=proxy-ticket&resolveLivePlaylist=true"));
     }
 }
 
