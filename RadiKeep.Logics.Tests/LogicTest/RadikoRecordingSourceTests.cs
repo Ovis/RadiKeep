@@ -41,7 +41,7 @@ public class RadikoRecordingSourceTests
         _dbContext.Dispose();
     }
 
-    private static IHttpClientFactory CreateHttpClientFactory(string area, bool isAreaFree)
+    private static IHttpClientFactory CreateHttpClientFactory(string area, bool isAreaFree, string? subStations = null)
     {
         var handler = new FakeHttpMessageHandler();
         handler.AddHandler(
@@ -70,7 +70,19 @@ public class RadikoRecordingSourceTests
 
         handler.AddHandler(
             req => req.RequestUri!.ToString().StartsWith("https://radiko.jp/v2/api/auth2"),
-            _ => new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent($"{area},0,0\n") });
+            _ =>
+            {
+                var response = new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent($"{area},0,0\n")
+                };
+                if (!string.IsNullOrWhiteSpace(subStations))
+                {
+                    response.Headers.Add("x-radiko-substation", subStations);
+                }
+
+                return response;
+            });
 
         return new FakeHttpClientFactory(new HttpClient(handler));
     }
@@ -129,12 +141,13 @@ public class RadikoRecordingSourceTests
         List<string> timeFreeUrls,
         List<string>? realTimeUrls = null,
         List<string>? timeFreeUrlsForAreaFree = null,
-        List<string>? realTimeUrlsForAreaFree = null)
+        List<string>? realTimeUrlsForAreaFree = null,
+        string? subStations = null)
     {
         var config = CreateConfig(stationId);
         var entryMapper = new EntryMapper(config);
 
-        var httpClientFactory = CreateHttpClientFactory(area, isAreaFree);
+        var httpClientFactory = CreateHttpClientFactory(area, isAreaFree, subStations);
         var radikoLogic = new RadikoUniqueProcessLogic(
             new Mock<ILogger<RadikoUniqueProcessLogic>>().Object,
             config,
@@ -371,6 +384,46 @@ public class RadikoRecordingSourceTests
         var result = await target.PrepareAsync(command);
 
         Assert.That(result.StreamUrl, Is.EqualTo("http://127.0.0.1:5148/api/programs/radiko-proxy/playlist.m3u8?target=https%3A%2F%2Fsi-c-radiko.smartstream.ne.jp%2Fso%2Fplaylist.m3u8%3Fstation_id%3DOUT%26l%3D15%26lsid%3Daf%26type%3Dc&proxyKey=proxy-ticket&resolveLivePlaylist=true"));
+    }
+
+    [Test]
+    public async Task PrepareAsync_TimeFree_SubStation指定があれば解決後のStationIdを保持する()
+    {
+        var stationId = "ABC";
+        _dbContext.RadikoStations.Add(new RadikoStation
+        {
+            StationId = stationId,
+            StationName = "ABC",
+            Area = "JP27",
+            RegionId = "R2",
+            RegionName = "Region2",
+            RegionOrder = 2,
+            StationOrder = 1,
+            AreaFree = true,
+            TimeFree = true
+        });
+        await _dbContext.SaveChangesAsync();
+
+        var target = CreateTarget(
+            stationId,
+            area: "JP27",
+            isAreaFree: true,
+            currentAreaStations: ["ABC"],
+            timeFreeUrls: ["http://example/timefree.m3u8"],
+            subStations: "JP27/ABC/ABC1");
+
+        var command = new RecordingCommand(
+            ServiceKind: RadioServiceKind.Radiko,
+            ProgramId: "P1",
+            ProgramName: "Test",
+            IsTimeFree: true,
+            StartDelaySeconds: 0,
+            EndDelaySeconds: 0);
+
+        var result = await target.PrepareAsync(command);
+
+        Assert.That(result.RequestStationIdOverride, Is.EqualTo("ABC1"));
+        Assert.That(result.ProgramInfo.StationId, Is.EqualTo("ABC"));
     }
 }
 

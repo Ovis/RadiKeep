@@ -64,11 +64,13 @@ public class RadikoRecordingSource(
                                     !currentAreaStation.Contains(stationInformation.StationId);
 
         // 認証トークン取得
-        var (authSuccess, token, areaId) = await radikoUniqueProcessLogic.AuthorizeRadikoAsync(session);
+        var (authSuccess, token, areaId, subStations) = await radikoUniqueProcessLogic.AuthorizeRadikoAsync(session);
         if (!authSuccess || string.IsNullOrWhiteSpace(token) || string.IsNullOrWhiteSpace(areaId))
         {
             throw new DomainException("radiko認証に失敗しました。");
         }
+
+        var requestStationId = RadikoUniqueProcessLogic.ResolveSubStationId(areaId, program.StationId, subStations) ?? program.StationId;
 
         var headers = new Dictionary<string, string>
         {
@@ -95,11 +97,11 @@ public class RadikoRecordingSource(
         }
         else
         {
-            var urls = await radikoApiClient.GetRealTimePlaylistUrlsAsync(program.StationId, useAreaFreeConnection, cancellationToken);
+            var urls = await radikoApiClient.GetRealTimePlaylistUrlsAsync(program.StationId, useAreaFreeConnection, requestStationId, cancellationToken);
             if (urls.Count == 0 && useAreaFreeConnection)
             {
                 // areafree URLが取得できない場合はfallbackで通常URLを試す
-                urls = await radikoApiClient.GetRealTimePlaylistUrlsAsync(program.StationId, false, cancellationToken);
+                urls = await radikoApiClient.GetRealTimePlaylistUrlsAsync(program.StationId, false, requestStationId, cancellationToken);
             }
 
             if (urls.Count == 0)
@@ -142,7 +144,8 @@ public class RadikoRecordingSource(
             StreamUrl: streamUrl,
             Headers: headers,
             ProgramInfo: programInfo,
-            Options: options);
+            Options: options,
+            RequestStationIdOverride: requestStationId);
     }
 
     /// <summary>

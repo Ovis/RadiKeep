@@ -46,7 +46,7 @@ namespace RadiKeep.Logics.Tests.LogicTest
                     Content = new StringContent(@"document.write('<span class=""JP13"">TOKYO JAPAN</span>');")
                 });
 
-            var result = await _radikoLogic.GetRadikoAreaAsync();
+            var result = await _radikoLogic.GetRadikoAreaAsync(forceRefresh: true);
 
             Assert.That(result.IsSuccess, Is.True);
             Assert.That(result.Area, Is.EqualTo("JP13"));
@@ -141,6 +141,112 @@ namespace RadiKeep.Logics.Tests.LogicTest
             var result = await logic.AuthorizeRadikoAsync("session");
 
             Assert.That(result.IsSuccess, Is.False);
+        }
+
+        [Test]
+        public async Task AuthorizeRadikoAsync_Auth2にConnectionHeaderを付与する()
+        {
+            var handler = new FakeHttpMessageHandler();
+            handler.AddHandler(
+                req => req.RequestUri!.ToString().Contains("auth1"),
+                _ =>
+                {
+                    var response = new HttpResponseMessage(HttpStatusCode.OK);
+                    response.Headers.Add("X-Radiko-AuthToken", "token");
+                    response.Headers.Add("X-Radiko-KeyLength", "5");
+                    response.Headers.Add("X-Radiko-KeyOffset", "0");
+                    return response;
+                });
+
+            handler.AddHandler(
+                req => req.RequestUri!.ToString().Contains("playerCommon.js"),
+                _ => new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent("new RadikoJSPlayer('a','b','abcde',{")
+                });
+
+            handler.AddHandler(
+                req => req.RequestUri!.ToString().Contains("auth2"),
+                req =>
+                {
+                    Assert.That(req.Headers.TryGetValues("X-Radiko-Connection", out var values), Is.True);
+                    Assert.That(values!.Single(), Is.EqualTo("wifi"));
+                    return new HttpResponseMessage(HttpStatusCode.OK)
+                    {
+                        Content = new StringContent("JP13,0,0\n")
+                    };
+                });
+
+            var logic = new RadikoUniqueProcessLogic(
+                _loggerMock.Object,
+                _configMock.Object,
+                new FakeHttpClientFactory(new HttpClient(handler)));
+
+            var result = await logic.AuthorizeRadikoAsync("session");
+
+            Assert.That(result.IsSuccess, Is.True);
+            Assert.That(result.AreaId, Is.EqualTo("JP13"));
+        }
+
+        [Test]
+        public async Task AuthorizeRadikoAsync_Auth2のSubStationHeaderを保持する()
+        {
+            var handler = new FakeHttpMessageHandler();
+            handler.AddHandler(
+                req => req.RequestUri!.ToString().Contains("auth1"),
+                _ =>
+                {
+                    var response = new HttpResponseMessage(HttpStatusCode.OK);
+                    response.Headers.Add("X-Radiko-AuthToken", "token");
+                    response.Headers.Add("X-Radiko-KeyLength", "5");
+                    response.Headers.Add("X-Radiko-KeyOffset", "0");
+                    return response;
+                });
+
+            handler.AddHandler(
+                req => req.RequestUri!.ToString().Contains("playerCommon.js"),
+                _ => new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent("new RadikoJSPlayer('a','b','abcde',{")
+                });
+
+            handler.AddHandler(
+                req => req.RequestUri!.ToString().Contains("auth2"),
+                _ =>
+                {
+                    var response = new HttpResponseMessage(HttpStatusCode.OK)
+                    {
+                        Content = new StringContent("JP27,0,0\n")
+                    };
+                    response.Headers.Add("x-radiko-substation", "JP27/ABC/ABC1");
+                    return response;
+                });
+
+            var logic = new RadikoUniqueProcessLogic(
+                _loggerMock.Object,
+                _configMock.Object,
+                new FakeHttpClientFactory(new HttpClient(handler)));
+
+            var result = await logic.AuthorizeRadikoAsync("session");
+
+            Assert.That(result.IsSuccess, Is.True);
+            Assert.That(result.SubStations, Is.EqualTo("JP27/ABC/ABC1"));
+        }
+
+        [Test]
+        public void ResolveSubStationId_一致する組み合わせならSubStationを返す()
+        {
+            var result = RadikoUniqueProcessLogic.ResolveSubStationId("JP27", "ABC", "JP27/ABC/ABC1,JP13/TBS/TBS1");
+
+            Assert.That(result, Is.EqualTo("ABC1"));
+        }
+
+        [Test]
+        public void ResolveSubStationId_一致しない組み合わせならnullを返す()
+        {
+            var result = RadikoUniqueProcessLogic.ResolveSubStationId("JP13", "ABC", "JP27/ABC/ABC1,JP13/TBS/TBS1");
+
+            Assert.That(result, Is.Null);
         }
 
         [Test]

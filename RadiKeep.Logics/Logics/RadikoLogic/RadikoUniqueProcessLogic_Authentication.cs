@@ -126,7 +126,7 @@ namespace RadiKeep.Logics.Logics.RadikoLogic
 
 
 
-        public async ValueTask<(bool IsSuccess, string Token, string AreaId)> AuthorizeRadikoAsync(string session = "", bool forceRefresh = false)
+        public async ValueTask<(bool IsSuccess, string Token, string AreaId, string? SubStations)> AuthorizeRadikoAsync(string session = "", bool forceRefresh = false)
         {
             await AuthenticationCacheLock.WaitAsync();
             {
@@ -160,7 +160,7 @@ namespace RadiKeep.Logics.Logics.RadikoLogic
                             {
                                 config.UpdateRadikoPremiumUser(false);
                                 config.UpdateRadikoAreaFree(false);
-                                return (false, string.Empty, string.Empty);
+                                return (false, string.Empty, string.Empty, null);
                             }
 
                             var loginResult = await TryLoginWithCredentialsAsync(userId, password);
@@ -170,7 +170,7 @@ namespace RadiKeep.Logics.Logics.RadikoLogic
                                 _cachedAuthorization = null;
                                 config.UpdateRadikoPremiumUser(false);
                                 config.UpdateRadikoAreaFree(false);
-                                return (false, string.Empty, string.Empty);
+                                return (false, string.Empty, string.Empty, null);
                             }
 
                             session = loginResult.Session;
@@ -192,7 +192,7 @@ namespace RadiKeep.Logics.Logics.RadikoLogic
                         !string.IsNullOrWhiteSpace(cachedAuthorization.Token) &&
                         !string.IsNullOrWhiteSpace(cachedAuthorization.AreaId))
                     {
-                        return (true, cachedAuthorization.Token, cachedAuthorization.AreaId);
+                        return (true, cachedAuthorization.Token, cachedAuthorization.AreaId, cachedAuthorization.SubStations);
                     }
 
                     string? token;
@@ -221,7 +221,7 @@ namespace RadiKeep.Logics.Logics.RadikoLogic
                                 _cachedAuthorization = null;
                             }
 
-                            return (false, string.Empty, string.Empty);
+                            return (false, string.Empty, string.Empty, null);
                         }
 
                         token = GetHeaderValue(response.Headers, "X-Radiko-AuthToken");
@@ -229,13 +229,13 @@ namespace RadiKeep.Logics.Logics.RadikoLogic
                         int.TryParse(GetHeaderValue(response.Headers, "X-Radiko-KeyOffset"), out var keyOffset);
 
                         if (string.IsNullOrEmpty(token))
-                            return (false, string.Empty, string.Empty);
+                            return (false, string.Empty, string.Empty, null);
 
                         var (isSuccess, key) = await GetPartialKeyString();
 
                         if (!isSuccess)
                         {
-                            return (false, string.Empty, string.Empty);
+                            return (false, string.Empty, string.Empty, null);
                         }
 
                         partialKey =
@@ -257,6 +257,7 @@ namespace RadiKeep.Logics.Logics.RadikoLogic
                             request.Headers.Add("X-Radiko-AuthToken", token);
                             request.Headers.Add("X-Radiko-Device", "pc");
                             request.Headers.Add("X-Radiko-PartialKey", partialKey);
+                            request.Headers.Add("X-Radiko-Connection", "wifi");
                             request.Headers.Add("x-radiko-user", "dummy_user");
                             return request;
                         },
@@ -265,15 +266,16 @@ namespace RadiKeep.Logics.Logics.RadikoLogic
                     {
                         _cachedAuthorization = null;
                         _cachedSession = null;
-                        return (false, string.Empty, string.Empty);
+                        return (false, string.Empty, string.Empty, null);
                     }
 
                     var body = (await auth2Response.Content.ReadAsStringAsync()).Replace("\r", "").Trim();
+                    var subStations = GetHeaderValue(auth2Response.Headers, "x-radiko-substation");
 
                     if (string.IsNullOrWhiteSpace(body) || body == "OUT")
                     {
                         _cachedAuthorization = null;
-                        return (false, string.Empty, string.Empty);
+                        return (false, string.Empty, string.Empty, null);
                     }
 
                     var areaId = body.Split('\n', StringSplitOptions.RemoveEmptyEntries)[0]
@@ -283,7 +285,7 @@ namespace RadiKeep.Logics.Logics.RadikoLogic
                     if (string.IsNullOrWhiteSpace(areaId))
                     {
                         _cachedAuthorization = null;
-                        return (false, string.Empty, string.Empty);
+                        return (false, string.Empty, string.Empty, null);
                     }
 
                     _cachedAuthorization = new CachedRadikoAuthorization(
@@ -291,9 +293,10 @@ namespace RadiKeep.Logics.Logics.RadikoLogic
                         session,
                         token!,
                         areaId,
+                        subStations,
                         nowUtc.Add(RadikoAuthorizationCacheTtl));
 
-                    return (true, token!, areaId);
+                    return (true, token!, areaId, subStations);
                 }
                 catch (Exception e)
                 {

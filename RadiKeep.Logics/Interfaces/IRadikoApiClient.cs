@@ -37,7 +37,7 @@ public interface IRadikoApiClient
     /// <param name="useAreaFreeConnection">エリアフリー接続を利用するか</param>
     /// <param name="cancellationToken">キャンセル用トークン</param>
     /// <returns>リアルタイム再生・録音用URLのリスト</returns>
-    Task<List<string>> GetRealTimePlaylistUrlsAsync(string stationId, bool useAreaFreeConnection, CancellationToken cancellationToken = default);
+    Task<List<string>> GetRealTimePlaylistUrlsAsync(string stationId, bool useAreaFreeConnection, string? requestStationId = null, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// タイムフリー録音用のplaylist_create_urlを取得する

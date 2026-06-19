@@ -207,7 +207,7 @@ public class StartupTaskTests
         public Task<List<RadikoProgram>> GetWeeklyProgramsAsync(string stationId, CancellationToken cancellationToken = default)
             => Task.FromResult(new List<RadikoProgram>());
 
-        public Task<List<string>> GetRealTimePlaylistUrlsAsync(string stationId, bool isAreaFree, CancellationToken cancellationToken = default)
+        public Task<List<string>> GetRealTimePlaylistUrlsAsync(string stationId, bool isAreaFree, string? requestStationId = null, CancellationToken cancellationToken = default)
             => Task.FromResult(new List<string>());
 
         public Task<List<string>> GetTimeFreePlaylistCreateUrlsAsync(string stationId, bool isAreaFree, CancellationToken cancellationToken = default)

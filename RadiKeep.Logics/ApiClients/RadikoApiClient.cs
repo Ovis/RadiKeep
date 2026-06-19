@@ -342,11 +342,13 @@ public class RadikoApiClient(
     public async Task<List<string>> GetRealTimePlaylistUrlsAsync(
         string stationId,
         bool useAreaFreeConnection,
+        string? requestStationId = null,
         CancellationToken cancellationToken = default)
     {
         var baseUrls = await GetPlaylistCreateUrlsByFlagsAsync(stationId, useAreaFreeConnection, isTimeFree: false, cancellationToken);
+        var effectiveStationId = string.IsNullOrWhiteSpace(requestStationId) ? stationId : requestStationId;
         return baseUrls
-            .Select(x => BuildRealTimePlaylistUrl(x, stationId, useAreaFreeConnection))
+            .Select(x => BuildRealTimePlaylistUrl(x, effectiveStationId, useAreaFreeConnection))
             .Distinct()
             .ToList();
     }

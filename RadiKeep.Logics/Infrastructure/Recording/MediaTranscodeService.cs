@@ -117,7 +117,7 @@ public class MediaTranscodeService(
         // concat用のファイルリストはBOMなしで生成する
         await File.WriteAllTextAsync(fileListPath, string.Empty, FileListEncoding);
 
-        var stationId = source.ProgramInfo.StationId;
+        var stationId = source.RequestStationIdOverride ?? source.ProgramInfo.StationId;
         var startAt = ToRadikoTimeString(startTime);
         var lsid = Guid.NewGuid().ToString("N");
 
