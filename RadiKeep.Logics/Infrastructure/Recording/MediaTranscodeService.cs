@@ -224,11 +224,13 @@ public class MediaTranscodeService(
             - startTime;
 
         var command = new StringBuilder();
-        command.Append(" -re -vn -nostdin");
+        // HLS ライブ入力は元から実時間で供給されるため、-re で入力を絞ると
+        // ライブ窓から取りこぼしやすくなる。
+        command.Append(" -vn -nostdin");
         AppendUserAgent(command, config.ExternalServiceUserAgent);
         AppendHeaders(command, source.Headers);
         command.Append(" -http_seekable 0 -seekable 0");
-        command.Append(" -reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 120");
+        command.Append(" -reconnect 1 -reconnect_streamed 1 -reconnect_on_network_error 1 -reconnect_delay_max 120");
         command.Append($" -i \"{source.StreamUrl}\"");
         command.Append($" -t {diff.TotalSeconds}");
 
