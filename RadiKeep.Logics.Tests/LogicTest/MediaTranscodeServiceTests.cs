@@ -208,7 +208,7 @@ public class MediaTranscodeServiceTests
 
         Assert.That(result, Is.True);
         Assert.That(captured, Is.Not.Null);
-        Assert.That(captured!, Does.Contain(" -t 90"));
+        Assert.That(captured!, Does.Contain(" -t 70"));
     }
 
     /// <summary>

@@ -114,7 +114,12 @@ public class RadikoRecordingSource(
             var proxyKey = radikoProxyTicketService.IssueTokenTicket(token);
             streamUrl = string.IsNullOrWhiteSpace(localBaseUrl)
                 ? resolvedUrl
-                : RadikoProxyUrlUtility.BuildAbsoluteProxyUrlWithProxyKey(localBaseUrl, resolvedUrl, proxyKey, resolveLivePlaylist: true);
+                : RadikoProxyUrlUtility.BuildAbsoluteProxyUrlWithProxyKey(
+                    localBaseUrl,
+                    resolvedUrl,
+                    proxyKey,
+                    resolveLivePlaylist: true,
+                    recordingStartUtc: program.StartTime);
         }
 
         var programInfo = new ProgramRecordingInfo(

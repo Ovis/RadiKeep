@@ -24,7 +24,7 @@ public class MediaTranscodeService(
     private const int TimeFreeChunkUnitSeconds = 5;
     private const int NonRealtimeRetryMaxAttempts = 3; // 初回 + リトライ2回
     private const int NonRealtimeRetryInitialDelaySeconds = 30;
-    private const int RadikoRealTimeTailCompensationSeconds = 30;
+    private const int RadikoRealTimeTailCompensationSeconds = 10;
     private static readonly Encoding FileListEncoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
 
     /// <summary>

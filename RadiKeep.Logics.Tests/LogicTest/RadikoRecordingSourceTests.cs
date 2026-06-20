@@ -21,6 +21,7 @@ namespace RadiKeep.Logics.Tests.LogicTest;
 
 public class RadikoRecordingSourceTests
 {
+    private static readonly DateTimeOffset FixedProgramStartTimeUtc = new(2026, 6, 20, 5, 20, 0, TimeSpan.Zero);
     private RadioDbContext _dbContext = null!;
 
     [SetUp]
@@ -195,8 +196,8 @@ public class RadikoRecordingSourceTests
                 Title = "Test",
                 Performer = "P",
                 Description = "D",
-                StartTime = DateTimeOffset.UtcNow,
-                EndTime = DateTimeOffset.UtcNow.AddMinutes(30),
+                StartTime = FixedProgramStartTimeUtc,
+                EndTime = FixedProgramStartTimeUtc.AddMinutes(30),
                 ProgramUrl = "http://example"
             }
         };
@@ -339,7 +340,7 @@ public class RadikoRecordingSourceTests
 
         var result = await target.PrepareAsync(command);
 
-        Assert.That(result.StreamUrl, Is.EqualTo("http://127.0.0.1:5148/api/programs/radiko-proxy/playlist.m3u8?target=https%3A%2F%2Fsi-f-radiko.smartstream.ne.jp%2Fso%2Fplaylist.m3u8%3Fstation_id%3DIN%26l%3D15%26lsid%3Dtest-session%26type%3Db&proxyKey=proxy-ticket&resolveLivePlaylist=true"));
+        Assert.That(result.StreamUrl, Is.EqualTo("http://127.0.0.1:5148/api/programs/radiko-proxy/playlist.m3u8?target=https%3A%2F%2Fsi-f-radiko.smartstream.ne.jp%2Fso%2Fplaylist.m3u8%3Fstation_id%3DIN%26l%3D15%26lsid%3Dtest-session%26type%3Db&proxyKey=proxy-ticket&resolveLivePlaylist=true&recordingStartUtc=2026-06-20T05%3A20%3A00.0000000%2B00%3A00"));
         Assert.That(result.Headers.ContainsKey("X-Radiko-Authtoken"), Is.True);
         Assert.That(result.Headers.ContainsKey("X-Radiko-AreaId"), Is.False);
         Assert.That(result.Options.IsTimeFree, Is.False);
@@ -383,7 +384,7 @@ public class RadikoRecordingSourceTests
 
         var result = await target.PrepareAsync(command);
 
-        Assert.That(result.StreamUrl, Is.EqualTo("http://127.0.0.1:5148/api/programs/radiko-proxy/playlist.m3u8?target=https%3A%2F%2Fsi-c-radiko.smartstream.ne.jp%2Fso%2Fplaylist.m3u8%3Fstation_id%3DOUT%26l%3D15%26lsid%3Daf%26type%3Dc&proxyKey=proxy-ticket&resolveLivePlaylist=true"));
+        Assert.That(result.StreamUrl, Is.EqualTo("http://127.0.0.1:5148/api/programs/radiko-proxy/playlist.m3u8?target=https%3A%2F%2Fsi-c-radiko.smartstream.ne.jp%2Fso%2Fplaylist.m3u8%3Fstation_id%3DOUT%26l%3D15%26lsid%3Daf%26type%3Dc&proxyKey=proxy-ticket&resolveLivePlaylist=true&recordingStartUtc=2026-06-20T05%3A20%3A00.0000000%2B00%3A00"));
     }
 
     [Test]
