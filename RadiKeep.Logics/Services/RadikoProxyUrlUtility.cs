@@ -8,7 +8,11 @@ public static class RadikoProxyUrlUtility
     /// <summary>
     /// 相対プロキシURLを生成する
     /// </summary>
-    public static string BuildRelativeProxyUrlWithProxyKey(string targetUrl, string proxyKey, bool resolveLivePlaylist = false)
+    public static string BuildRelativeProxyUrlWithProxyKey(
+        string targetUrl,
+        string proxyKey,
+        bool resolveLivePlaylist = false,
+        DateTimeOffset? recordingStartUtc = null)
     {
         var proxyPath = BuildProxyPath(targetUrl);
         var query = $"target={Uri.EscapeDataString(targetUrl)}&proxyKey={Uri.EscapeDataString(proxyKey)}";
@@ -17,15 +21,25 @@ public static class RadikoProxyUrlUtility
             query += "&resolveLivePlaylist=true";
         }
 
+        if (recordingStartUtc.HasValue)
+        {
+            query += $"&recordingStartUtc={Uri.EscapeDataString(recordingStartUtc.Value.ToString("O"))}";
+        }
+
         return $"{proxyPath}?{query}";
     }
 
     /// <summary>
     /// 絶対プロキシURLを生成する
     /// </summary>
-    public static string BuildAbsoluteProxyUrlWithProxyKey(string baseUrl, string targetUrl, string proxyKey, bool resolveLivePlaylist = false)
+    public static string BuildAbsoluteProxyUrlWithProxyKey(
+        string baseUrl,
+        string targetUrl,
+        string proxyKey,
+        bool resolveLivePlaylist = false,
+        DateTimeOffset? recordingStartUtc = null)
     {
-        var relativeUrl = BuildRelativeProxyUrlWithProxyKey(targetUrl, proxyKey, resolveLivePlaylist);
+        var relativeUrl = BuildRelativeProxyUrlWithProxyKey(targetUrl, proxyKey, resolveLivePlaylist, recordingStartUtc);
         return new Uri(new Uri(AppendTrailingSlash(baseUrl)), relativeUrl).ToString();
     }
 

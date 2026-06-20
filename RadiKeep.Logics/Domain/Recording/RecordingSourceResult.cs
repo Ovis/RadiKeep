@@ -7,8 +7,10 @@ namespace RadiKeep.Logics.Domain.Recording;
 /// <param name="Headers">HTTPヘッダー</param>
 /// <param name="ProgramInfo">番組情報</param>
 /// <param name="Options">録音オプション</param>
+/// <param name="RequestStationIdOverride">radiko向けの実リクエスト用station_id上書き</param>
 public record RecordingSourceResult(
     string StreamUrl,
     IReadOnlyDictionary<string, string> Headers,
     ProgramRecordingInfo ProgramInfo,
-    RecordingOptions Options);
+    RecordingOptions Options,
+    string? RequestStationIdOverride = null);

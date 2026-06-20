@@ -64,35 +64,36 @@ namespace RadiKeep.Logics.Logics.PlayProgramLogic
             }
 
             string loginSession;
-            bool isAreaFree;
+            bool useAreaFreeConnection;
             {
-                var (_, loginSessionString, isPremiumUser, currentIsAreaFree) = await radikoUniqueProcessLogic.LoginRadikoAsync();
+                var (_, loginSessionString, _, currentIsAreaFree) = await radikoUniqueProcessLogic.LoginRadikoAsync();
 
                 var stationInformation = await dbContext.RadikoStations.FindAsync(program.StationId);
 
                 var currentAreaStation = await stationLobLogic.GetCurrentAreaStations(area);
 
-                if (!currentAreaStation.Contains(stationInformation!.StationId) && !isPremiumUser)
+                if (!currentAreaStation.Contains(stationInformation!.StationId) && !currentIsAreaFree)
                 {
                     logger.ZLogError($"現在のエリアと番組の視聴可能エリアが異なる。現在エリア{string.Join(',', currentAreaStation)} 番組視聴エリア {stationInformation.StationId}");
                     return (false, null, null, new DomainException("この番組は地域が異なるため再生できませんでした。異なる地域の番組を再生する場合はプレミアム会員としてログインする必要があります。"));
                 }
 
                 loginSession = loginSessionString;
-                isAreaFree = currentIsAreaFree;
+                useAreaFreeConnection = currentIsAreaFree && !currentAreaStation.Contains(stationInformation.StationId);
             }
 
-            var (authSuccess, token, _) = await radikoUniqueProcessLogic.AuthorizeRadikoAsync(loginSession);
+            var (authSuccess, token, areaId, subStations) = await radikoUniqueProcessLogic.AuthorizeRadikoAsync(loginSession);
             if (!authSuccess || string.IsNullOrWhiteSpace(token))
             {
                 logger.ZLogError($"再生処理においてradiko認証に失敗");
                 return (false, null, null, new DomainException("radiko認証に失敗しました。"));
             }
 
-            var streamUrls = await radikoApiClient.GetRealTimePlaylistUrlsAsync(program.StationId, isAreaFree);
-            if (streamUrls.Count == 0 && isAreaFree)
+            var requestStationId = RadikoUniqueProcessLogic.ResolveSubStationId(areaId, program.StationId, subStations) ?? program.StationId;
+            var streamUrls = await radikoApiClient.GetRealTimePlaylistUrlsAsync(program.StationId, useAreaFreeConnection, requestStationId);
+            if (streamUrls.Count == 0 && useAreaFreeConnection)
             {
-                streamUrls = await radikoApiClient.GetRealTimePlaylistUrlsAsync(program.StationId, false);
+                streamUrls = await radikoApiClient.GetRealTimePlaylistUrlsAsync(program.StationId, false, requestStationId);
             }
 
             if (streamUrls.Count == 0)

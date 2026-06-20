@@ -24,7 +24,7 @@ public class MediaTranscodeService(
     private const int TimeFreeChunkUnitSeconds = 5;
     private const int NonRealtimeRetryMaxAttempts = 3; // 初回 + リトライ2回
     private const int NonRealtimeRetryInitialDelaySeconds = 30;
-    private const int RadikoRealTimeTailCompensationSeconds = 30;
+    private const int RadikoRealTimeTailCompensationSeconds = 10;
     private static readonly Encoding FileListEncoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
 
     /// <summary>
@@ -117,7 +117,7 @@ public class MediaTranscodeService(
         // concat用のファイルリストはBOMなしで生成する
         await File.WriteAllTextAsync(fileListPath, string.Empty, FileListEncoding);
 
-        var stationId = source.ProgramInfo.StationId;
+        var stationId = source.RequestStationIdOverride ?? source.ProgramInfo.StationId;
         var startAt = ToRadikoTimeString(startTime);
         var lsid = Guid.NewGuid().ToString("N");
 
@@ -224,11 +224,13 @@ public class MediaTranscodeService(
             - startTime;
 
         var command = new StringBuilder();
-        command.Append(" -re -vn -nostdin");
+        // HLS ライブ入力は元から実時間で供給されるため、-re で入力を絞ると
+        // ライブ窓から取りこぼしやすくなる。
+        command.Append(" -vn -nostdin");
         AppendUserAgent(command, config.ExternalServiceUserAgent);
         AppendHeaders(command, source.Headers);
         command.Append(" -http_seekable 0 -seekable 0");
-        command.Append(" -reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 120");
+        command.Append(" -reconnect 1 -reconnect_streamed 1 -reconnect_on_network_error 1 -reconnect_delay_max 120");
         command.Append($" -i \"{source.StreamUrl}\"");
         command.Append($" -t {diff.TotalSeconds}");
 

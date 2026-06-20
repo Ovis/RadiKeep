@@ -15,6 +15,7 @@ public class FakeRadikoApiClient : IRadikoApiClient
     public List<string> RealTimeUrlsForAreaFree { get; set; } = [];
     public List<string> TimeFreeUrls { get; set; } = [];
     public List<string> TimeFreeUrlsForAreaFree { get; set; } = [];
+    public string? LastRealTimeRequestStationId { get; private set; }
 
     public Task<List<RadikoStation>> GetRadikoStationsAsync(CancellationToken cancellationToken = default)
     {
@@ -31,17 +32,18 @@ public class FakeRadikoApiClient : IRadikoApiClient
         return Task.FromResult(WeeklyPrograms);
     }
 
-    public Task<List<string>> GetRealTimePlaylistUrlsAsync(string stationId, bool isAreaFree, CancellationToken cancellationToken = default)
+    public Task<List<string>> GetRealTimePlaylistUrlsAsync(string stationId, bool useAreaFreeConnection, string? requestStationId = null, CancellationToken cancellationToken = default)
     {
-        var list = isAreaFree && RealTimeUrlsForAreaFree.Count != 0
+        LastRealTimeRequestStationId = requestStationId ?? stationId;
+        var list = useAreaFreeConnection && RealTimeUrlsForAreaFree.Count != 0
             ? RealTimeUrlsForAreaFree
             : RealTimeUrls;
         return Task.FromResult(list);
     }
 
-    public Task<List<string>> GetTimeFreePlaylistCreateUrlsAsync(string stationId, bool isAreaFree, CancellationToken cancellationToken = default)
+    public Task<List<string>> GetTimeFreePlaylistCreateUrlsAsync(string stationId, bool useAreaFreeConnection, CancellationToken cancellationToken = default)
     {
-        var list = isAreaFree && TimeFreeUrlsForAreaFree.Count != 0
+        var list = useAreaFreeConnection && TimeFreeUrlsForAreaFree.Count != 0
             ? TimeFreeUrlsForAreaFree
             : TimeFreeUrls;
         return Task.FromResult(list);

@@ -27,6 +27,7 @@ namespace RadiKeep.Logics.Logics.RadikoLogic
             string Session,
             string Token,
             string AreaId,
+            string? SubStations,
             DateTimeOffset ExpiresAtUtc);
 
         private const string RadikoAreaCacheKey = "radiko_current_area";
@@ -93,6 +94,36 @@ namespace RadiKeep.Logics.Logics.RadikoLogic
         public ValueTask<(bool IsSuccess, string Area)> RefreshRadikoAreaCacheAsync()
         {
             return GetRadikoAreaAsync(forceRefresh: true);
+        }
+
+        public static string? ResolveSubStationId(string areaId, string stationId, string? subStations)
+        {
+            if (string.IsNullOrWhiteSpace(areaId) ||
+                string.IsNullOrWhiteSpace(stationId) ||
+                string.IsNullOrWhiteSpace(subStations))
+            {
+                return null;
+            }
+
+            foreach (var item in subStations.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                var parts = item.Split('/', StringSplitOptions.TrimEntries);
+                if (parts.Length < 3)
+                {
+                    continue;
+                }
+
+                if (!string.Equals(parts[0], areaId, StringComparison.OrdinalIgnoreCase) ||
+                    !string.Equals(parts[1], stationId, StringComparison.OrdinalIgnoreCase) ||
+                    string.IsNullOrWhiteSpace(parts[2]))
+                {
+                    continue;
+                }
+
+                return parts[2];
+            }
+
+            return null;
         }
 
         private async ValueTask<(bool IsSuccess, string Area)> FetchRadikoAreaAsync()

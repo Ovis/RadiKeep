@@ -103,6 +103,7 @@ public class RadiruRecordingSource(
             StreamUrl: streamUrl,
             Headers: new Dictionary<string, string>(),
             ProgramInfo: programInfo,
-            Options: options);
+            Options: options,
+            RequestStationIdOverride: null);
     }
 }
