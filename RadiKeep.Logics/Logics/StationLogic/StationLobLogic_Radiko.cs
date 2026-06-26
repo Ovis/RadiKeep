@@ -55,11 +55,11 @@ namespace RadiKeep.Logics.Logics.StationLogic
 
 
 
-        public async ValueTask<List<RadikoStation>> GetAllRadikoStationAsync()
+        public async ValueTask<List<RadikoStation>> GetAllRadikoStationAsync(bool activeOnly = true)
         {
             try
             {
-                return await stationRepository.GetRadikoStationsAsync();
+                return await stationRepository.GetRadikoStationsAsync(activeOnly);
             }
             catch (Exception e)
             {

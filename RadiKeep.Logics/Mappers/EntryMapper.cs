@@ -85,7 +85,7 @@ public class EntryMapper(IAppConfigurationService config) : IEntryMapper
             AreaId = string.Empty,
             AreaName = string.Empty,
             StationId = source.StationId,
-            StationName = config.RadikoStationDic[source.StationId],
+            StationName = ResolveRadikoStationName(source.StationId),
             Title = source.Title,
             Subtitle = string.Empty,
             Performer = source.Performer,
@@ -139,7 +139,7 @@ public class EntryMapper(IAppConfigurationService config) : IEntryMapper
             AreaId = string.Empty,
             AreaName = string.Empty,
             StationId = source.StationId,
-            StationName = config.RadikoStationDic[source.StationId],
+            StationName = ResolveRadikoStationName(source.StationId),
             Title = source.Title,
             RadioDate = source.RadioDate,
             DaysOfWeek = source.DaysOfWeek,
@@ -269,6 +269,13 @@ public class EntryMapper(IAppConfigurationService config) : IEntryMapper
             RadioServiceKind.Radiru => ResolveRadiruStationName(stationId),
             _ => string.IsNullOrWhiteSpace(fallbackStationName) ? "不明" : fallbackStationName
         };
+    }
+
+    private string ResolveRadikoStationName(string stationId)
+    {
+        return config.RadikoStationDic.TryGetValue(stationId, out var stationName)
+            ? stationName
+            : $"不明局({stationId})";
     }
 
     private static string ResolveRadiruStationName(string stationId)
