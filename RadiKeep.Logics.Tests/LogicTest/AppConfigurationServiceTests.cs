@@ -209,4 +209,14 @@ public class AppConfigurationServiceTests
 
         Assert.That(stationName, Is.EqualTo("不明局(am)"));
     }
+
+    [Test]
+    public void ChooseStationName_Radiko未知StationIdはフォールバック名を返す()
+    {
+        var service = CreateService();
+
+        var stationName = service.ChooseStationName(RadioServiceKind.Radiko, "MAJAL");
+
+        Assert.That(stationName, Is.EqualTo("不明局(MAJAL)"));
+    }
 }

@@ -122,6 +122,33 @@ public class ProgramScheduleLobLogicTests
     }
 
     [Test]
+    public async Task GetRadikoNowOnAirProgramListAsync_未知StationIdでもフォールバック名で取得できる()
+    {
+        var (logic, repoMock, context) = CreateTarget();
+
+        repoMock.Setup(r => r.GetRadikoNowOnAirAsync(context.StandardDateTimeOffset, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(
+            [
+                new RadikoProgram
+                {
+                    ProgramId = "P_MAJAL",
+                    StationId = "MAJAL",
+                    Title = "Test",
+                    RadioDate = DateOnly.FromDateTime(DateTime.UtcNow),
+                    DaysOfWeek = DaysOfWeek.Monday,
+                    StartTime = DateTimeOffset.UtcNow,
+                    EndTime = DateTimeOffset.UtcNow.AddMinutes(30),
+                    AvailabilityTimeFree = AvailabilityTimeFree.Available
+                }
+            ]);
+
+        var result = await logic.GetRadikoNowOnAirProgramListAsync(context.StandardDateTimeOffset);
+
+        Assert.That(result.Count, Is.EqualTo(1));
+        Assert.That(result[0].StationName, Is.EqualTo("不明局(MAJAL)"));
+    }
+
+    [Test]
     public async Task GetRadikoProgramAsync_番組がない場合はnull()
     {
         var (logic, repoMock, _) = CreateTarget();

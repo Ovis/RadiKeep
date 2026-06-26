@@ -193,10 +193,21 @@ namespace RadiKeep.Logics.Services
         {
             return kind switch
             {
-                RadioServiceKind.Radiko => RadikoStationDic[stationId],
+                RadioServiceKind.Radiko => ResolveRadikoStationName(stationId),
                 RadioServiceKind.Radiru => ResolveRadiruStationName(stationId),
                 _ => throw new DomainException("未対応のサービス種別です。")
             };
+        }
+
+        private string ResolveRadikoStationName(string stationId)
+        {
+            if (RadikoStationDic.TryGetValue(stationId, out var stationName))
+            {
+                return stationName;
+            }
+
+            _logger.ZLogWarning($"radiko局名を解決できませんでした。 stationId={stationId}");
+            return $"不明局({stationId})";
         }
 
         private static string ResolveRadiruStationName(string stationId)

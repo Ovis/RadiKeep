@@ -73,6 +73,117 @@ public class StartupTaskTests
         Assert.That(list.Any(x => x.Message.Contains("radikoの放送局情報同期に失敗")), Is.True);
     }
 
+    [Test]
+    public async Task InitializeAsync_radiko局キャッシュ復元はinactive局も含む()
+    {
+        var configMock = CreateConfig();
+
+        var ffmpegMock = new Mock<IFfmpegService>();
+        ffmpegMock.Setup(x => x.Initialize()).Returns(true);
+
+        var radikoHttpHandler = new FakeHttpMessageHandler();
+        radikoHttpHandler.AddHandler(
+            req => req.RequestUri!.ToString().Contains("member/login"),
+            _ => new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+            {
+                Content = new StringContent("{\"paid_member\":\"0\",\"areafree\":\"0\",\"radiko_session\":\"\"}")
+            });
+        var radikoHttpClientFactory = new FakeHttpClientFactory(new HttpClient(radikoHttpHandler));
+
+        var radikoLogic = new RadikoUniqueProcessLogic(
+            new Mock<ILogger<RadikoUniqueProcessLogic>>().Object,
+            configMock.Object,
+            radikoHttpClientFactory);
+
+        var appContext = new FakeRadioAppContext();
+        var recordJobLogic = new RecordJobLobLogic(
+            new Mock<ILogger<RecordJobLobLogic>>().Object,
+            configMock.Object);
+        var programScheduleLogic = new ProgramScheduleLobLogic(
+            new Mock<ILogger<ProgramScheduleLobLogic>>().Object,
+            appContext,
+            new FakeRadikoApiClient(),
+            new FakeRadiruApiClient(),
+            new FakeProgramScheduleRepository(),
+            recordJobLogic,
+            new EntryMapper(configMock.Object));
+
+        var stationRepoMock = new Mock<IStationRepository>();
+        stationRepoMock.Setup(x => x.HasAnyRadikoStationAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        stationRepoMock.Setup(x => x.GetRadikoStationsAsync(false, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(
+            [
+                new RadikoStation { StationId = "TBS", StationName = "TBS", IsActive = true },
+                new RadikoStation { StationId = "MAJAL", StationName = "MAJ AUDIO LIVE", IsActive = false }
+            ]);
+        stationRepoMock.Setup(x => x.HasAnyRadiruStationAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        var httpClientFactoryMock = new Mock<IHttpClientFactory>();
+        httpClientFactoryMock
+            .Setup(x => x.CreateClient(It.IsAny<string>()))
+            .Returns(new HttpClient(new HttpClientHandler()));
+
+        var stationLogic = new StationLobLogic(
+            new Mock<ILogger<StationLobLogic>>().Object,
+            appContext,
+            configMock.Object,
+            new ThrowingRadikoApiClient(),
+            stationRepoMock.Object,
+            radikoLogic,
+            httpClientFactoryMock.Object,
+            new EntryMapper(configMock.Object));
+
+        var notificationRepo = new FakeNotificationRepository();
+        var notificationHttpClientFactory = new FakeHttpClientFactory(new HttpClient(new FakeHttpMessageHandler()));
+        var notificationLogic = new NotificationLobLogic(
+            new Mock<ILogger<NotificationLobLogic>>().Object,
+            appContext,
+            configMock.Object,
+            new EntryMapper(configMock.Object),
+            notificationHttpClientFactory,
+            notificationRepo);
+        var logMaintenanceLobLogic = new LogMaintenanceLobLogic(
+            new Mock<ILogger<LogMaintenanceLobLogic>>().Object,
+            new ConfigurationBuilder().AddInMemoryCollection().Build());
+        var dbPath = Path.Combine(Path.GetTempPath(), $"radiokeep-startup-tests-{Guid.NewGuid():N}.db");
+        var dbOptions = new DbContextOptionsBuilder<RadioDbContext>()
+            .UseSqlite($"Data Source={dbPath}")
+            .Options;
+        var dbContext = new RadioDbContext(dbOptions);
+        dbContext.Database.EnsureCreated();
+        var temporaryStorageMaintenanceLobLogic = new TemporaryStorageMaintenanceLobLogic(
+            new Mock<ILogger<TemporaryStorageMaintenanceLobLogic>>().Object,
+            configMock.Object,
+            dbContext);
+        var storageCapacityMonitorLobLogic = new StorageCapacityMonitorLobLogic(
+            new Mock<ILogger<StorageCapacityMonitorLobLogic>>().Object,
+            configMock.Object,
+            notificationLogic);
+
+        var task = new StartupTask(
+            new Mock<ILogger<StartupTask>>().Object,
+            configMock.Object,
+            ffmpegMock.Object,
+            radikoLogic,
+            programScheduleLogic,
+            logMaintenanceLobLogic,
+            temporaryStorageMaintenanceLobLogic,
+            storageCapacityMonitorLobLogic,
+            stationLogic,
+            notificationLogic);
+
+        await task.InitializeAsync();
+
+        stationRepoMock.Verify(x => x.GetRadikoStationsAsync(false, It.IsAny<CancellationToken>()), Times.Once);
+        configMock.Verify(
+            x => x.UpdateRadikoStationDic(It.Is<List<RadikoStation>>(list =>
+                list.Any(s => s.StationId == "TBS") &&
+                list.Any(s => s.StationId == "MAJAL"))),
+            Times.Once);
+    }
+
     /// <summary>
     /// StartupTask構築
     /// </summary>

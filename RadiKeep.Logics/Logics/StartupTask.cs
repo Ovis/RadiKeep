@@ -65,7 +65,7 @@ namespace RadiKeep.Logics.Logics
                         try
                         {
                             // radikoの放送局データをキャッシュ
-                            var radikoStationList = await stationLobLogic.GetAllRadikoStationAsync();
+                            var radikoStationList = await stationLobLogic.GetAllRadikoStationAsync(activeOnly: false);
                             config.UpdateRadikoStationDic(radikoStationList);
                         }
                         catch (Exception ex)

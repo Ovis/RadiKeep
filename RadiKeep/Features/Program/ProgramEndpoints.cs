@@ -195,7 +195,7 @@ public static class ProgramEndpoints
         var programs = radikoPrograms.Concat(radiruPrograms).OrderBy(r => r.StationName).ToList();
         List<string> currentAreaStationsForUi = [];
 
-        var stationList = await stationLobLogic.GetAllRadikoStationAsync();
+        var stationList = await stationLobLogic.GetAllRadikoStationAsync(activeOnly: false);
         var stationById = stationList.ToDictionary(r => r.StationId, r => r);
         var regionOrderMap = stationList
             .GroupBy(r => r.RegionId)
